@@ -1,0 +1,60 @@
+id: c0543ccb-b53d-5e56-917f-9210def2c413
+name: Abstract - High or Critical event
+description: |
+  An Abstract-delivered event with high or critical severity was observed.
+  Enriched/normalized upstream by the Abstract pipeline; surfaces the Abstract
+  insight id as the AbstractInsightId custom detail so the agentic Verdict
+  playbook can run, and maps IP + Account entities.
+severity: High
+status: Available
+requiredDataConnectors:
+  - connectorId: AbstractSecurityConnector
+    dataTypes:
+      - AbstractEventLogs_CL
+queryFrequency: 1h
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - InitialAccess
+  - Execution
+query: |
+  AbstractEventLogs_CL
+  | extend AbstractEvent = iff(isnotnull(column_ifexists('AbstractEvent', dynamic(null))), column_ifexists('AbstractEvent', dynamic(null)), pack_all()), Message = tostring(column_ifexists('Message', ''))
+  | where TimeGenerated > ago(1h)
+  | extend e = AbstractEvent
+  | extend AbstractSeverity = tolower(tostring(e.severity)),
+           SrcIpAddr = coalesce(tostring(e.source_ipv4), tostring(e.source_address)),
+           ActorUsername = coalesce(tostring(e.user_name), tostring(e.user_id)),
+           AbstractInsightId = coalesce(tostring(e.id), tostring(e.acs_id)),
+           EventProduct = tostring(e.product),
+           EventMessage = coalesce(tostring(e.message), Message)
+  | where AbstractSeverity in ("high", "critical")
+  | project TimeGenerated, AbstractSeverity, EventProduct, EventMessage, SrcIpAddr, ActorUsername, AbstractInsightId
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+incidentConfiguration:
+  createIncident: true
+  groupingConfiguration:
+    enabled: true
+    reopenClosedIncident: false
+    lookbackDuration: PT5H
+    matchingMethod: Selected
+    groupByEntities:
+      - IP
+      - Account
+entityMappings:
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: SrcIpAddr
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: ActorUsername
+customDetails:
+  AbstractInsightId: AbstractInsightId
+  AbstractSeverity: AbstractSeverity
+  EventProduct: EventProduct
+version: 1.0.0
+kind: Scheduled

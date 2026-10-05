@@ -1,0 +1,46 @@
+[
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "abstract-cwl"
+  },
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "MaxSessionDurationSeconds",
+    "ParameterValue": "3600"
+  },
+  {
+    "ParameterKey": "PermissionsBoundaryArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "StoreCredentialsInSecretsManager",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "LogGroupName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ScopeToSingleGroup",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "KmsKeyArn",
+    "ParameterValue": ""
+  }
+]

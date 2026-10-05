@@ -1,0 +1,134 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Abstract Security - Insights & Detections pull (API connector)",
+    "description": "A scheduled Logic App that PULLS Abstract Security insights/detections (with ASTRO verdicts, risk, and reduction stats) from the Abstract API into a Sentinel custom table (AbstractInsights_CL) via the Log Analytics Data Collector API. This enables the Abstract x Sentinel comparison EVEN WHEN Sentinel is not the Abstract data destination: raw telemetry can stay in Abstract's lake while Abstract's higher-order insights/detections land in Sentinel for side-by-side coverage, fidelity, and TCO analysis. Pairs with the Competitive & TCO Command Center workbook.",
+    "prerequisites": "Abstract API key + vendor account id; the Log Analytics workspace id + primary key (for the Data Collector API). Prefer Key Vault for both secrets in production. Endpoint confirmed against the Abstract Security API (GET /v1/insights/, Bearer + X-AS-Vendor-Account-ID, paginated).",
+    "author": "Abstract Security - Solutions Engineering"
+  },
+  "parameters": {
+    "PlaybookName": { "type": "string", "defaultValue": "Abstract-Insights-Pull" },
+    "abstractBaseUrl": { "type": "string", "defaultValue": "https://api.abstractsecurity.app" },
+    "abstractInsightsPath": { "type": "string", "defaultValue": "/v1/insights/", "metadata": { "description": "Abstract insights list endpoint (GET). Confirmed: /v1/insights/ (paginated via page_number/page_size)." } },
+    "abstractVendorAccountId": { "type": "string" },
+    "abstractApiKey": { "type": "securestring" },
+    "workspaceId": { "type": "string", "metadata": { "description": "Log Analytics workspace ID (GUID) that receives AbstractInsights_CL." } },
+    "workspaceKey": { "type": "securestring", "metadata": { "description": "Log Analytics workspace primary key. Prefer a Key Vault reference." } },
+    "pollFrequencyMinutes": { "type": "int", "defaultValue": 60 },
+    "lookbackHours": { "type": "int", "defaultValue": 24 }
+  },
+  "variables": {
+    "DataCollectorConnectionName": "[concat('azureloganalyticsdatacollector-', parameters('PlaybookName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[variables('DataCollectorConnectionName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "V1",
+      "properties": {
+        "displayName": "[variables('DataCollectorConnectionName')]",
+        "parameterValues": {
+          "username": "[parameters('workspaceId')]",
+          "password": "[parameters('workspaceKey')]"
+        },
+        "api": { "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureloganalyticsdatacollector')]" }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2017-07-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[resourceGroup().location]",
+      "identity": { "type": "SystemAssigned" },
+      "dependsOn": [ "[resourceId('Microsoft.Web/connections', variables('DataCollectorConnectionName'))]" ],
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": { "type": "Object" },
+            "abstractBaseUrl": { "type": "string" },
+            "abstractInsightsPath": { "type": "string" },
+            "abstractVendorAccountId": { "type": "string" },
+            "abstractApiKey": { "type": "securestring" },
+            "lookbackHours": { "type": "int" }
+          },
+          "triggers": {
+            "Recurrence": {
+              "type": "Recurrence",
+              "recurrence": { "frequency": "Minute", "interval": "@parameters('pollFrequencyMinutes')" }
+            }
+          },
+          "actions": {
+            "List_Abstract_insights": {
+              "type": "Http",
+              "runtimeConfiguration": { "secureData": { "properties": ["inputs"] } },
+              "inputs": {
+                "method": "GET",
+                "uri": "@{parameters('abstractBaseUrl')}@{parameters('abstractInsightsPath')}",
+                "queries": { "page_number": "1", "page_size": "200", "sort": "-created_at" },
+                "headers": {
+                  "Authorization": "Bearer @{parameters('abstractApiKey')}",
+                  "X-AS-Vendor-Account-ID": "@parameters('abstractVendorAccountId')",
+                  "accept": "application/json"
+                }
+              }
+            },
+            "Shape_rows": {
+              "runAfter": { "List_Abstract_insights": ["Succeeded"] },
+              "type": "Select",
+              "comment": "Maps GET /v1/insights/ response (insights[]) to AbstractInsights_CL rows. Schema confirmed against the Abstract Security API Postman collection (Read Insights).",
+              "inputs": {
+                "from": "@coalesce(body('List_Abstract_insights')?['insights'], json('[]'))",
+                "select": {
+                  "InsightId": "@coalesce(item()?['nanoid'], string(item()?['id']), '')",
+                  "Title": "@coalesce(item()?['title'], '')",
+                  "Status": "@coalesce(item()?['status'], '')",
+                  "Severity": "@coalesce(item()?['severity'], '')",
+                  "PriorityScore": "@coalesce(item()?['priority_score']?['score'], '')",
+                  "Summary": "@coalesce(item()?['summary'], '')",
+                  "Categories": "@join(coalesce(item()?['categories'], json('[]')), ',')",
+                  "MitreTechniques": "@string(coalesce(item()?['mitre_attack_techniques'], json('[]')))",
+                  "CountEvents": "@coalesce(item()?['count_events'], 0)",
+                  "Resolution": "@coalesce(item()?['resolution'], '')",
+                  "AbstractTimestamp": "@coalesce(item()?['created_at'], utcNow())"
+                }
+              }
+            },
+            "Send_to_Sentinel": {
+              "runAfter": { "Shape_rows": ["Succeeded"] },
+              "type": "ApiConnection",
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['azureloganalyticsdatacollector']['connectionId']" } },
+                "method": "post",
+                "path": "/api/logs",
+                "body": "@body('Shape_rows')",
+                "headers": { "Log-Type": "AbstractInsights", "time-generated-field": "AbstractTimestamp" }
+              }
+            }
+          }
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azureloganalyticsdatacollector": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', variables('DataCollectorConnectionName'))]",
+                "connectionName": "[variables('DataCollectorConnectionName')]",
+                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureloganalyticsdatacollector')]"
+              }
+            }
+          },
+          "abstractBaseUrl": { "value": "[parameters('abstractBaseUrl')]" },
+          "abstractInsightsPath": { "value": "[parameters('abstractInsightsPath')]" },
+          "abstractVendorAccountId": { "value": "[parameters('abstractVendorAccountId')]" },
+          "abstractApiKey": { "value": "[parameters('abstractApiKey')]" },
+          "lookbackHours": { "value": "[parameters('lookbackHours')]" }
+        }
+      }
+    }
+  ]
+}

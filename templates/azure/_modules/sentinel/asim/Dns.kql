@@ -1,0 +1,53 @@
+// ASIM schema: Dns (schema version 0.1.7)
+// outputStream: Microsoft-ASimDnsActivityLogs
+//
+// Maps Abstract Common Schema (ACS) events for DNS queries and responses. Selected by the presence of dns.question.name, whatever the event's category.
+// Microsoft's built-in _Im_Dns parser reads the target table, so Microsoft's ASIM
+// analytics rules, hunting queries and workbooks see these events from any vendor.
+source
+// Abstract findings and alerts are detections, not activity: keep them out of the activity tables.
+| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')
+| where isnotempty(tostring(dns.question.name))
+| extend _rcode = toupper(tostring(dns.response_code))
+| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))
+| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')
+| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())
+// Azure restamps anything older than two days with its arrival time. A replay, backfill or
+// long catch-up would then look like live activity to every ASIM rule, so it stays out of
+// the ASIM tables (it still lands in the Abstract table).
+| where _time > ago(2d)
+| project
+    TimeGenerated = _time,
+    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),
+    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),
+    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),
+    EventResult = case(isempty(_rcode), _result, _rcode == 'NOERROR', 'Success', 'Failure'),
+    EventOriginalType = tostring(action),
+    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),
+    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', case(isempty(_rcode), _result, _rcode == 'NOERROR', 'Success', 'Failure') == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),
+    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),
+    EventMessage = message,
+    EventProduct = product,
+    EventVendor = vendor,
+    EventSchemaVersion = '0.1.7',
+    DvcHostname = host_name,
+    Dvc = case(isnotempty(host_name), host_name, isnotempty(host_ipv4), host_ipv4, isnotempty(product), product, vendor),
+    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),
+    EventType = 'Query',
+    EventSubType = iif(isnotempty(_rcode) or tolower(tostring(dns.type)) in ('answer', 'response'), 'response', 'request'),
+    DnsQuery = tostring(dns.question.name),
+    DnsQueryTypeName = toupper(tostring(dns.question.type)),
+    DnsQueryClassName = toupper(tostring(dns.question.class)),
+    DnsResponseName = _rcode,
+    EventResultDetails = _rcode,
+    DnsResponseCode = toint(case(_rcode == 'NOERROR', 0, _rcode == 'FORMERR', 1, _rcode == 'SERVFAIL', 2, _rcode == 'NXDOMAIN', 3, _rcode == 'NOTIMP', 4, _rcode == 'REFUSED', 5, tolong(''))),
+    TransactionIdHex = tostring(dns.id),
+    SrcIpAddr = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, source_address matches regex '^[0-9a-fA-F:.]+$', source_address, ''),
+    DstIpAddr = case(isnotempty(dest_ipv4), dest_ipv4, isnotempty(dest_ipv6), dest_ipv6, dest_address matches regex '^[0-9a-fA-F:.]+$', dest_address, ''),
+    SrcPortNumber = toint(source_port),
+    Src = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, isnotempty(tostring(source.domain)), tostring(source.domain), host_name),
+    DstPortNumber = toint(dest_port),
+    NetworkProtocol = toupper(tostring(network.transport)),
+    SrcUsername = user_name,
+    DvcAction = case(_action in ('allow', 'allowed', 'accept', 'accepted', 'permit', 'pass') or _outcome in ('allow', 'allowed'), 'Allow', _action in ('deny', 'denied', 'block', 'blocked', 'reject', 'rejected') or _outcome in ('deny', 'denied', 'blocked'), 'Deny', _action in ('drop', 'dropped'), 'Drop', ''),
+    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)

@@ -1,0 +1,18 @@
+[
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "true"
+  }
+]

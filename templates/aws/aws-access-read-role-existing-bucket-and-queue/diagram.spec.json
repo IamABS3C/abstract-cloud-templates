@@ -1,0 +1,143 @@
+{
+ "title": "aws.iam-role-s3-sqs",
+ "theme": "dark",
+ "animate": false,
+ "pages": [
+  {
+   "name": "aws.iam-role-s3-sqs",
+   "groups": [
+    {
+     "id": "acct",
+     "label": "Customer AWS account",
+     "kind": "account",
+     "x": 40,
+     "y": 40,
+     "w": 800,
+     "h": 500,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 900,
+     "y": 40,
+     "w": 260,
+     "h": 500,
+     "color": "#FF216B"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "s3",
+     "label": "Log bucket",
+     "icon": "aws:s3",
+     "parent": "acct",
+     "x": 90,
+     "y": 60,
+     "sublabel": "existing"
+    },
+    {
+     "id": "sqs",
+     "label": "SQS queue",
+     "icon": "aws:sqs",
+     "parent": "acct",
+     "x": 90,
+     "y": 220,
+     "sublabel": "existing"
+    },
+    {
+     "id": "kms",
+     "label": "KMS key",
+     "icon": "aws:key_management_service",
+     "parent": "acct",
+     "x": 90,
+     "y": 380,
+     "sublabel": "existing, optional"
+    },
+    {
+     "id": "role",
+     "label": "Abstract IAM role",
+     "icon": "aws:role",
+     "parent": "acct",
+     "x": 450,
+     "y": 220,
+     "sublabel": "the only resource"
+    },
+    {
+     "id": "plat",
+     "label": "Abstract platform",
+     "sublabel": "polls SQS, reads S3",
+     "icon": "img:../../app/web/public/logo-mark.svg",
+     "parent": "abs",
+     "x": 85,
+     "y": 219,
+     "w": 90,
+     "h": 80
+    }
+   ],
+   "edges": [
+    {
+     "from": "plat",
+     "to": "role",
+     "label": "AssumeRole + External ID",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ]
+    },
+    {
+     "from": "role",
+     "to": "s3",
+     "label": "S3 read",
+     "tone": "muted",
+     "exit": [
+      0,
+      0.15
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.4
+    },
+    {
+     "from": "role",
+     "to": "sqs",
+     "label": "SQS consume",
+     "tone": "muted",
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ]
+    },
+    {
+     "from": "role",
+     "to": "kms",
+     "label": "KMS decrypt",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.85
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.4
+    }
+   ]
+  }
+ ]
+}

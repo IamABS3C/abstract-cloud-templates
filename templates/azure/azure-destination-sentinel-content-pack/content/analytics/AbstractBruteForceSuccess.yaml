@@ -1,0 +1,53 @@
+id: 7918c399-841e-5466-ade1-8dc5ac08a6c5
+name: Abstract - Repeated auth failures followed by success
+description: |
+  Detects a likely successful brute force / password spray: many failed
+  authentication events followed by a success from the same source IP within a
+  short window, using Abstract-normalized auth telemetry (ASim_AbstractEvent).
+  Field values (failure/success) depend on the upstream source; tune the
+  EventResult terms to your products.
+severity: High
+status: Available
+requiredDataConnectors:
+  - connectorId: AbstractSecurityConnector
+    dataTypes:
+      - AbstractEventLogs_CL
+queryFrequency: 1h
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - CredentialAccess
+relevantTechniques:
+  - T1110
+query: |
+  let failures = ASim_AbstractEvent
+    | where TimeGenerated > ago(1h)
+    | where EventType has_any ("auth", "login", "logon") or EventResult has "fail"
+    | where EventResult has_any ("fail", "failure", "denied")
+    | summarize Failures = count(), FailUsers = make_set(ActorUsername, 25) by SrcIpAddr, bin(TimeGenerated, 10m)
+    | where Failures >= 10;
+  let successes = ASim_AbstractEvent
+    | where TimeGenerated > ago(1h)
+    | where EventResult has_any ("success", "succeeded", "allowed")
+    | project SuccessTime = TimeGenerated, SrcIpAddr, ActorUsername, AbstractInsightId = AbstractEventId, EventProduct;
+  failures
+  | join kind=inner successes on SrcIpAddr
+  | where SuccessTime between (TimeGenerated .. (TimeGenerated + 10m))
+  | where set_has_element(FailUsers, ActorUsername)
+  | project SuccessTime, SrcIpAddr, ActorUsername, Failures, EventProduct, AbstractInsightId
+  | sort by Failures desc
+entityMappings:
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: SrcIpAddr
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: ActorUsername
+customDetails:
+  AbstractInsightId: AbstractInsightId
+  FailureCount: Failures
+version: 1.0.0
+kind: Scheduled

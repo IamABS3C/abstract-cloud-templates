@@ -1,0 +1,46 @@
+[
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "VpcFlowResourceType",
+    "ParameterValue": "VPC"
+  },
+  {
+    "ParameterKey": "VpcFlowResourceId",
+    "ParameterValue": "<VpcFlowResourceId>"
+  },
+  {
+    "ParameterKey": "VpcFlowTrafficType",
+    "ParameterValue": "ALL"
+  },
+  {
+    "ParameterKey": "VpcFlowMaxAggregationInterval",
+    "ParameterValue": "600"
+  },
+  {
+    "ParameterKey": "BucketEncryption",
+    "ParameterValue": "SSE-KMS"
+  },
+  {
+    "ParameterKey": "QueueEncryption",
+    "ParameterValue": "SSE-KMS"
+  },
+  {
+    "ParameterKey": "KmsMode",
+    "ParameterValue": "CreateNew"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "true"
+  }
+]

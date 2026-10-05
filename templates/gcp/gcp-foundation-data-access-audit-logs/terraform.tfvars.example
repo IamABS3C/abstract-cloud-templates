@@ -1,0 +1,31 @@
+# organization | folder | project. Inheritance is ONE-WAY — a project can add Data Access logging
+# but cannot disable what the organization enabled.
+# scope = "organization"
+
+# Organization ID, when scope = organization. Find it with: gcloud organizations list
+# org_id = ""
+
+# Folder ID, when scope = folder. Find it with: gcloud resource-manager folders list
+# --organization=<org-id>
+# folder_id = ""
+
+# Project ID, when scope = project.
+# project_id = ""
+
+# ADMIN_READ | DATA_WRITE | DATA_READ. ADMIN_WRITE is rejected — that is Admin Activity, always on.
+# log_types = ["ADMIN_READ", "DATA_WRITE"]
+
+# Empty means allServices. With DATA_READ that is the expensive option and needs
+# acknowledge_data_read.
+# services = []
+
+# Principals excluded. One chatty ETL service account can dominate DATA_READ volume while carrying
+# no security signal — this is the most-missed cost lever.
+# exempted_members = []
+
+# Required for DATA_READ when services is empty (allServices).
+# acknowledge_data_read = false
+
+# Required for allServices. See tools/gcp-guided-setup/preflight.sh output first — this resource can
+# REMOVE audit log types it does not list.
+# acknowledge_authoritative_overwrite = false

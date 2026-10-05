@@ -1,0 +1,358 @@
+{
+ "description": "Columns of Microsoft's ASimRegistryEventLogs table, read from a Sentinel workspace on 2026-09-28. gen-sentinel-asim.py checks every mapped column against this list; refresh it when Microsoft extends the schema.",
+ "table": "ASimRegistryEventLogs",
+ "columns": [
+  {
+   "name": "TenantId",
+   "type": "guid"
+  },
+  {
+   "name": "TimeGenerated",
+   "type": "datetime"
+  },
+  {
+   "name": "EventProduct",
+   "type": "string"
+  },
+  {
+   "name": "EventVendor",
+   "type": "string"
+  },
+  {
+   "name": "EventResult",
+   "type": "string"
+  },
+  {
+   "name": "EventSeverity",
+   "type": "string"
+  },
+  {
+   "name": "EventType",
+   "type": "string"
+  },
+  {
+   "name": "RegistryKey",
+   "type": "string"
+  },
+  {
+   "name": "RegistryValue",
+   "type": "string"
+  },
+  {
+   "name": "RegistryValueType",
+   "type": "string"
+  },
+  {
+   "name": "RegistryValueData",
+   "type": "string"
+  },
+  {
+   "name": "RegistryPreviousKey",
+   "type": "string"
+  },
+  {
+   "name": "RegistryPreviousValue",
+   "type": "string"
+  },
+  {
+   "name": "RegistryPreviousValueType",
+   "type": "string"
+  },
+  {
+   "name": "RegistryPreviousValueData",
+   "type": "string"
+  },
+  {
+   "name": "ActorUserId",
+   "type": "string"
+  },
+  {
+   "name": "ActorUserIdType",
+   "type": "string"
+  },
+  {
+   "name": "EventResultDetails",
+   "type": "string"
+  },
+  {
+   "name": "DvcIpAddr",
+   "type": "string"
+  },
+  {
+   "name": "DvcHostname",
+   "type": "string"
+  },
+  {
+   "name": "DvcDomain",
+   "type": "string"
+  },
+  {
+   "name": "DvcDomainType",
+   "type": "string"
+  },
+  {
+   "name": "DvcFQDN",
+   "type": "string"
+  },
+  {
+   "name": "DvcDescription",
+   "type": "string"
+  },
+  {
+   "name": "DvcId",
+   "type": "string"
+  },
+  {
+   "name": "DvcIdType",
+   "type": "string"
+  },
+  {
+   "name": "DvcAction",
+   "type": "string"
+  },
+  {
+   "name": "EventMessage",
+   "type": "string"
+  },
+  {
+   "name": "EventCount",
+   "type": "int"
+  },
+  {
+   "name": "EventSubType",
+   "type": "string"
+  },
+  {
+   "name": "EventOriginalUid",
+   "type": "string"
+  },
+  {
+   "name": "EventOriginalType",
+   "type": "string"
+  },
+  {
+   "name": "EventOriginalSubType",
+   "type": "string"
+  },
+  {
+   "name": "EventOriginalResultDetails",
+   "type": "string"
+  },
+  {
+   "name": "EventOriginalSeverity",
+   "type": "string"
+  },
+  {
+   "name": "EventProductVersion",
+   "type": "string"
+  },
+  {
+   "name": "EventOwner",
+   "type": "string"
+  },
+  {
+   "name": "EventReportUrl",
+   "type": "string"
+  },
+  {
+   "name": "DvcMacAddr",
+   "type": "string"
+  },
+  {
+   "name": "DvcZone",
+   "type": "string"
+  },
+  {
+   "name": "DvcOs",
+   "type": "string"
+  },
+  {
+   "name": "DvcOsVersion",
+   "type": "string"
+  },
+  {
+   "name": "DvcOriginalAction",
+   "type": "string"
+  },
+  {
+   "name": "DvcInterface",
+   "type": "string"
+  },
+  {
+   "name": "DvcScopeId",
+   "type": "string"
+  },
+  {
+   "name": "DvcScope",
+   "type": "string"
+  },
+  {
+   "name": "ActorUserAadId",
+   "type": "string"
+  },
+  {
+   "name": "ActorUserSid",
+   "type": "string"
+  },
+  {
+   "name": "ActorScopeId",
+   "type": "string"
+  },
+  {
+   "name": "ActorScope",
+   "type": "string"
+  },
+  {
+   "name": "ActorUsername",
+   "type": "string"
+  },
+  {
+   "name": "ActorUsernameType",
+   "type": "string"
+  },
+  {
+   "name": "ActorUserType",
+   "type": "string"
+  },
+  {
+   "name": "ActorOriginalUserType",
+   "type": "string"
+  },
+  {
+   "name": "ActorSessionId",
+   "type": "string"
+  },
+  {
+   "name": "ActingProcessName",
+   "type": "string"
+  },
+  {
+   "name": "ActingProcessId",
+   "type": "string"
+  },
+  {
+   "name": "ActingProcessCommandLine",
+   "type": "string"
+  },
+  {
+   "name": "ActingProcessGuid",
+   "type": "string"
+  },
+  {
+   "name": "ParentProcessName",
+   "type": "string"
+  },
+  {
+   "name": "ParentProcessId",
+   "type": "string"
+  },
+  {
+   "name": "ParentProcessCommandLine",
+   "type": "string"
+  },
+  {
+   "name": "ParentProcessGuid",
+   "type": "string"
+  },
+  {
+   "name": "RuleName",
+   "type": "string"
+  },
+  {
+   "name": "RuleNumber",
+   "type": "int"
+  },
+  {
+   "name": "ThreatId",
+   "type": "string"
+  },
+  {
+   "name": "ThreatName",
+   "type": "string"
+  },
+  {
+   "name": "ThreatCategory",
+   "type": "string"
+  },
+  {
+   "name": "ThreatRiskLevel",
+   "type": "int"
+  },
+  {
+   "name": "ThreatOriginalRiskLevel",
+   "type": "string"
+  },
+  {
+   "name": "ThreatField",
+   "type": "string"
+  },
+  {
+   "name": "ThreatConfidence",
+   "type": "int"
+  },
+  {
+   "name": "ThreatOriginalConfidence",
+   "type": "string"
+  },
+  {
+   "name": "ThreatIsActive",
+   "type": "boolean"
+  },
+  {
+   "name": "ThreatFirstReportedTime",
+   "type": "datetime"
+  },
+  {
+   "name": "ThreatLastReportedTime",
+   "type": "datetime"
+  },
+  {
+   "name": "EventSchema",
+   "type": "string"
+  },
+  {
+   "name": "EventSchemaVersion",
+   "type": "string"
+  },
+  {
+   "name": "EventStartTime",
+   "type": "datetime"
+  },
+  {
+   "name": "EventEndTime",
+   "type": "datetime"
+  },
+  {
+   "name": "AdditionalFields",
+   "type": "dynamic"
+  },
+  {
+   "name": "ActorUserEntityKey",
+   "type": "string"
+  },
+  {
+   "name": "ActingProcessEntityKey",
+   "type": "string"
+  },
+  {
+   "name": "ParentProcessEntityKey",
+   "type": "string"
+  },
+  {
+   "name": "DvcEntityKey",
+   "type": "string"
+  },
+  {
+   "name": "ActorUserAdditionalIds",
+   "type": "dynamic"
+  },
+  {
+   "name": "AdditionalEntities",
+   "type": "dynamic"
+  },
+  {
+   "name": "SourceSystem",
+   "type": "string"
+  }
+ ]
+}

@@ -1,0 +1,49 @@
+id: aws-source-s3-sqs-organization-stackset
+title: One source, every account
+cloud: aws
+role: source
+scope: organization
+summary: A wrapper around CloudFormation StackSets, service-managed for AWS Organizations, that rolls one Abstract
+  template across every account in an organizational unit and a list of regions. With auto-deployment on, accounts
+  added to the OU later receive the stack too.
+formats:
+- script
+permissions:
+- role: CloudFormation StackSets trusted access, plus rights in the Organizations management account
+  where: The organization
+  why: 'Deployer: Only needed for the organization-wide path; a single-account deployment does not require it.'
+creates:
+- A SERVICE_MANAGED StackSet from the chosen template, with CAPABILITY_NAMED_IAM
+- Stack instances in every account of the target OU across the listed regions (failure tolerance 0, up to 5 concurrent)
+- With --auto-deploy, stacks in accounts added to the OU later; stacks are removed when an account leaves (RetainStacksOnAccountRemoval=false)
+never_touches:
+- Accounts outside the target OU (derived from declared deployment targets)
+prerequisites:
+- AWS CLI v2 and jq, authenticated to the management account or a delegated StackSets administrator
+- Organizations trusted access enabled for CloudFormation StackSets
+- The target OU ID and the list of regions
+- 'Confirm the OU membership before running: the StackSet applies to every account in it'
+parameters:
+- name: TemplateId
+  type: string
+  required: true
+  description: The sibling template to roll out, e.g. aws-source-vpc-flow-logs-s3-sqs; its parameters.example.json
+    supplies the stack-set parameters.
+  example: aws-source-vpc-flow-logs-s3-sqs
+- name: OrganizationalUnitId
+  type: string
+  required: true
+  description: The organizational unit whose accounts receive a stack instance.
+  find_it: aws organizations list-organizational-units-for-parent --parent-id <root-id>
+- name: Regions
+  type: array
+  required: true
+  description: The regions to deploy a stack instance to in each account.
+outputs: []
+verify:
+- check: The script prints every call before it runs
+  healthy: 'Run with --dry-run: create-stack-set and create-stack-instances are printed with the expected OU and
+    regions.'
+when_not_to_use: For organization-wide CloudTrail, where a single organization trail (CtIsOrganizationTrail=true
+  with CtOrganizationId) in the management account is preferred over per-account trails.
+live_test: canary

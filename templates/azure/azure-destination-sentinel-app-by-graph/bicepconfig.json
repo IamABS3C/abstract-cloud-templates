@@ -1,0 +1,7 @@
+{
+  // The Microsoft Graph Bicep extension (generally available since July 2025) lets
+  // sentinel-destination-graph.bicep create the Entra app registration declaratively.
+  "extensions": {
+    "microsoftGraphV1": "br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0:1.0.0"
+  }
+}

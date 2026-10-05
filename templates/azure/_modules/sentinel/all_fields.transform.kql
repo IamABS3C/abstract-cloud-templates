@@ -1,0 +1,2 @@
+source
+| extend TimeGenerated = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())

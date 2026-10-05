@@ -1,0 +1,94 @@
+id: gcp-foundation-data-access-audit-logs
+title: Data Access audit logging
+cloud: gcp
+role: foundation
+scope: organization
+summary: Admin Activity audit logs are always on; Data Access logs are off by default, and until they
+  are on a sink filter referencing data_access matches nothing. This deployment enables the chosen Data
+  Access log types in separate state from the log-export pipeline.
+formats:
+- terraform
+- script
+- cloud-shell
+permissions:
+- role: Organization Admin (resourcemanager.organizations.setIamPolicy)
+  where: The organization
+  why: 'Deployer: This modifies the organization IAM policy.'
+creates:
+- An IAM audit config at the chosen scope (organization, folder or project) enabling the listed Data Access
+  log types
+never_touches:
+- 'Admin Activity audit logs: always on, and nothing here can turn them off'
+- 'The log-export pipeline: this is deliberately separate state'
+prerequisites:
+- 'Read the preflight output first: the resource is authoritative per service, so a narrower set removes
+  log types you did not list'
+- acknowledge_authoritative_overwrite when services resolves to allServices, and acknowledge_data_read
+  for DATA_READ
+parameters:
+- name: scope
+  type: string
+  required: false
+  description: organization | folder | project. Inheritance is ONE-WAY — a project can add Data Access
+    logging but cannot disable what the organization enabled.
+  default: organization
+- name: org_id
+  type: string
+  required: false
+  description: 'Organization ID, when scope = organization. Find it with: gcloud organizations list'
+  default: ''
+  find_it: gcloud organizations list --format='value(ID)'
+- name: folder_id
+  type: string
+  required: false
+  description: 'Folder ID, when scope = folder. Find it with: gcloud resource-manager folders list --organization=<org-id>'
+  default: ''
+  find_it: gcloud resource-manager folders list --organization=<org-id>
+- name: project_id
+  type: string
+  required: false
+  description: Project ID, when scope = project.
+  default: ''
+- name: log_types
+  type: array
+  required: false
+  description: ADMIN_READ | DATA_WRITE | DATA_READ. ADMIN_WRITE is rejected — that is Admin Activity,
+    always on.
+  default:
+  - ADMIN_READ
+  - DATA_WRITE
+- name: services
+  type: array
+  required: false
+  description: Empty means allServices. With DATA_READ that is the expensive option and needs acknowledge_data_read.
+  default: []
+- name: exempted_members
+  type: array
+  required: false
+  description: Principals excluded. One chatty ETL service account can dominate DATA_READ volume while
+    carrying no security signal — this is the most-missed cost lever.
+  default: []
+- name: acknowledge_data_read
+  type: bool
+  required: false
+  description: Required for DATA_READ when services is empty (allServices).
+  default: false
+- name: acknowledge_authoritative_overwrite
+  type: bool
+  required: false
+  description: Required for allServices. See tools/gcp-guided-setup/preflight.sh output first — this resource
+    can REMOVE audit log types it does not list.
+  default: false
+outputs:
+- enabled
+verify:
+- check: See what is already enabled
+  command: tools/gcp-guided-setup/preflight.sh --project <project-id> --org-id <org-id>
+  healthy: The audit config lists exactly the services and log types you chose.
+cost: BigQuery DATA_READ on a BigQuery-heavy estate can move total volume by one to two orders of magnitude;
+  scope it to BigQuery and regulated buckets rather than refusing it.
+when_to_use: Data Access signal (BigQuery reads, Cloud Storage object reads, KMS use) is needed, decided
+  per service.
+when_not_to_use: To change Admin Activity logs, which are always on; or before reading the current audit
+  config, because this resource is authoritative per service.
+live_test: static

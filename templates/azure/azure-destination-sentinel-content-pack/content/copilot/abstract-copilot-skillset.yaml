@@ -1,0 +1,89 @@
+# =============================================================================
+# Microsoft Security Copilot — Abstract Security plugin (API skillset)
+# -----------------------------------------------------------------------------
+# EXPERIMENTAL / lab. The Security Copilot plugin schema evolves; validate
+# against the current docs (https://learn.microsoft.com/copilot/security/plugins)
+# before publishing. Upload via Copilot > Sources > Manage plugins > Custom.
+#
+# Auth + tenant are entered as plugin SETTINGS in Copilot (stored securely) —
+# never hard-code the key here:
+#   AbstractApiKey          -> sent as  Authorization: Bearer <key>
+#   AbstractVendorAccountId -> sent as  x-as-vendor-account-id: <id>
+#
+# These skills are read-only (search events, fetch a verdict) so an analyst can
+# ask Copilot natural-language questions that reach into the Abstract pipeline's
+# fuller, normalized dataset — context that may never have been forwarded to the
+# SIEM.
+# =============================================================================
+Descriptor:
+  Name: AbstractSecurity
+  DisplayName: Abstract Security (Pipeline)
+  Description: >-
+    Query the Abstract Security data pipeline from Security Copilot — search
+    normalized events and retrieve agentic verdicts for insights.
+  Settings:
+    - Name: AbstractBaseUrl
+      Label: Abstract API base URL
+      Description: e.g. https://api.abstractsecurity.app
+      HintText: https://api.abstractsecurity.app
+      SettingType: String
+      Required: true
+    - Name: AbstractVendorAccountId
+      Label: Vendor account id
+      Description: Sent as the x-as-vendor-account-id header.
+      SettingType: String
+      Required: true
+    - Name: AbstractApiKey
+      Label: Abstract API key
+      Description: Bearer token. Stored securely by Copilot.
+      SettingType: Credential
+      Required: true
+
+SkillGroups:
+  - Format: API
+    Settings:
+      OpenApiSpecUrl: https://api.abstractsecurity.app/openapi.json
+      # Auth + tenant headers applied to every call in this group.
+      Headers:
+        Authorization: "Bearer {{AbstractApiKey}}"
+        x-as-vendor-account-id: "{{AbstractVendorAccountId}}"
+        Content-Type: application/json
+    Skills:
+      - Name: SearchAbstractEvents
+        DisplayName: Search Abstract events
+        Description: Search normalized events in the Abstract pipeline within a time window.
+        DescriptionForModel: >-
+          Use to find security events that Abstract has processed/normalized.
+          Maps to POST /v1/streamviewer/search. Provide an ISO8601 start_time
+          and end_time and the vendor_account_id (from settings). Returns events
+          in the Abstract Common Schema (fields like product, vendor, severity,
+          source_ipv4, dest_ipv4, user_name, message).
+        Inputs:
+          - Name: start_time
+            Description: ISO 8601 UTC start, e.g. 2026-06-16T00:00:00Z
+            Required: true
+          - Name: end_time
+            Description: ISO 8601 UTC end, e.g. 2026-06-17T00:00:00Z
+            Required: true
+        Settings:
+          EndpointUrl: "{{AbstractBaseUrl}}/v1/streamviewer/search"
+          HttpMethod: POST
+          HttpBody: >-
+            {"vendor_account_id":"{{AbstractVendorAccountId}}","page_size":25,
+             "selected_fields":["id","@timestamp","severity","product","vendor","message","source_ipv4","dest_ipv4","user_name"],
+             "start_time":"{{start_time}}","end_time":"{{end_time}}"}
+      - Name: GetInsightVerdict
+        DisplayName: Get Abstract insight verdict
+        Description: Retrieve the stored agentic verdict for an Abstract insight.
+        DescriptionForModel: >-
+          Use when the analyst references an Abstract insight id and wants the
+          verdict (MALICIOUS / SUSPICIOUS / BENIGN / FALSE_POSITIVE), confidence,
+          evidence and recommended actions. Maps to GET
+          /v1/insights/{insight_id}/verdict.
+        Inputs:
+          - Name: insight_id
+            Description: The Abstract insight nanoid.
+            Required: true
+        Settings:
+          EndpointUrl: "{{AbstractBaseUrl}}/v1/insights/{{insight_id}}/verdict"
+          HttpMethod: GET

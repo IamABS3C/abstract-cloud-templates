@@ -1,0 +1,116 @@
+id: gcp-source-cloud-storage-bucket-logs
+title: Logs in a Cloud Storage bucket
+cloud: gcp
+role: source
+scope: project
+summary: For logs that are already objects in a bucket, such as a vendor export or an archive being backfilled.
+  The bucket emits an object-created notification to Pub/Sub and Abstract fetches the object; the notification
+  is a pointer, not the data.
+formats:
+- terraform
+- script
+- cloud-shell
+permissions:
+- role: roles/pubsub.publisher
+  where: The topic
+  why: 'GCS service agent (one per owning project): The notification publishes as the service agent; without
+    it the config delivers nothing.'
+- role: roles/pubsub.subscriber
+  where: The subscription
+  why: 'Abstract service account: Read the pointer.'
+- role: roles/storage.objectViewer
+  where: The bucket, conditioned on the prefix when set
+  why: 'Abstract service account: Fetch the object the pointer points at.'
+- role: roles/cloudkms.cryptoKeyDecrypter
+  where: The KMS key, CMEK buckets only
+  why: 'Abstract service account: Without it every fetch fails with an error that blames Storage.'
+creates:
+- A Pub/Sub topic and subscription for the notifications
+- roles/pubsub.publisher for the GCS service agent of each bucket-owning project
+- One OBJECT_FINALIZE notification config per bucket, scoped by object_name_prefix
+- A service account for Abstract, unless an existing one is passed
+- roles/pubsub.subscriber on the subscription and roles/storage.objectViewer on each bucket, prefix-conditioned
+  when a prefix is set
+- Optional roles/cloudkms.cryptoKeyDecrypter on the CMEK key (cmek_crypto_key_id)
+never_touches:
+- 'Existing notification configs on the bucket: creating one adds to them rather than replacing them'
+prerequisites:
+- The bucket already exists and is receiving objects
+- A real sample object from the producer
+- Scope object_name_prefix; an unscoped config notifies on every object written
+- Abstract stores the objects' content only with a parser for their format on this subscription's own
+  configuration; the managed GCP Pub/Sub parser keeps only Cloud Audit Log records
+parameters:
+- name: buckets
+  type: array
+  required: false
+  description: Buckets to watch, all in bucket_project.
+  default: []
+- name: bucket_map
+  type: object
+  required: false
+  description: bucket => owning project, when buckets span several projects. Each project has its OWN
+    GCS service agent and each must be granted publisher — this is what makes that happen.
+  default: {}
+- name: bucket_project
+  type: string
+  required: false
+  description: Project owning every bucket in buckets. Its Cloud Storage service agent is the principal
+    that publishes. Ignored when bucket_map is set.
+  default: ''
+- name: log_project
+  type: string
+  required: true
+  description: 'DEDICATED logging or security project holding this pipeline. Not a workload project. Find
+    it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project
+    (set create_project = true).'
+  find_it: gcloud projects list --format='value(projectId)'
+  example: acme-security-logging
+- name: object_name_prefix
+  type: string
+  required: false
+  description: Scope to a prefix so irrelevant objects never generate a message you then pay to fetch.
+  default: ''
+- name: cmek_crypto_key_id
+  type: string
+  required: false
+  description: KMS key protecting the bucket, if any. Without the decrypter role every fetch fails with
+    an error that blames Storage rather than KMS.
+  default: ''
+- name: existing_service_account_email
+  type: string
+  required: false
+  description: Reuse Abstract's identity from the log-export deployment. Empty creates a new one.
+  default: ''
+- name: acknowledge_bucket_sprawl
+  type: bool
+  required: false
+  description: Required to notify on more buckets than the module's guard allows without acknowledgement.
+  default: false
+- name: labels
+  type: object
+  required: false
+  description: Labels applied to every resource this template creates.
+  default: {}
+outputs:
+- abstract_onboarding
+- gcs_service_agents
+abstract:
+  integration: gcp_cloud_storage_pubsub_notifications
+  parser: null
+verify:
+- check: The notification config exists and is scoped as intended
+  command: gsutil notification list gs://<bucket>
+  healthy: One config for the expected topic, event type OBJECT_FINALIZE, and the expected prefix.
+- check: The service agents that must publish
+  command: terraform output gcs_service_agents
+  healthy: Each bucket-owning project's agent is listed and granted.
+- check: A real producer file parses end to end
+  command: gsutil cp <real-sample-file> gs://<bucket>/logs/
+  healthy: Its contents appear as correctly parsed events in Abstract.
+cost: 'Object count rather than size: each object is a notification plus at least one Class B read, so
+  thousands of tiny files cost far more than the same bytes in a few large ones.'
+when_to_use: A vendor or internal system writes log files to a bucket and cannot stream, or an archive
+  needs backfilling.
+when_not_to_use: Anything that is already a Cloud Logging entry; use the organization sink instead.
+live_test: static

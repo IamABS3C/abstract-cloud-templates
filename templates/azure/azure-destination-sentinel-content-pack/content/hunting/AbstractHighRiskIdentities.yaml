@@ -1,0 +1,35 @@
+id: 880d9fb9-9f9a-532c-b9a2-78ebb936f374
+name: Abstract - High cumulative-risk identities
+description: |
+  Aggregates Abstract risk_score across the Abstract Common Schema by identity
+  over the last 7 days and surfaces identities whose cumulative, pipeline-scored
+  risk crosses a threshold across multiple products — a cross-source signal the
+  SIEM rarely sees because Abstract enriches/scores upstream.
+severity: High
+requiredDataConnectors:
+  - connectorId: AbstractSecurityConnector
+    dataTypes:
+      - AbstractEventLogs_CL
+tactics:
+  - CredentialAccess
+  - LateralMovement
+relevantTechniques:
+  - T1078
+query: |
+  ASim_AbstractEvent
+  | where TimeGenerated > ago(7d) and isnotempty(AbstractIdentity)
+  | summarize
+      TotalRisk = sum(EventRiskScore),
+      Events = count(),
+      Products = make_set(EventProduct, 10),
+      SrcIps = make_set(SrcIpAddr, 10),
+      LastSeen = max(TimeGenerated)
+      by AbstractIdentity, ActorUsername
+  | where TotalRisk > 100 and array_length(Products) >= 2
+  | sort by TotalRisk desc
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: ActorUsername
+version: 1.0.0

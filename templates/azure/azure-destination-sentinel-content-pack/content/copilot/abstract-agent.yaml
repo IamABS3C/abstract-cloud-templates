@@ -1,0 +1,71 @@
+# =============================================================================
+# Microsoft Security Copilot — Abstract Security triage AGENT (agentic)
+# -----------------------------------------------------------------------------
+# EXPERIMENTAL / lab. Security Copilot agents are evolving; this declarative
+# manifest expresses an autonomous triage agent that orchestrates the Abstract
+# KQL skills (read the workspace) and API skills (reach the pipeline) to produce
+# a grounded recommendation. Validate against the current Copilot agent schema
+# before publishing (learn.microsoft.com/copilot/security/agents).
+#
+# Tools the agent composes:
+#   - AbstractSecurityKql.*        (workspace queries; no key)
+#   - AbstractSecurity.*           (API: SearchAbstractEvents, GetInsightVerdict)
+#   - Abstract's own ASTRO Verdict / IP Threat Intelligence agentic workflows
+#     run server-side in Abstract and are surfaced via the API skill.
+# =============================================================================
+Descriptor:
+  Name: AbstractTriageAgent
+  DisplayName: Abstract Security — Pipeline Triage Agent
+  Description: >-
+    Autonomously triages a Sentinel incident that originated from Abstract:
+    pulls the Abstract verdict, scopes the identity and source across the
+    pipeline's fuller dataset, and recommends a containment + pipeline-tuning
+    action.
+
+Agent:
+  Trigger:
+    Type: SentinelIncident
+    # Fires for incidents that carry an Abstract insight id custom detail.
+    Condition: "customDetails.AbstractInsightId != null"
+  Goal: >-
+    Decide whether this incident is a true positive, explain why with evidence
+    from the Abstract pipeline, and propose the next action — including whether
+    to tune the source at the pipeline to reduce future noise.
+  Instructions: |-
+    You are a Tier-1 SOC analyst augmented by the Abstract Security pipeline.
+    1. Read the incident and extract AbstractInsightId.
+    2. Call GetInsightVerdict for that insight. If no stored verdict exists,
+       summarize the linked events instead.
+    3. Use AbstractIdentityActivity (KQL) to scope the actor across products and
+       cumulative risk over 7 days, and AbstractEventsForIp (KQL) to scope the
+       incident's source IP entity across the pipeline (last 24h).
+    4. Use SearchAbstractEvents (API) for related pipeline context the SIEM may
+       not hold (last 24h, same source IP / user).
+    4b. For each external IOC (IP, domain, hash, email), call osint_pivots (via
+       the Abstract MCP server) to gather curated OSINT/hacker-search-engine
+       links (Shodan, Censys, GreyNoise, VirusTotal, crt.sh, AbuseIPDB, urlscan,
+       …) and cite the most relevant ones as investigation references.
+    5. Produce: verdict (MALICIOUS / SUSPICIOUS / BENIGN / FALSE_POSITIVE),
+       a confidence, a 2-4 sentence rationale citing the evidence above, and
+       concrete recommended actions. If the verdict is FALSE_POSITIVE, explicitly
+       recommend a pipeline tuning rule in Abstract to down-sample the pattern.
+    Never invent fields. If a tool returns nothing, say so and lower confidence.
+  Tools:
+    - SkillGroup: AbstractSecurityKql
+      Skills: [AbstractIdentityActivity, AbstractEventsForIp, AbstractHighSeverity]
+    - SkillGroup: AbstractSecurity
+      Skills: [GetInsightVerdict, SearchAbstractEvents]
+  Outputs:
+    - Name: verdict
+      Type: string
+    - Name: confidence
+      Type: int
+    - Name: rationale
+      Type: string
+    - Name: recommendedActions
+      Type: array
+  Settings:
+    # Run read-only by default; require human approval before any write-back
+    # (e.g. raising severity or calling a pipeline-tuning action).
+    Autonomy: SuggestOnly
+    RequireApprovalForWrites: true

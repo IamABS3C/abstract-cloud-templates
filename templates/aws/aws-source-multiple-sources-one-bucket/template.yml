@@ -1,0 +1,293 @@
+id: aws-source-multiple-sources-one-bucket
+title: Several sources, one stack
+cloud: aws
+role: source
+scope: account
+summary: A master stack nests the per-source child templates, so one deploy provisions any combination of CloudTrail,
+  CloudFront, load balancer, Route 53 Resolver, S3 access, VPC Flow, WAF, CloudWatch Logs, Kinesis and Security
+  Lake sources. The Abstract principal, External ID, encryption and alarm settings are entered once and flow down
+  to every enabled child.
+formats:
+- cloudformation
+- script
+depends_on:
+- aws-source-cloudtrail-s3-sqs
+- aws-source-cloudfront-logs-s3-sqs
+- aws-source-load-balancer-logs-s3-sqs
+- aws-source-route53-resolver-logs-s3-sqs
+- aws-source-s3-access-logs-s3-sqs
+- aws-source-vpc-flow-logs-s3-sqs
+- aws-source-waf-logs-s3-sqs
+- aws-source-cloudwatch-logs-api
+- aws-source-kinesis-stream
+- aws-source-security-lake
+permissions:
+- role: Create IAM roles, S3 buckets, SQS queues, SNS topics and KMS keys
+  where: The target AWS account
+  why: 'Deployer: The stack builds the whole path, including the cross-account role Abstract assumes.'
+- role: sts:AssumeRole, conditioned on sts:ExternalId
+  where: The role created per source
+  why: 'Abstract ingest role: How Abstract reads the queue and the objects; the External ID prevents a confused
+    deputy.'
+- role: s3:ListBucket, s3:GetBucketLocation, s3:GetObject
+  where: The log bucket, scoped to LogPrefix when set
+  why: 'Abstract ingest role: Fetch the log objects each notification points at.'
+- role: sqs:ReceiveMessage, sqs:DeleteMessage, sqs:ChangeMessageVisibility, sqs:GetQueueAttributes, sqs:GetQueueUrl
+  where: The notification queue
+  why: 'Abstract ingest role: Consume the object-created notifications.'
+- role: kms:Decrypt, kms:GenerateDataKey, kms:DescribeKey
+  where: The KMS key, only when SSE-KMS is used
+  why: 'Abstract ingest role: Read objects and messages encrypted with a customer-managed key.'
+creates:
+- One nested stack per enabled source; CloudTrail is on by default and every other source is off until enabled
+- 'For each S3 + SQS source: a log bucket, notification wiring, an SQS queue with a dead-letter queue, and the log
+  producer where CloudFormation can express it'
+- 'For each source: a cross-account IAM role Abstract assumes with the External ID (AssumeRole), or an IAM user
+  and access key (AccessKey)'
+- Optional customer-managed KMS key (KmsMode=CreateNew)
+- Optional dead-letter-queue alarm and CloudWatch dashboard per S3 + SQS source (EnableDlqAlarm, EnableDashboard,
+  both off by default)
+- Optional SSM parameters holding each source's non-secret outputs (ExportToSsm)
+- An EnabledSources output summarising which sources were deployed
+never_touches:
+- 'Sources left disabled: their child stacks are not created'
+- Anything outside the enabled child stacks, each of which states what it never touches
+prerequisites:
+- AWS CLI v2, authenticated, and jq for deploy.sh
+- AWS CLI v2, authenticated
+- The Abstract principal ARN (or account ID) and External ID for your tenant; the console regenerates the External
+  ID on each pass, so mint it once and use the same value on both sides
+- An S3 bucket to host the child templates; TemplateBaseUrl must be an https S3 URL with no trailing slash
+- 'Per enabled source: a VPC, subnet or ENI ID (VPC Flow Logs), a WebACL ARN (WAF), an existing stream name (Kinesis),
+  or a data lake ARN (Security Lake)'
+- With Security Lake enabled, AbstractPrincipalArn must be a bare 12-digit account ID
+- deploy.sh uploads the child templates from the sibling folders to s3://<template-bucket>/<prefix>/<template-id>.yaml
+  before it deploys; CloudFormation refuses any TemplateURL that is not on S3
+parameters:
+- name: TemplateBaseUrl
+  type: string
+  required: true
+  description: Base https URL where the child templates are hosted, no trailing slash (e.g. https://my-bucket.s3.amazonaws.com/abstract).
+    The master appends /<template-id>.yaml, e.g. /aws-source-cloudtrail-s3-sqs.yaml.
+- name: AuthMode
+  type: string
+  required: false
+  description: AssumeRole (recommended) creates a cross-account role Abstract assumes with an External ID; AccessKey
+    creates an IAM user and access key.
+  default: AssumeRole
+  allowed:
+  - AssumeRole
+  - AccessKey
+- name: AbstractPrincipalArn
+  type: string
+  required: false
+  description: 'The principal Abstract provides: a full IAM ARN or a bare 12-digit account ID. Required for AssumeRole.'
+  default: ''
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: ExternalId
+  type: securestring
+  required: false
+  description: The External ID from Abstract, enforced on sts:AssumeRole. Required for AssumeRole.
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: StoreCredentialsInSecretsManager
+  type: string
+  required: false
+  description: With AuthMode=AccessKey, store the access key in Secrets Manager instead of emitting it as a stack
+    output.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: ExportToSsm
+  type: string
+  required: false
+  description: Publish each enabled source's non-secret outputs to SSM Parameter Store.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: BucketEncryption
+  type: string
+  required: false
+  description: 'Bucket encryption for every enabled S3 + SQS source: SSE-S3 or SSE-KMS.'
+  default: SSE-S3
+  allowed:
+  - SSE-S3
+  - SSE-KMS
+- name: QueueEncryption
+  type: string
+  required: false
+  description: 'Queue encryption for every enabled S3 + SQS source: SSE-SQS or SSE-KMS.'
+  default: SSE-SQS
+  allowed:
+  - SSE-SQS
+  - SSE-KMS
+- name: KmsMode
+  type: string
+  required: false
+  description: 'With SSE-KMS: None, CreateNew (each child makes a key) or UseExisting (supply ExistingKmsKeyArn).'
+  default: None
+  allowed:
+  - None
+  - CreateNew
+  - UseExisting
+- name: ExistingKmsKeyArn
+  type: string
+  required: false
+  description: 'Optional. Supply if the bucket, queue or stream uses a customer-managed key. Find it with: aws kms
+    list-aliases'
+  default: ''
+  find_it: aws kms list-aliases
+- name: EnableDlqAlarm
+  type: string
+  required: false
+  description: Create a DLQ CloudWatch alarm for each enabled S3+SQS source.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableDashboard
+  type: string
+  required: false
+  description: Create a CloudWatch dashboard for each enabled S3+SQS source.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: AlarmEmail
+  type: string
+  required: false
+  description: Optional email subscribed to the alarm topic(s).
+  default: ''
+- name: EnableCloudTrail
+  type: string
+  required: false
+  description: Deploy the CloudTrail child stack.
+  default: 'true'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableCloudFront
+  type: string
+  required: false
+  description: Deploy the CloudFront child stack.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableLoadBalancer
+  type: string
+  required: false
+  description: Deploy the LoadBalancer child stack.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableRoute53
+  type: string
+  required: false
+  description: Deploy the Route53 child stack.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableS3AccessLogs
+  type: string
+  required: false
+  description: Deploy the S3AccessLogs child stack.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableVPCFlowLogs
+  type: string
+  required: false
+  description: Deploy the VPCFlowLogs child stack.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableWAF
+  type: string
+  required: false
+  description: Deploy the WAF child stack.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableCloudWatchLogs
+  type: string
+  required: false
+  description: Deploy the CloudWatchLogs child stack.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableKinesis
+  type: string
+  required: false
+  description: Deploy the Kinesis child stack.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableSecurityLake
+  type: string
+  required: false
+  description: Deploy the SecurityLake child stack.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: VpcFlowResourceId
+  type: string
+  required: false
+  description: 'vpc-/subnet-/eni- ID for VPC Flow Logs (if enabled). Find it with: aws ec2 describe-vpcs --query
+    Vpcs[].VpcId'
+  default: ''
+  find_it: aws ec2 describe-vpcs --query Vpcs[].VpcId
+- name: WafWebAclArn
+  type: string
+  required: false
+  description: 'WAF WebACL ARN (if WAF enabled). Find it with: aws wafv2 list-web-acls --scope REGIONAL'
+  default: ''
+  find_it: aws wafv2 list-web-acls --scope REGIONAL
+- name: KinesisStreamName
+  type: string
+  required: false
+  description: 'Existing Kinesis stream name (if Kinesis enabled). Find it with: aws kinesis list-streams'
+  default: ''
+  find_it: aws kinesis list-streams
+- name: SecurityLakeDataLakeArn
+  type: string
+  required: false
+  description: 'Security Lake data lake ARN (if Security Lake enabled). Note: when Security Lake is enabled, AbstractPrincipalArn
+    must be a bare 12-digit account ID (the Security Lake subscriber principal), not a full IAM ARN. Find it with:
+    aws securitylake list-data-lakes'
+  default: ''
+  find_it: aws securitylake list-data-lakes
+- name: SecurityLakeSourceName
+  type: string
+  required: false
+  description: Security Lake AWS log source (if Security Lake enabled).
+  default: WAFV2
+outputs:
+- EnabledSources
+verify:
+- check: The stack reports which sources it deployed
+  command: aws cloudformation describe-stacks --stack-name abstract-aws --query 'Stacks[0].Outputs' --output table
+  healthy: EnabledSources lists true for every source you enabled.
+- check: The SQS queue is receiving messages
+  command: aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible
+  healthy: A non-zero count, or a count that returns to zero because Abstract is consuming.
+- check: The cross-account AssumeRole succeeds
+  healthy: The Abstract source saves without a validation error.
+- check: Events are parsed and searchable
+  healthy: Documents return with vendor, product and action populated.
+cost: Object count drives the S3 request, SQS and KMS charges more than byte volume. KMS decrypt requests, one per
+  object, are the line nobody forecasts on high-object-count sources such as VPC Flow Logs.
+when_to_use: Several AWS sources in the same account and region, where the shared identity and encryption should
+  be set once.
+when_not_to_use: When the child templates cannot be hosted at an https S3 URL; the master only references its children
+  through TemplateBaseUrl.
+live_test: canary

@@ -1,0 +1,292 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - AWS Kinesis Data Streams source. Kinesis is an API-poll
+  source: Abstract reads records directly from a stream using read-only
+  kinesis:* permissions. This template provisions the cross-account access
+  Abstract needs - a role it assumes (recommended, with an External ID) or an
+  IAM user + access key - scoped to one stream or all streams, with optional
+  KMS decrypt (for streams encrypted with a customer-managed key) and optional
+  Secrets Manager storage. It can also optionally CREATE a new Kinesis stream.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "1. Naming" }
+        Parameters: [NamePrefix]
+      - Label: { default: "2. Abstract access" }
+        Parameters: [AuthMode, AbstractPrincipalArn, ExternalId, MaxSessionDurationSeconds, PermissionsBoundaryArn, StoreCredentialsInSecretsManager, ExportToSsm]
+      - Label: { default: "3. Stream" }
+        Parameters: [StreamMode, StreamName, ShardCount, ScopeToSingleStream, KmsKeyArn]
+    ParameterLabels:
+      NamePrefix: { default: "Name prefix for created resources" }
+      AuthMode: { default: "Authentication method" }
+      AbstractPrincipalArn: { default: "Abstract principal ARN or 12-digit account ID" }
+      ExternalId: { default: "External ID (shared secret from Abstract)" }
+      MaxSessionDurationSeconds: { default: "Max assumed-session duration (s)" }
+      PermissionsBoundaryArn: { default: "Permissions boundary ARN (optional)" }
+      StoreCredentialsInSecretsManager: { default: "Store credentials in Secrets Manager?" }
+      StreamMode: { default: "Create a new stream or use an existing one?" }
+      StreamName: { default: "Stream name" }
+      ShardCount: { default: "Shard count (new PROVISIONED stream)" }
+      ScopeToSingleStream: { default: "Restrict access to just that stream?" }
+      KmsKeyArn: { default: "KMS key ARN for encrypted streams (optional)" }
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract-kinesis
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: Lowercase letters, digits, hyphens (3-32 chars).
+
+  AuthMode:
+    Type: String
+    Default: AssumeRole
+    AllowedValues: [AssumeRole, AccessKey]
+
+  AbstractPrincipalArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[0-9]{12}$|^arn:aws[a-z-]*:iam::[0-9]{12}:(root|(role|user)/.+)$"
+
+  ExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    MaxLength: 1224
+
+  MaxSessionDurationSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 43200
+
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$"
+    Description: "Only if your account mandates a permissions boundary on every role. Find it with: aws iam list-policies --scope Local --query Policies[].Arn"
+
+  StoreCredentialsInSecretsManager:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+  ExportToSsm:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Publish the role ARN to SSM Parameter Store under /NamePrefix/kinesis/role-arn for later lookup.
+
+  StreamMode:
+    Type: String
+    Default: UseExisting
+    AllowedValues: [CreateNew, UseExisting]
+    Description: CreateNew provisions a Kinesis stream; UseExisting references one you already have.
+
+  StreamName:
+    Type: String
+    Description: "Name of the stream (required for UseExisting; the name to create for CreateNew). Find it with: aws kinesis list-streams"
+
+  ShardCount:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 1000
+    Description: Shard count for a new PROVISIONED stream.
+
+  ScopeToSingleStream:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Restrict permissions to the named stream (recommended). If false, grants ListStreams/Describe across all streams.
+
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/.+$"
+    Description: "Supply if the stream is encrypted with a customer-managed KMS key. Find it with: aws kms list-aliases"
+
+Rules:
+  AssumeRoleNeedsIdentity:
+    RuleCondition: !Equals [!Ref AuthMode, "AssumeRole"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AbstractPrincipalArn, ""]]
+        AssertDescription: AbstractPrincipalArn is required for AssumeRole.
+      - Assert: !Not [!Equals [!Ref ExternalId, ""]]
+        AssertDescription: ExternalId is required for AssumeRole.
+  NeedsStreamName:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref StreamName, ""]]
+        AssertDescription: StreamName is required.
+
+Conditions:
+  IsAssumeRole: !Equals [!Ref AuthMode, "AssumeRole"]
+  IsAccessKey: !Equals [!Ref AuthMode, "AccessKey"]
+  StoreInSecrets: !And
+    - !Equals [!Ref AuthMode, "AccessKey"]
+    - !Equals [!Ref StoreCredentialsInSecretsManager, "true"]
+  ShowKeyOutputs: !And
+    - !Equals [!Ref AuthMode, "AccessKey"]
+    - !Equals [!Ref StoreCredentialsInSecretsManager, "false"]
+  PrincipalIsBareAccount: !Equals
+    - !Select [0, !Split [":", !Ref AbstractPrincipalArn]]
+    - !Ref AbstractPrincipalArn
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  HasKms: !Not [!Equals [!Ref KmsKeyArn, ""]]
+  CreateStream: !Equals [!Ref StreamMode, "CreateNew"]
+  ScopeStream: !Equals [!Ref ScopeToSingleStream, "true"]
+  DoSsmExportRole: !And
+    - !Equals [!Ref ExportToSsm, "true"]
+    - !Equals [!Ref AuthMode, "AssumeRole"]
+
+Resources:
+  Stream:
+    Type: AWS::Kinesis::Stream
+    Condition: CreateStream
+    Properties:
+      Name: !Ref StreamName
+      ShardCount: !Ref ShardCount
+      StreamEncryption: !If
+        - HasKms
+        - EncryptionType: KMS
+          KeyId: !Ref KmsKeyArn
+        - !Ref "AWS::NoValue"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  AbstractRole:
+    Type: AWS::IAM::Role
+    Condition: IsAssumeRole
+    Properties:
+      RoleName: !Sub "${NamePrefix}-role"
+      Description: Role assumed by Abstract Security to read a Kinesis stream.
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - PrincipalIsBareAccount
+                - !Sub "arn:${AWS::Partition}:iam::${AbstractPrincipalArn}:root"
+                - !Ref AbstractPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: { "sts:ExternalId": !Ref ExternalId }
+      Policies:
+        - PolicyName: read-kinesis
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListStreams
+                Effect: Allow
+                Action: [kinesis:ListStreams, kinesis:ListShards]
+                Resource: "*"
+              - Sid: ReadStream
+                Effect: Allow
+                Action: [kinesis:DescribeStream, kinesis:DescribeStreamSummary, kinesis:GetRecords, kinesis:GetShardIterator, kinesis:SubscribeToShard, kinesis:DescribeStreamConsumer, kinesis:ListShards]
+                Resource: !If
+                  - ScopeStream
+                  - !Sub "arn:${AWS::Partition}:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${StreamName}"
+                  - !Sub "arn:${AWS::Partition}:kinesis:${AWS::Region}:${AWS::AccountId}:stream/*"
+        - !If
+          - HasKms
+          - PolicyName: kms-decrypt
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action: [kms:Decrypt, kms:DescribeKey]
+                  Resource: !Ref KmsKeyArn
+          - !Ref "AWS::NoValue"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  AbstractUser:
+    Type: AWS::IAM::User
+    Condition: IsAccessKey
+    Properties:
+      UserName: !Sub "${NamePrefix}-user"
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      Policies:
+        - PolicyName: read-kinesis
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListStreams
+                Effect: Allow
+                Action: [kinesis:ListStreams, kinesis:ListShards]
+                Resource: "*"
+              - Sid: ReadStream
+                Effect: Allow
+                Action: [kinesis:DescribeStream, kinesis:DescribeStreamSummary, kinesis:GetRecords, kinesis:GetShardIterator, kinesis:SubscribeToShard, kinesis:DescribeStreamConsumer]
+                Resource: !If
+                  - ScopeStream
+                  - !Sub "arn:${AWS::Partition}:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${StreamName}"
+                  - !Sub "arn:${AWS::Partition}:kinesis:${AWS::Region}:${AWS::AccountId}:stream/*"
+              - !If
+                - HasKms
+                - Effect: Allow
+                  Action: [kms:Decrypt, kms:DescribeKey]
+                  Resource: !Ref KmsKeyArn
+                - !Ref "AWS::NoValue"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  AbstractAccessKey:
+    Type: AWS::IAM::AccessKey
+    Condition: IsAccessKey
+    Properties:
+      UserName: !Ref AbstractUser
+      Status: Active
+
+  SsmRoleArn:
+    Type: AWS::SSM::Parameter
+    Condition: DoSsmExportRole
+    Properties:
+      Name: !Sub "/${NamePrefix}/kinesis/role-arn"
+      Type: String
+      Value: !GetAtt AbstractRole.Arn
+      Description: Abstract Kinesis cross-account role ARN.
+      Tags: { Purpose: AbstractSecurity }
+
+  AbstractCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: StoreInSecrets
+    Properties:
+      Name: !Sub "${NamePrefix}/abstract-kinesis-credentials"
+      Description: Abstract Security Kinesis credentials.
+      SecretString: !Sub
+        - '{"accessKeyId":"${AKID}","secretAccessKey":"${SK}","region":"${AWS::Region}","streamName":"${StreamName}"}'
+        - AKID: !Ref AbstractAccessKey
+          SK: !GetAtt AbstractAccessKey.SecretAccessKey
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+Outputs:
+  AuthModeOut:
+    Value: !Ref AuthMode
+  AwsRegion:
+    Value: !Ref "AWS::Region"
+  StreamNameOut:
+    Description: Stream name for the Abstract wizard.
+    Value: !Ref StreamName
+  StreamArn:
+    Condition: CreateStream
+    Value: !GetAtt Stream.Arn
+  RoleArn:
+    Condition: IsAssumeRole
+    Description: Paste this Role ARN into the Abstract Kinesis integration.
+    Value: !GetAtt AbstractRole.Arn
+  AccessKeyId:
+    Condition: ShowKeyOutputs
+    Value: !Ref AbstractAccessKey
+  SecretAccessKey:
+    Condition: ShowKeyOutputs
+    Description: SENSITIVE - store securely, rotate after onboarding.
+    Value: !GetAtt AbstractAccessKey.SecretAccessKey
+  CredentialsSecretArn:
+    Condition: StoreInSecrets
+    Value: !Ref AbstractCredentialsSecret

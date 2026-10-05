@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.47.16.16243",
+      "templateHash": "16431700135770636192"
+    }
+  },
+  "parameters": {
+    "keyVaultName": {
+      "type": "string"
+    },
+    "principalId": {
+      "type": "string"
+    },
+    "roleDefinitionId": {
+      "type": "string"
+    },
+    "principalType": {
+      "type": "string",
+      "defaultValue": "",
+      "allowedValues": [
+        "",
+        "ServicePrincipal",
+        "User",
+        "Group"
+      ],
+      "metadata": {
+        "description": "Principal type of principalId. Set it for a freshly created identity to avoid PrincipalNotFound while the directory replicates; leave empty when the type is not known (for example a user or group supplied by the deployer)."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('principalId'), parameters('roleDefinitionId'))]",
+      "properties": {
+        "principalId": "[parameters('principalId')]",
+        "roleDefinitionId": "[parameters('roleDefinitionId')]",
+        "principalType": "[if(empty(parameters('principalType')), null(), parameters('principalType'))]"
+      }
+    }
+  ]
+}

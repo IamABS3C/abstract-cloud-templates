@@ -1,0 +1,42 @@
+[
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "abstract-s3-sqs"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "LogBucketName",
+    "ParameterValue": "<LogBucketName>"
+  },
+  {
+    "ParameterKey": "LogBucketPrefix",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "SqsQueueArn",
+    "ParameterValue": "<SqsQueueArn>"
+  },
+  {
+    "ParameterKey": "KmsKeyArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "PermissionsBoundaryArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "MaxSessionDurationSeconds",
+    "ParameterValue": "3600"
+  },
+  {
+    "ParameterKey": "CreateAccessKeyUser",
+    "ParameterValue": "false"
+  }
+]

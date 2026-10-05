@@ -1,0 +1,337 @@
+id: aws-source-s3-access-logs-s3-sqs
+title: S3 server access logs
+cloud: aws
+role: source
+scope: account
+summary: Creates the hardened destination bucket for S3 server access logging, the SQS queue S3 notifies, and the
+  cross-account role Abstract assumes to read them.
+formats:
+- cloudformation
+- launch-stack
+- script
+assemble:
+  from: _snippets/s3-log-source.yaml
+  set:
+    SourceType: S3AccessLogs
+permissions:
+- role: Create IAM roles or users, S3, SQS, SNS, KMS and the producer resources
+  where: The target AWS account
+  why: 'Deployer: the stack creates the whole path; deploy.sh passes CAPABILITY_NAMED_IAM because it names IAM resources.'
+- role: sts:AssumeRole, conditioned on sts:ExternalId
+  where: <NamePrefix>-S3AccessLogs-role
+  why: 'Abstract: only the Abstract principal you supply can assume it, and only with the matching External ID.'
+- role: s3:ListBucket, s3:GetBucketLocation, s3:GetObject
+  where: The log bucket, scoped to LogPrefix when set
+  why: 'Abstract: read the log objects each notification points at.'
+- role: sqs:ReceiveMessage, sqs:DeleteMessage, sqs:ChangeMessageVisibility, sqs:GetQueueAttributes, sqs:GetQueueUrl
+  where: The notification queue
+  why: 'Abstract: consume the notifications.'
+- role: kms:Decrypt, kms:GenerateDataKey, kms:DescribeKey
+  where: The KMS key, only when SSE-KMS is selected
+  why: 'Abstract: decrypt objects and messages under a customer-managed key.'
+creates:
+- 'A hardened S3 log bucket (BucketMode=CreateNew): Block Public Access, ACLs disabled, HTTPS-only policy, versioning,
+  lifecycle expiry, retained on stack delete'
+- A bucket policy granting PutObject only to this source's log-delivery service principal
+- An SQS queue and dead-letter queue with redrive (QueueMode=CreateNew)
+- 'No producer: enable server access logging on each source bucket, pointing at this destination bucket'
+- A cross-account IAM role <NamePrefix>-S3AccessLogs-role (AssumeRole), or an IAM user and access key (AccessKey),
+  optionally stored in Secrets Manager
+- Optional customer-managed KMS key and alias (KmsMode=CreateNew)
+- Optional dead-letter and queue-age alarms and a CloudWatch dashboard (off by default)
+- Optional SSM parameters for the bucket name, queue URL and role ARN (ExportToSsm)
+never_touches:
+- 'An existing bucket''s notification configuration or producer: with BucketMode=UseExisting the bucket is only
+  referenced'
+- 'The source buckets: server access logging is switched on by you, not by the stack'
+- IAM principals other than the role (or user) the stack creates
+prerequisites:
+- AWS CLI v2, authenticated to the target account and region, and jq for deploy.sh
+- The Abstract principal ARN (or 12-digit account ID) and the External ID, copied from the integration in the Abstract
+  console
+- With BucketMode=UseExisting, wire the bucket's notifications and the log producer yourself; the stack does not
+  write them on a bucket it does not own
+- After the deploy, enable server access logging on each source bucket with the destination from BucketNameOut
+parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for all created resource names.
+  default: abstract
+- name: AuthMode
+  type: string
+  required: false
+  description: AssumeRole (recommended) creates a cross-account role Abstract assumes with an External ID. AccessKey
+    creates a long-lived IAM user + keys (use only when Abstract cannot assume a role).
+  default: AssumeRole
+  allowed:
+  - AssumeRole
+  - AccessKey
+- name: AbstractPrincipalArn
+  type: string
+  required: false
+  description: Required for AssumeRole. The principal Abstract provides (full IAM ARN or bare 12-digit account ID,
+    expanded to :root). Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract
+    console. Note the console regenerates the External ID on each pass, so mint it once and give the SAME value
+    to whoever deploys the role.
+  default: ''
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+  example: <AbstractPrincipalArn>
+- name: ExternalId
+  type: securestring
+  required: false
+  description: Required for AssumeRole. Shared secret from Abstract, enforced on sts:AssumeRole (confused-deputy
+    protection). Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract console.
+    Note the console regenerates the External ID on each pass, so mint it once and give the SAME value to whoever
+    deploys the role.
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: MaxSessionDurationSeconds
+  type: int
+  required: false
+  description: Maximum duration of an assumed session.
+  default: 3600
+- name: PermissionsBoundaryArn
+  type: string
+  required: false
+  description: 'Optional IAM permissions-boundary policy ARN attached to the created role/user. Only if your account
+    mandates a boundary on every role. Find it with: aws iam list-policies --scope Local --query Policies[].Arn'
+  default: ''
+  find_it: aws iam list-policies --scope Local --query Policies[].Arn
+- name: StoreCredentialsInSecretsManager
+  type: string
+  required: false
+  description: When AuthMode=AccessKey, store the generated access key in AWS Secrets Manager (encrypted, never
+    shown in stack outputs) instead of emitting the secret as a plaintext output. Recommended for production.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: ExportToSsm
+  type: string
+  required: false
+  description: Publish the non-secret outputs (role ARN, queue URL, bucket name) to SSM Parameter Store under /NamePrefix/SourceType/*
+    so other stacks, regions, or tooling can look them up later with aws ssm get-parameter.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: BucketMode
+  type: string
+  required: false
+  description: CreateNew provisions a hardened bucket (and the producer, where possible). UseExisting references
+    a bucket you already have (you wire notifications/producer yourself).
+  default: CreateNew
+  allowed:
+  - CreateNew
+  - UseExisting
+- name: BucketName
+  type: string
+  required: false
+  description: 'For UseExisting, the existing bucket name (required). For CreateNew, an optional explicit name;
+    leave blank to auto-generate. WAF requires the name to start with aws-waf-logs-. Find it with: aws s3 ls'
+  default: ''
+  find_it: aws s3 ls
+- name: LogPrefix
+  type: string
+  required: false
+  description: Key prefix that scopes reads/writes (e.g. AWSLogs/). CloudTrail and VPC Flow Logs prepend AWSLogs/
+    automatically; leave blank for those unless you want a custom top-level prefix.
+  default: ''
+- name: LogRetentionDays
+  type: int
+  required: false
+  description: Lifecycle expiration for current log objects (0 = keep forever).
+  default: 365
+- name: NoncurrentRetentionDays
+  type: int
+  required: false
+  description: Days to keep noncurrent (overwritten/deleted) versions before expiry.
+  default: 30
+- name: NotificationPath
+  type: string
+  required: false
+  description: How notifications reach the queue. S3ToSQS = S3 event -> SQS (most sources). S3ToSNSToSQS = S3 event
+    -> SNS -> SQS (fan-out). CloudTrailToSNSToSQS = Trail -> SNS -> SQS (CloudTrail's native delivery). None = create
+    the queue only (you wire delivery yourself; required when BucketMode=UseExisting and you cannot grant the stack
+    notification rights).
+  default: S3ToSQS
+  allowed:
+  - S3ToSQS
+  - S3ToSNSToSQS
+  - CloudTrailToSNSToSQS
+  - None
+- name: QueueMode
+  type: string
+  required: false
+  description: Create a new SQS queue (+DLQ) or attach policy/subscription to an existing queue.
+  default: CreateNew
+  allowed:
+  - CreateNew
+  - UseExisting
+- name: ExistingQueueArn
+  type: string
+  required: false
+  description: 'Required when QueueMode=UseExisting. Find it with: aws sqs get-queue-attributes --queue-url QUEUE_URL
+    --attribute-names QueueArn'
+  default: ''
+  find_it: aws sqs get-queue-attributes --queue-url QUEUE_URL --attribute-names QueueArn
+- name: ExistingQueueUrl
+  type: string
+  required: false
+  description: 'Required when QueueMode=UseExisting (used for the output and Abstract wizard). Find it with: aws
+    sqs list-queues'
+  default: ''
+  find_it: aws sqs list-queues
+- name: QueueVisibilityTimeoutSeconds
+  type: int
+  required: false
+  description: Visibility timeout for the created queue.
+  default: 900
+- name: MessageRetentionSeconds
+  type: int
+  required: false
+  description: How long SQS retains a message (default 4 days, max 14).
+  default: 345600
+- name: DlqMaxReceiveCount
+  type: int
+  required: false
+  description: Number of failed receives before a message is moved to the dead-letter queue.
+  default: 5
+- name: SubscriptionEmail
+  type: string
+  required: false
+  description: Optional email subscribed to the SNS topic for operational alerts (only when an SNS path is used).
+  default: ''
+- name: BucketEncryption
+  type: string
+  required: false
+  description: SSE-S3 (AES256, AWS-managed) or SSE-KMS (customer-managed key).
+  default: SSE-S3
+  allowed:
+  - SSE-S3
+  - SSE-KMS
+- name: QueueEncryption
+  type: string
+  required: false
+  description: SSE-SQS (AWS-managed) or SSE-KMS (customer-managed key).
+  default: SSE-SQS
+  allowed:
+  - SSE-SQS
+  - SSE-KMS
+- name: KmsMode
+  type: string
+  required: false
+  description: When any encryption is SSE-KMS, choose CreateNew (the stack makes a CMK with the right key policy)
+    or UseExisting (supply ExistingKmsKeyArn).
+  default: None
+  allowed:
+  - None
+  - CreateNew
+  - UseExisting
+- name: ExistingKmsKeyArn
+  type: string
+  required: false
+  description: 'Required when KmsMode=UseExisting. Find it with: aws kms list-aliases'
+  default: ''
+  find_it: aws kms list-aliases
+- name: RequireAclHeader
+  type: string
+  required: false
+  description: Require s3:x-amz-acl=bucket-owner-full-control on PutObject. "auto" uses the correct default per
+    source (CloudTrail/ALB/Route53/VPC need it; others don't).
+  default: auto
+  allowed:
+  - auto
+  - 'true'
+  - 'false'
+- name: RestrictBySourceAccount
+  type: string
+  required: false
+  description: Add aws:SourceAccount = this account to the PutObject condition (recommended).
+  default: 'true'
+  allowed:
+  - 'true'
+  - 'false'
+- name: SourceArnCondition
+  type: string
+  required: false
+  description: Optional aws:SourceArn value to further restrict who may write (e.g. a specific trail or distribution
+    ARN).
+  default: ''
+- name: LogDeliveryPrincipalOverride
+  type: string
+  required: false
+  description: Override the log-delivery service principal (advanced; leave blank to use the correct default for
+    the SourceType).
+  default: ''
+- name: EnableDlqAlarm
+  type: string
+  required: false
+  description: Create a CloudWatch alarm that fires when messages land in the dead-letter queue (Abstract failing
+    to process). Requires QueueMode=CreateNew.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: DlqAlarmThreshold
+  type: int
+  required: false
+  description: Number of visible DLQ messages that triggers the alarm.
+  default: 1
+- name: EnableQueueAgeAlarm
+  type: string
+  required: false
+  description: Alarm when the oldest message in the main queue exceeds QueueAgeAlarmSeconds (ingestion lag). Requires
+    QueueMode=CreateNew.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: QueueAgeAlarmSeconds
+  type: int
+  required: false
+  description: Age (seconds) of the oldest message that triggers the queue-age alarm.
+  default: 3600
+- name: EnableDashboard
+  type: string
+  required: false
+  description: Create a CloudWatch dashboard for the queue/DLQ metrics. Requires QueueMode=CreateNew.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: AlarmEmail
+  type: string
+  required: false
+  description: Optional email subscribed to the alarm topic (separate from the notification SubscriptionEmail).
+  default: ''
+outputs:
+- SourceTypeOut
+- AuthModeOut
+- AwsRegion
+- BucketNameOut
+- SqsQueueUrl
+- SqsQueueArn
+- DeadLetterQueueUrl
+- SnsTopicArn
+- KmsKeyArnOut
+- RoleArn
+- AccessKeyId
+- SecretAccessKey
+- CredentialsSecretArn
+abstract:
+  integration: aws_s3_access
+verify:
+- check: The stack outputs carry the values the Abstract integration needs
+  command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
+  healthy: SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present.
+- check: The SQS queue is receiving notifications
+  command: aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible
+  healthy: A non-zero count, or a count that returns to zero because Abstract is consuming.
+- check: Nothing is failing into the dead-letter queue
+  command: aws sqs get-queue-attributes --queue-url <dead-letter-queue-url> --attribute-names ApproximateNumberOfMessagesVisible
+  healthy: Zero messages.
+cost: Server access logging is free apart from storage; it produces many small objects, each one an S3 and SQS request.
+when_to_use: You want S3 server access logs for one or more buckets in Abstract.
+when_not_to_use: 'Access logs already land in a bucket: use the read role for an existing bucket and queue.'
+live_test: canary

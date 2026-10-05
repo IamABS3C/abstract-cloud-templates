@@ -1,0 +1,1900 @@
+{
+ "_comment": "Abstract Common Schema (ACS) static field catalog from GET /v1/acs/fields (tenant-specific ext.* fields removed; ext is carried as one dynamic column). Input to solutions/scripts/gen-sentinel-schema.py.",
+ "source": "GET /v1/acs/fields",
+ "retrieved": "2026-09-27",
+ "fieldCount": 473,
+ "fields": [
+  {
+   "field": "id",
+   "data_type": "String"
+  },
+  {
+   "field": "identity",
+   "data_type": "String"
+  },
+  {
+   "field": "aggregation_count",
+   "data_type": "Float64"
+  },
+  {
+   "field": "aggregation_start",
+   "data_type": "Date"
+  },
+  {
+   "field": "aggregation_end",
+   "data_type": "Date"
+  },
+  {
+   "field": "related_events",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "matched_rules",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "risk_score",
+   "data_type": "Float64"
+  },
+  {
+   "field": "correlated_count",
+   "data_type": "Float64"
+  },
+  {
+   "field": "severity",
+   "data_type": "String"
+  },
+  {
+   "field": "@timestamp",
+   "data_type": "Date"
+  },
+  {
+   "field": "ingested_time",
+   "data_type": "Date"
+  },
+  {
+   "field": "insertion_time",
+   "data_type": "Date"
+  },
+  {
+   "field": "labels",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "message",
+   "data_type": "String"
+  },
+  {
+   "field": "tags",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "type",
+   "data_type": "String"
+  },
+  {
+   "field": "action",
+   "data_type": "String"
+  },
+  {
+   "field": "product",
+   "data_type": "String"
+  },
+  {
+   "field": "vendor",
+   "data_type": "String"
+  },
+  {
+   "field": "span_id",
+   "data_type": "String"
+  },
+  {
+   "field": "trace_id",
+   "data_type": "String"
+  },
+  {
+   "field": "transaction_id",
+   "data_type": "String"
+  },
+  {
+   "field": "customer_id",
+   "data_type": "String"
+  },
+  {
+   "field": "customer_name",
+   "data_type": "String"
+  },
+  {
+   "field": "resource.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "resource.id",
+   "data_type": "String"
+  },
+  {
+   "field": "resource.name",
+   "data_type": "String"
+  },
+  {
+   "field": "resource.type",
+   "data_type": "String"
+  },
+  {
+   "field": "host_address",
+   "data_type": "String"
+  },
+  {
+   "field": "host_ipv4",
+   "data_type": "Ipv4"
+  },
+  {
+   "field": "host_ipv6",
+   "data_type": "Ipv6"
+  },
+  {
+   "field": "host_name",
+   "data_type": "String"
+  },
+  {
+   "field": "dest_address",
+   "data_type": "String"
+  },
+  {
+   "field": "dest_ipv4",
+   "data_type": "Ipv4"
+  },
+  {
+   "field": "dest_ipv6",
+   "data_type": "Ipv6"
+  },
+  {
+   "field": "dest_port",
+   "data_type": "Float64"
+  },
+  {
+   "field": "source_address",
+   "data_type": "String"
+  },
+  {
+   "field": "source_ipv4",
+   "data_type": "Ipv4"
+  },
+  {
+   "field": "source_ipv6",
+   "data_type": "Ipv6"
+  },
+  {
+   "field": "source_port",
+   "data_type": "Float64"
+  },
+  {
+   "field": "user_agent",
+   "data_type": "String"
+  },
+  {
+   "field": "user_id",
+   "data_type": "String"
+  },
+  {
+   "field": "user_name",
+   "data_type": "String"
+  },
+  {
+   "field": "vulnerability_id",
+   "data_type": "String"
+  },
+  {
+   "field": "agent.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "agent.id",
+   "data_type": "String"
+  },
+  {
+   "field": "agent.name",
+   "data_type": "String"
+  },
+  {
+   "field": "agent.type",
+   "data_type": "String"
+  },
+  {
+   "field": "agent.version",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.account_id",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.account_name",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "cloud.availability_zone",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.origin.account_id",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.origin.account_name",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.origin.availability_zone",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.origin.project_id",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.origin.project_name",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.origin.region",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.project_id",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.project_name",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.provider",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.region",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.target.account_id",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.target.account_name",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.target.availability_zone",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.target.project_id",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.target.project_name",
+   "data_type": "String"
+  },
+  {
+   "field": "cloud.target.region",
+   "data_type": "String"
+  },
+  {
+   "field": "container.id",
+   "data_type": "String"
+  },
+  {
+   "field": "container.image_hash_list",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "container.image_name",
+   "data_type": "String"
+  },
+  {
+   "field": "container.name",
+   "data_type": "String"
+  },
+  {
+   "field": "container.runtime",
+   "data_type": "String"
+  },
+  {
+   "field": "data_stream.dataset",
+   "data_type": "String"
+  },
+  {
+   "field": "data_stream.namespace",
+   "data_type": "String"
+  },
+  {
+   "field": "data_stream.type",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "destination.asn",
+   "data_type": "Float64"
+  },
+  {
+   "field": "destination.as_organization",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.domain",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.geo.city_name",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.geo.continent_code",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.geo.continent_name",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.geo.country_iso_code",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.geo.country_name",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.geo.location",
+   "data_type": "Coordinate"
+  },
+  {
+   "field": "destination.geo.name",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.geo.region_name",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.mac",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.nat.ipv4",
+   "data_type": "Ipv4"
+  },
+  {
+   "field": "destination.nat.ipv6",
+   "data_type": "Ipv6"
+  },
+  {
+   "field": "destination.nat.port",
+   "data_type": "Float64"
+  },
+  {
+   "field": "destination.packets",
+   "data_type": "Float64"
+  },
+  {
+   "field": "destination.resource.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "destination.resource.id",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.resource.name",
+   "data_type": "String"
+  },
+  {
+   "field": "destination.resource.type",
+   "data_type": "String"
+  },
+  {
+   "field": "device.id",
+   "data_type": "String"
+  },
+  {
+   "field": "device.manufacturer",
+   "data_type": "String"
+  },
+  {
+   "field": "device.model_id",
+   "data_type": "String"
+  },
+  {
+   "field": "device.model_name",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.answers.class",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.answers.data",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.answers.name",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.answers.ttl",
+   "data_type": "Float64"
+  },
+  {
+   "field": "dns.answers.type",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.header_flags",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "dns.id",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.op_code",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.question.class",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.question.name",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.question.registered_domain",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.question.subdomain",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.question.top_level_domain",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.question.type",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.resolved_ipv4",
+   "data_type": "List(Ipv4)"
+  },
+  {
+   "field": "dns.resolved_ipv6",
+   "data_type": "List(Ipv6)"
+  },
+  {
+   "field": "dns.response_code",
+   "data_type": "String"
+  },
+  {
+   "field": "dns.type",
+   "data_type": "String"
+  },
+  {
+   "field": "email.attachments.file.hash.md5",
+   "data_type": "String"
+  },
+  {
+   "field": "email.attachments.file.hash.sha1",
+   "data_type": "String"
+  },
+  {
+   "field": "email.attachments.file.hash.sha256",
+   "data_type": "String"
+  },
+  {
+   "field": "email.attachments.file.hash.sha512",
+   "data_type": "String"
+  },
+  {
+   "field": "email.attachments.file.mime_type",
+   "data_type": "String"
+  },
+  {
+   "field": "email.attachments.file.name",
+   "data_type": "String"
+  },
+  {
+   "field": "email.attachments.file.size",
+   "data_type": "Float64"
+  },
+  {
+   "field": "email.bcc",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "email.cc",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "email.content_type",
+   "data_type": "String"
+  },
+  {
+   "field": "email.delivery_timestamp",
+   "data_type": "Date"
+  },
+  {
+   "field": "email.direction",
+   "data_type": "String"
+  },
+  {
+   "field": "email.from",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "email.local_id",
+   "data_type": "String"
+  },
+  {
+   "field": "email.message_id",
+   "data_type": "String"
+  },
+  {
+   "field": "email.origination_timestamp",
+   "data_type": "Date"
+  },
+  {
+   "field": "email.reply_to",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "email.sender",
+   "data_type": "String"
+  },
+  {
+   "field": "email.subject",
+   "data_type": "String"
+  },
+  {
+   "field": "email.to",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "email.x_mailer",
+   "data_type": "String"
+  },
+  {
+   "field": "error.code",
+   "data_type": "String"
+  },
+  {
+   "field": "error.id",
+   "data_type": "String"
+  },
+  {
+   "field": "error.message",
+   "data_type": "String"
+  },
+  {
+   "field": "error.stack_trace",
+   "data_type": "String"
+  },
+  {
+   "field": "error.type",
+   "data_type": "String"
+  },
+  {
+   "field": "event.category",
+   "data_type": "String"
+  },
+  {
+   "field": "event.code",
+   "data_type": "String"
+  },
+  {
+   "field": "event.dataset",
+   "data_type": "String"
+  },
+  {
+   "field": "event.duration",
+   "data_type": "Float64"
+  },
+  {
+   "field": "event.end",
+   "data_type": "Date"
+  },
+  {
+   "field": "event.id",
+   "data_type": "String"
+  },
+  {
+   "field": "event.module",
+   "data_type": "String"
+  },
+  {
+   "field": "event.original",
+   "data_type": "String"
+  },
+  {
+   "field": "event.outcome",
+   "data_type": "String"
+  },
+  {
+   "field": "event.parsed",
+   "data_type": "JSON"
+  },
+  {
+   "field": "event.provider",
+   "data_type": "String"
+  },
+  {
+   "field": "event.reason",
+   "data_type": "String"
+  },
+  {
+   "field": "event.reference",
+   "data_type": "String"
+  },
+  {
+   "field": "event.risk_score",
+   "data_type": "Float64"
+  },
+  {
+   "field": "event.severity",
+   "data_type": "String"
+  },
+  {
+   "field": "event.start",
+   "data_type": "Date"
+  },
+  {
+   "field": "event.timezone",
+   "data_type": "String"
+  },
+  {
+   "field": "event.url",
+   "data_type": "String"
+  },
+  {
+   "field": "ext",
+   "data_type": "JSON"
+  },
+  {
+   "field": "file.accessed",
+   "data_type": "Date"
+  },
+  {
+   "field": "file.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "file.architecture",
+   "data_type": "String"
+  },
+  {
+   "field": "file.attributes",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.code_signature.status",
+   "data_type": "String"
+  },
+  {
+   "field": "file.code_signature.subject_name",
+   "data_type": "String"
+  },
+  {
+   "field": "file.code_signature.valid",
+   "data_type": "Boolean"
+  },
+  {
+   "field": "file.compile_time",
+   "data_type": "Date"
+  },
+  {
+   "field": "file.created",
+   "data_type": "Date"
+  },
+  {
+   "field": "file.ctime",
+   "data_type": "Date"
+  },
+  {
+   "field": "file.device",
+   "data_type": "String"
+  },
+  {
+   "field": "file.directory",
+   "data_type": "String"
+  },
+  {
+   "field": "file.exports",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "file.extension",
+   "data_type": "String"
+  },
+  {
+   "field": "file.fork_name",
+   "data_type": "String"
+  },
+  {
+   "field": "file.gid",
+   "data_type": "String"
+  },
+  {
+   "field": "file.group",
+   "data_type": "String"
+  },
+  {
+   "field": "file.hash.md5",
+   "data_type": "String"
+  },
+  {
+   "field": "file.hash.sha1",
+   "data_type": "String"
+  },
+  {
+   "field": "file.hash.sha256",
+   "data_type": "String"
+  },
+  {
+   "field": "file.hash.sha512",
+   "data_type": "String"
+  },
+  {
+   "field": "file.import_hash",
+   "data_type": "String"
+  },
+  {
+   "field": "file.imports",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "file.inode",
+   "data_type": "String"
+  },
+  {
+   "field": "file.mime_type",
+   "data_type": "String"
+  },
+  {
+   "field": "file.mode",
+   "data_type": "String"
+  },
+  {
+   "field": "file.mtime",
+   "data_type": "Date"
+  },
+  {
+   "field": "file.name",
+   "data_type": "String"
+  },
+  {
+   "field": "file.owner",
+   "data_type": "String"
+  },
+  {
+   "field": "file.path",
+   "data_type": "String"
+  },
+  {
+   "field": "file.pe.company",
+   "data_type": "String"
+  },
+  {
+   "field": "file.pe.description",
+   "data_type": "String"
+  },
+  {
+   "field": "file.pe.file_version",
+   "data_type": "String"
+  },
+  {
+   "field": "file.pe.original_file_name",
+   "data_type": "String"
+  },
+  {
+   "field": "file.pe.pehash",
+   "data_type": "String"
+  },
+  {
+   "field": "file.pe.product",
+   "data_type": "String"
+  },
+  {
+   "field": "file.sections.flags",
+   "data_type": "String"
+  },
+  {
+   "field": "file.sections.name",
+   "data_type": "String"
+  },
+  {
+   "field": "file.sections.physical_offset",
+   "data_type": "String"
+  },
+  {
+   "field": "file.sections.physical_size",
+   "data_type": "Float64"
+  },
+  {
+   "field": "file.sections.type",
+   "data_type": "String"
+  },
+  {
+   "field": "file.sections.virtual_address",
+   "data_type": "Float64"
+  },
+  {
+   "field": "file.sections.virtual_size",
+   "data_type": "Float64"
+  },
+  {
+   "field": "file.segments.sections",
+   "data_type": "String"
+  },
+  {
+   "field": "file.segments.type",
+   "data_type": "String"
+  },
+  {
+   "field": "file.shared_libraries",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.size",
+   "data_type": "Float64"
+  },
+  {
+   "field": "file.target_path",
+   "data_type": "String"
+  },
+  {
+   "field": "file.type",
+   "data_type": "String"
+  },
+  {
+   "field": "file.uid",
+   "data_type": "String"
+  },
+  {
+   "field": "file.x509.alternative_names",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.issuer.common_name",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.issuer.country",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.issuer.distinguished_name",
+   "data_type": "String"
+  },
+  {
+   "field": "file.x509.issuer.locality",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.issuer.organization",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.issuer.organizational_unit",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.issuer.state_or_province",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.not_after",
+   "data_type": "Date"
+  },
+  {
+   "field": "file.x509.not_before",
+   "data_type": "Date"
+  },
+  {
+   "field": "file.x509.public_key_algorithm",
+   "data_type": "String"
+  },
+  {
+   "field": "file.x509.public_key_exponent",
+   "data_type": "Float64"
+  },
+  {
+   "field": "file.x509.public_key_size",
+   "data_type": "Float64"
+  },
+  {
+   "field": "file.x509.serial_number",
+   "data_type": "String"
+  },
+  {
+   "field": "file.x509.signature_algorithm",
+   "data_type": "String"
+  },
+  {
+   "field": "file.x509.subject.common_name",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.subject.country",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.subject.distinguished_name",
+   "data_type": "String"
+  },
+  {
+   "field": "file.x509.subject.locality",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.subject.organization",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.subject.organizational_unit",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.subject.state_or_province",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "file.x509.version_number",
+   "data_type": "String"
+  },
+  {
+   "field": "group.domain",
+   "data_type": "String"
+  },
+  {
+   "field": "group.id",
+   "data_type": "String"
+  },
+  {
+   "field": "group.name",
+   "data_type": "String"
+  },
+  {
+   "field": "host.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "host.architecture",
+   "data_type": "String"
+  },
+  {
+   "field": "host.domain",
+   "data_type": "String"
+  },
+  {
+   "field": "host.geo.city_name",
+   "data_type": "String"
+  },
+  {
+   "field": "host.geo.continent_code",
+   "data_type": "String"
+  },
+  {
+   "field": "host.geo.continent_name",
+   "data_type": "String"
+  },
+  {
+   "field": "host.geo.country_iso_code",
+   "data_type": "String"
+  },
+  {
+   "field": "host.geo.country_name",
+   "data_type": "String"
+  },
+  {
+   "field": "host.geo.location",
+   "data_type": "Coordinate"
+  },
+  {
+   "field": "host.geo.name",
+   "data_type": "String"
+  },
+  {
+   "field": "host.geo.region_name",
+   "data_type": "String"
+  },
+  {
+   "field": "host.mac",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "host.os.family",
+   "data_type": "String"
+  },
+  {
+   "field": "host.os.kernel",
+   "data_type": "String"
+  },
+  {
+   "field": "host.os.name",
+   "data_type": "String"
+  },
+  {
+   "field": "host.os.type",
+   "data_type": "String"
+  },
+  {
+   "field": "host.os.version",
+   "data_type": "String"
+  },
+  {
+   "field": "host.type",
+   "data_type": "String"
+  },
+  {
+   "field": "host.uptime",
+   "data_type": "Float64"
+  },
+  {
+   "field": "http.request.content",
+   "data_type": "String"
+  },
+  {
+   "field": "http.request.bytes",
+   "data_type": "Float64"
+  },
+  {
+   "field": "http.request.id",
+   "data_type": "String"
+  },
+  {
+   "field": "http.request.method",
+   "data_type": "String"
+  },
+  {
+   "field": "http.request.mime_type",
+   "data_type": "String"
+  },
+  {
+   "field": "http.request.referrer",
+   "data_type": "String"
+  },
+  {
+   "field": "http.response.content",
+   "data_type": "String"
+  },
+  {
+   "field": "http.response.bytes",
+   "data_type": "Float64"
+  },
+  {
+   "field": "http.response.mime_type",
+   "data_type": "String"
+  },
+  {
+   "field": "http.response.status_code",
+   "data_type": "Float64"
+  },
+  {
+   "field": "http.version",
+   "data_type": "String"
+  },
+  {
+   "field": "log.file.path",
+   "data_type": "String"
+  },
+  {
+   "field": "log.level",
+   "data_type": "String"
+  },
+  {
+   "field": "log.logger",
+   "data_type": "String"
+  },
+  {
+   "field": "log.origin.file.line",
+   "data_type": "Float64"
+  },
+  {
+   "field": "log.origin.file.name",
+   "data_type": "String"
+  },
+  {
+   "field": "log.origin.function",
+   "data_type": "String"
+  },
+  {
+   "field": "log.syslog.appname",
+   "data_type": "String"
+  },
+  {
+   "field": "log.syslog.facility.code",
+   "data_type": "Float64"
+  },
+  {
+   "field": "log.syslog.facility.name",
+   "data_type": "String"
+  },
+  {
+   "field": "log.syslog.hostname",
+   "data_type": "String"
+  },
+  {
+   "field": "log.syslog.msgid",
+   "data_type": "String"
+  },
+  {
+   "field": "log.syslog.priority",
+   "data_type": "Float64"
+  },
+  {
+   "field": "log.syslog.procid",
+   "data_type": "String"
+  },
+  {
+   "field": "log.syslog.severity.code",
+   "data_type": "Float64"
+  },
+  {
+   "field": "log.syslog.severity.name",
+   "data_type": "String"
+  },
+  {
+   "field": "log.syslog.structured_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "log.syslog.version",
+   "data_type": "String"
+  },
+  {
+   "field": "network.application",
+   "data_type": "String"
+  },
+  {
+   "field": "network.bytes",
+   "data_type": "Float64"
+  },
+  {
+   "field": "network.community_id",
+   "data_type": "String"
+  },
+  {
+   "field": "network.direction",
+   "data_type": "String"
+  },
+  {
+   "field": "network.egress_bytes",
+   "data_type": "Float64"
+  },
+  {
+   "field": "network.egress_packets",
+   "data_type": "Float64"
+  },
+  {
+   "field": "network.forwarded_ipv4",
+   "data_type": "Ipv4"
+  },
+  {
+   "field": "network.forwarded_ipv6",
+   "data_type": "Ipv6"
+  },
+  {
+   "field": "network.iana_number",
+   "data_type": "String"
+  },
+  {
+   "field": "network.ingress_bytes",
+   "data_type": "Float64"
+  },
+  {
+   "field": "network.ingress_packets",
+   "data_type": "Float64"
+  },
+  {
+   "field": "network.inner.vlan_id",
+   "data_type": "String"
+  },
+  {
+   "field": "network.inner.vlan_name",
+   "data_type": "String"
+  },
+  {
+   "field": "network.name",
+   "data_type": "String"
+  },
+  {
+   "field": "network.packets",
+   "data_type": "Float64"
+  },
+  {
+   "field": "network.protocol",
+   "data_type": "String"
+  },
+  {
+   "field": "network.transport",
+   "data_type": "String"
+  },
+  {
+   "field": "network.type",
+   "data_type": "String"
+  },
+  {
+   "field": "network.vlan_id",
+   "data_type": "String"
+  },
+  {
+   "field": "network.vlan_name",
+   "data_type": "String"
+  },
+  {
+   "field": "organization.id",
+   "data_type": "String"
+  },
+  {
+   "field": "organization.name",
+   "data_type": "String"
+  },
+  {
+   "field": "process.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "process.command_line",
+   "data_type": "String"
+  },
+  {
+   "field": "process.end",
+   "data_type": "Date"
+  },
+  {
+   "field": "process.entity_id",
+   "data_type": "String"
+  },
+  {
+   "field": "process.env_vars",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "process.executable",
+   "data_type": "String"
+  },
+  {
+   "field": "process.exit_code",
+   "data_type": "Float64"
+  },
+  {
+   "field": "process.interactive",
+   "data_type": "Boolean"
+  },
+  {
+   "field": "process.name",
+   "data_type": "String"
+  },
+  {
+   "field": "process.parent.command_line",
+   "data_type": "String"
+  },
+  {
+   "field": "process.parent.executable",
+   "data_type": "String"
+  },
+  {
+   "field": "process.parent.exit_code",
+   "data_type": "Float64"
+  },
+  {
+   "field": "process.parent.name",
+   "data_type": "String"
+  },
+  {
+   "field": "process.parent.pe.company",
+   "data_type": "String"
+  },
+  {
+   "field": "process.parent.pe.description",
+   "data_type": "String"
+  },
+  {
+   "field": "process.parent.pe.file_version",
+   "data_type": "String"
+  },
+  {
+   "field": "process.parent.pe.original_file_name",
+   "data_type": "String"
+  },
+  {
+   "field": "process.parent.pe.product",
+   "data_type": "String"
+  },
+  {
+   "field": "process.parent.pgid",
+   "data_type": "Float64"
+  },
+  {
+   "field": "process.parent.pid",
+   "data_type": "Float64"
+  },
+  {
+   "field": "process.parent.start",
+   "data_type": "Date"
+  },
+  {
+   "field": "process.pgid",
+   "data_type": "Float64"
+  },
+  {
+   "field": "process.pid",
+   "data_type": "Float64"
+  },
+  {
+   "field": "process.signed",
+   "data_type": "Boolean"
+  },
+  {
+   "field": "process.start",
+   "data_type": "Date"
+  },
+  {
+   "field": "process.target.command_line",
+   "data_type": "String"
+  },
+  {
+   "field": "process.target.executable",
+   "data_type": "String"
+  },
+  {
+   "field": "process.target.name",
+   "data_type": "String"
+  },
+  {
+   "field": "process.target.pid",
+   "data_type": "Float64"
+  },
+  {
+   "field": "process.target.user_id",
+   "data_type": "String"
+  },
+  {
+   "field": "process.target.username",
+   "data_type": "String"
+  },
+  {
+   "field": "process.thread_id",
+   "data_type": "Float64"
+  },
+  {
+   "field": "process.title",
+   "data_type": "String"
+  },
+  {
+   "field": "process.uptime",
+   "data_type": "Float64"
+  },
+  {
+   "field": "process.user_id",
+   "data_type": "String"
+  },
+  {
+   "field": "process.username",
+   "data_type": "String"
+  },
+  {
+   "field": "process.working_directory",
+   "data_type": "String"
+  },
+  {
+   "field": "registry.data.bytes",
+   "data_type": "String"
+  },
+  {
+   "field": "registry.data.strings",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "registry.data.type",
+   "data_type": "String"
+  },
+  {
+   "field": "registry.hive",
+   "data_type": "String"
+  },
+  {
+   "field": "registry.key",
+   "data_type": "String"
+  },
+  {
+   "field": "registry.path",
+   "data_type": "String"
+  },
+  {
+   "field": "registry.value",
+   "data_type": "String"
+  },
+  {
+   "field": "related.hash",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "related.hosts",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "related.ipv4",
+   "data_type": "List(Ipv4)"
+  },
+  {
+   "field": "related.ipv6",
+   "data_type": "List(Ipv6)"
+  },
+  {
+   "field": "related.user",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "rule.author",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "rule.description",
+   "data_type": "String"
+  },
+  {
+   "field": "rule.id",
+   "data_type": "String"
+  },
+  {
+   "field": "rule.name",
+   "data_type": "String"
+  },
+  {
+   "field": "rule.version",
+   "data_type": "String"
+  },
+  {
+   "field": "service.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "service.address",
+   "data_type": "String"
+  },
+  {
+   "field": "service.id",
+   "data_type": "String"
+  },
+  {
+   "field": "service.name",
+   "data_type": "String"
+  },
+  {
+   "field": "service.origin_id",
+   "data_type": "String"
+  },
+  {
+   "field": "service.origin_name",
+   "data_type": "String"
+  },
+  {
+   "field": "service.state",
+   "data_type": "String"
+  },
+  {
+   "field": "service.target_id",
+   "data_type": "String"
+  },
+  {
+   "field": "service.target_name",
+   "data_type": "String"
+  },
+  {
+   "field": "source.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "source.asn",
+   "data_type": "Float64"
+  },
+  {
+   "field": "source.as_org",
+   "data_type": "String"
+  },
+  {
+   "field": "source.domain",
+   "data_type": "String"
+  },
+  {
+   "field": "source.geo.city_name",
+   "data_type": "String"
+  },
+  {
+   "field": "source.geo.continent_code",
+   "data_type": "String"
+  },
+  {
+   "field": "source.geo.continent_name",
+   "data_type": "String"
+  },
+  {
+   "field": "source.geo.country_iso_code",
+   "data_type": "String"
+  },
+  {
+   "field": "source.geo.country_name",
+   "data_type": "String"
+  },
+  {
+   "field": "source.geo.location",
+   "data_type": "Coordinate"
+  },
+  {
+   "field": "source.geo.name",
+   "data_type": "String"
+  },
+  {
+   "field": "source.geo.region_name",
+   "data_type": "String"
+  },
+  {
+   "field": "source.geo.timezone",
+   "data_type": "String"
+  },
+  {
+   "field": "source.mac",
+   "data_type": "String"
+  },
+  {
+   "field": "source.nat.ipv4",
+   "data_type": "Ipv4"
+  },
+  {
+   "field": "source.nat.ipv6",
+   "data_type": "Ipv6"
+  },
+  {
+   "field": "source.nat.port",
+   "data_type": "Float64"
+  },
+  {
+   "field": "source.packets",
+   "data_type": "Float64"
+  },
+  {
+   "field": "source.resource.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "source.resource.id",
+   "data_type": "String"
+  },
+  {
+   "field": "source.resource.name",
+   "data_type": "String"
+  },
+  {
+   "field": "source.resource.type",
+   "data_type": "String"
+  },
+  {
+   "field": "threat.feed",
+   "data_type": "String"
+  },
+  {
+   "field": "threat.framework",
+   "data_type": "String"
+  },
+  {
+   "field": "threat.group_id",
+   "data_type": "String"
+  },
+  {
+   "field": "threat.group_name",
+   "data_type": "String"
+  },
+  {
+   "field": "threat.indicator",
+   "data_type": "String"
+  },
+  {
+   "field": "threat.description",
+   "data_type": "String"
+  },
+  {
+   "field": "threat.reference",
+   "data_type": "String"
+  },
+  {
+   "field": "threat.tactic_id",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "threat.technique_id",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "tls.cipher",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.client.certificate",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.client.certificate_chain",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "tls.client.hash.md5",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.client.hash.sha1",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.client.hash.sha256",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.client.issuer",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.client.ja3",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.client.not_after",
+   "data_type": "Date"
+  },
+  {
+   "field": "tls.client.not_before",
+   "data_type": "Date"
+  },
+  {
+   "field": "tls.client.server_name",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.client.subject",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.client.supported_ciphers",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "tls.curve",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.established",
+   "data_type": "Boolean"
+  },
+  {
+   "field": "tls.resumed",
+   "data_type": "Boolean"
+  },
+  {
+   "field": "tls.server.certificate",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.server.certificate_chain",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "tls.server.hash.md5",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.server.hash.sha1",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.server.hash.sha256",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.server.issuer",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.server.ja3s",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.server.not_after",
+   "data_type": "Date"
+  },
+  {
+   "field": "tls.server.not_before",
+   "data_type": "Date"
+  },
+  {
+   "field": "tls.server.subject",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.version",
+   "data_type": "String"
+  },
+  {
+   "field": "tls.version_protocol",
+   "data_type": "String"
+  },
+  {
+   "field": "url.original",
+   "data_type": "String"
+  },
+  {
+   "field": "url.path",
+   "data_type": "String"
+  },
+  {
+   "field": "url.port",
+   "data_type": "Float64"
+  },
+  {
+   "field": "url.query",
+   "data_type": "String"
+  },
+  {
+   "field": "url.username",
+   "data_type": "String"
+  },
+  {
+   "field": "user.additional_data",
+   "data_type": "StringifyJSON"
+  },
+  {
+   "field": "user.changes.domain",
+   "data_type": "String"
+  },
+  {
+   "field": "user.changes.email",
+   "data_type": "String"
+  },
+  {
+   "field": "user.changes.full_name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.changes.group.domain",
+   "data_type": "String"
+  },
+  {
+   "field": "user.changes.group.id",
+   "data_type": "String"
+  },
+  {
+   "field": "user.changes.group.name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.changes.hash",
+   "data_type": "String"
+  },
+  {
+   "field": "user.changes.id",
+   "data_type": "String"
+  },
+  {
+   "field": "user.changes.name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.changes.roles",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "user.credential_type",
+   "data_type": "String"
+  },
+  {
+   "field": "user.domain",
+   "data_type": "String"
+  },
+  {
+   "field": "user.effective.domain",
+   "data_type": "String"
+  },
+  {
+   "field": "user.effective.email",
+   "data_type": "String"
+  },
+  {
+   "field": "user.effective.full_name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.effective.group.id",
+   "data_type": "String"
+  },
+  {
+   "field": "user.effective.group.name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.effective.id",
+   "data_type": "String"
+  },
+  {
+   "field": "user.effective.name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.effective.roles",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "user.email",
+   "data_type": "String"
+  },
+  {
+   "field": "user.full_name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.group.id",
+   "data_type": "String"
+  },
+  {
+   "field": "user.group.name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.mfa",
+   "data_type": "Boolean"
+  },
+  {
+   "field": "user.roles",
+   "data_type": "List(String)"
+  },
+  {
+   "field": "user.target.domain",
+   "data_type": "String"
+  },
+  {
+   "field": "user.target.email",
+   "data_type": "String"
+  },
+  {
+   "field": "user.target.full_name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.target.group.id",
+   "data_type": "String"
+  },
+  {
+   "field": "user.target.group.name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.target.id",
+   "data_type": "String"
+  },
+  {
+   "field": "user.target.name",
+   "data_type": "String"
+  },
+  {
+   "field": "user.target.roles",
+   "data_type": "List(String)"
+  }
+ ]
+}

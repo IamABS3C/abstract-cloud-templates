@@ -1,0 +1,28 @@
+# Project that owns the connector service account. Can be the same one used for the Pub/Sub
+# pipeline. Find it with: gcloud projects list
+log_project = "acme-security-logging"
+
+# A Workspace ADMIN the service account impersonates. Delegation acts as a real user — without a
+# subject the Reports API returns 401, not an empty result. A Google Workspace SUPER ADMIN, used
+# only for domain-wide delegation. No gcloud command lists this — ask whoever administers Workspace.
+workspace_admin_email = "<workspace_admin_email>"
+
+# identity | admin | data | endpoint | collaboration | platform. Individual application names also
+# work.
+# workspace_app_groups = ["identity", "admin"]
+
+# Explicit Reports API application list, overriding workspace_app_groups (for example login, admin,
+# token, saml, drive).
+# workspace_applications = []
+
+# Account ID for the Workspace connector service account, separate from the Pub/Sub one so
+# domain-wide delegation can be revoked on its own.
+# workspace_service_account_id = "abstract-workspace-reader"
+
+# Required to include gmail or drive.
+# acknowledge_high_volume = false
+
+# Also print the Admin SDK Directory API scopes (admin.directory.user.readonly,
+# admin.directory.group.readonly) in the delegation step. Abstract's Google Workspace integration
+# does not request these scopes today, so leave this false unless another consumer needs them.
+# include_directory_enrichment_scopes = false

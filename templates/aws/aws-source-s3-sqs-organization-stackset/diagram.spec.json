@@ -1,0 +1,264 @@
+{
+ "title": "aws.stacksets",
+ "theme": "dark",
+ "animate": false,
+ "pages": [
+  {
+   "name": "aws.stacksets",
+   "groups": [
+    {
+     "id": "mgmt",
+     "label": "Management account",
+     "kind": "account",
+     "x": 40,
+     "y": 40,
+     "w": 220,
+     "h": 580,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "ou",
+     "label": "Target OU, listed regions",
+     "kind": "plain",
+     "x": 300,
+     "y": 40,
+     "w": 540,
+     "h": 580,
+     "color": "#f5c61e"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 900,
+     "y": 40,
+     "w": 260,
+     "h": 580,
+     "color": "#FF216B"
+    },
+    {
+     "id": "m0",
+     "label": "Member account",
+     "kind": "account",
+     "parent": "ou",
+     "x": 30,
+     "y": 45,
+     "w": 470,
+     "h": 155,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "m1",
+     "label": "Member account",
+     "kind": "account",
+     "parent": "ou",
+     "x": 30,
+     "y": 215,
+     "w": 470,
+     "h": 155,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "m2",
+     "label": "New account, auto-deployed",
+     "kind": "account",
+     "parent": "ou",
+     "x": 30,
+     "y": 385,
+     "w": 470,
+     "h": 155,
+     "color": "#2e9bf0"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "ss",
+     "label": "StackSet",
+     "icon": "aws:cloudformation",
+     "parent": "mgmt",
+     "x": 70,
+     "y": 245,
+     "sublabel": "service-managed"
+    },
+    {
+     "id": "plat",
+     "label": "Abstract platform",
+     "sublabel": "polls every account",
+     "icon": "img:../../app/web/public/logo-mark.svg",
+     "parent": "abs",
+     "x": 75,
+     "y": 235,
+     "w": 110,
+     "h": 98
+    },
+    {
+     "id": "stk0",
+     "label": "Stack instance",
+     "icon": "aws:cloudformation",
+     "parent": "m0",
+     "x": 40,
+     "y": 30,
+     "sublabel": "per region"
+    },
+    {
+     "id": "sqs0",
+     "label": "S3 + SQS",
+     "icon": "aws:sqs",
+     "parent": "m0",
+     "x": 200,
+     "y": 30,
+     "sublabel": "source path"
+    },
+    {
+     "id": "role0",
+     "label": "IAM role",
+     "icon": "aws:role",
+     "parent": "m0",
+     "x": 350,
+     "y": 30,
+     "sublabel": "External ID trust"
+    },
+    {
+     "id": "stk1",
+     "label": "Stack instance",
+     "icon": "aws:cloudformation",
+     "parent": "m1",
+     "x": 40,
+     "y": 30,
+     "sublabel": "per region"
+    },
+    {
+     "id": "sqs1",
+     "label": "S3 + SQS",
+     "icon": "aws:sqs",
+     "parent": "m1",
+     "x": 200,
+     "y": 30,
+     "sublabel": "source path"
+    },
+    {
+     "id": "role1",
+     "label": "IAM role",
+     "icon": "aws:role",
+     "parent": "m1",
+     "x": 350,
+     "y": 30,
+     "sublabel": "External ID trust"
+    },
+    {
+     "id": "stk2",
+     "label": "Stack instance",
+     "icon": "aws:cloudformation",
+     "parent": "m2",
+     "x": 40,
+     "y": 30,
+     "sublabel": "per region"
+    },
+    {
+     "id": "sqs2",
+     "label": "S3 + SQS",
+     "icon": "aws:sqs",
+     "parent": "m2",
+     "x": 200,
+     "y": 30,
+     "sublabel": "source path"
+    },
+    {
+     "id": "role2",
+     "label": "IAM role",
+     "icon": "aws:role",
+     "parent": "m2",
+     "x": 350,
+     "y": 30,
+     "sublabel": "External ID trust"
+    }
+   ],
+   "edges": [
+    {
+     "from": "ss",
+     "to": "stk0",
+     "tone": "brand",
+     "dashed": false,
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "deploy",
+     "label_x": 0.3
+    },
+    {
+     "from": "plat",
+     "to": "role0",
+     "label": "",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.2
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.3
+    },
+    {
+     "from": "ss",
+     "to": "stk1",
+     "tone": "brand",
+     "dashed": false,
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "",
+     "label_x": 0.3
+    },
+    {
+     "from": "plat",
+     "to": "role1",
+     "label": "AssumeRole + External ID",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.3
+    },
+    {
+     "from": "ss",
+     "to": "stk2",
+     "tone": "brand",
+     "dashed": true,
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "auto-deploy",
+     "label_x": 0.3
+    },
+    {
+     "from": "plat",
+     "to": "role2",
+     "label": "",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.8
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.3
+    }
+   ]
+  }
+ ]
+}

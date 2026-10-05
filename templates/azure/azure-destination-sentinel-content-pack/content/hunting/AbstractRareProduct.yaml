@@ -1,0 +1,29 @@
+id: b0622120-583b-52dd-ad91-584ac3d09df4
+name: Abstract - Rare or newly-seen product activity
+description: |
+  Surfaces products/sources in the Abstract pipeline that are rare or first seen
+  in the last few days. Newly-appearing telemetry sources can indicate shadow IT,
+  a misconfigured route, or an attacker enabling a new logging surface.
+severity: Medium
+requiredDataConnectors:
+  - connectorId: AbstractSecurityConnector
+    dataTypes:
+      - AbstractEventLogs_CL
+tactics:
+  - Discovery
+relevantTechniques:
+  - T1518
+query: |
+  ASim_AbstractEvent
+  | where TimeGenerated > ago(14d)
+  | summarize Events = count(), FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated)
+      by EventProduct, EventVendor
+  | where Events < 50 and FirstSeen > ago(3d)
+  | extend Rarity = round(1.0 / Events, 4)
+  | sort by Events asc
+entityMappings:
+  - entityType: CloudApplication
+    fieldMappings:
+      - identifier: Name
+        columnName: EventProduct
+version: 1.0.0

@@ -1,0 +1,17 @@
+routing_mode = "direct"
+eventbridge_emit_s3_envelope = true
+bucket_name = "example-security-logs-111122223333-us-east-1"
+manage_bucket_notification = true
+sources = {"cloudtrail": {"prefix": "AWSLogs/", "suffix": ".json.gz", "integration": "default.cloudtrail.1_0_7"}}
+abstract_aws_account_id = "111122223333"
+external_id = "<external_id>"
+role_name = "AbstractIntegrationRole"
+name_prefix = "abstract"
+kms_key_arn = "<kms_key_arn>"
+scope_list_bucket_to_prefixes = false
+message_retention_seconds = 345600
+visibility_timeout_seconds = 300
+dlq_max_receive_count = 5
+dlq_alarm_actions = []
+create_dlq_alarms = true
+tags = {}

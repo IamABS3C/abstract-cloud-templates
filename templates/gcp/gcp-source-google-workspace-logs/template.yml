@@ -1,0 +1,93 @@
+id: gcp-source-google-workspace-logs
+title: Google Workspace logs
+cloud: gcp
+role: source
+scope: project
+summary: 'A separate pipeline: Abstract''s Google Workspace integration reads Workspace audit data from
+  the Admin SDK Reports API, so no Cloud Logging sink or Pub/Sub topic is involved. Terraform creates
+  the service account; a Workspace super admin then grants domain-wide delegation by hand.'
+formats:
+- terraform
+- script
+- cloud-shell
+permissions:
+- role: roles/iam.serviceAccountAdmin
+  where: The logging project
+  why: 'Deployer: Create the delegated service account.'
+- role: Grant domain-wide delegation
+  where: admin.google.com
+  why: 'Workspace super admin: No API or Terraform provider exists for it; a Google Cloud Owner cannot
+    grant it.'
+- role: The two admin.reports readonly scopes, through delegation only
+  where: Google Workspace
+  why: 'Workspace service account: It holds nothing in GCP IAM.'
+creates:
+- The Admin SDK API enabled on the logging project
+- A service account (default abstract-workspace-reader) for domain-wide delegation
+never_touches:
+- 'Google Workspace settings: domain-wide delegation is granted by hand in admin.google.com'
+- Cloud Logging sinks, Pub/Sub and any other pipeline
+prerequisites:
+- A Workspace super admin available for the delegation step
+- The email of a real Workspace admin for the impersonation subject
+parameters:
+- name: log_project
+  type: string
+  required: true
+  description: 'Project that owns the connector service account. Can be the same one used for the Pub/Sub
+    pipeline. Find it with: gcloud projects list'
+  find_it: gcloud projects list --format='value(projectId)'
+  example: acme-security-logging
+- name: workspace_admin_email
+  type: string
+  required: true
+  description: A Workspace ADMIN the service account impersonates. Delegation acts as a real user — without
+    a subject the Reports API returns 401, not an empty result. A Google Workspace SUPER ADMIN, used only
+    for domain-wide delegation. No gcloud command lists this — ask whoever administers Workspace.
+- name: workspace_app_groups
+  type: array
+  required: false
+  description: identity | admin | data | endpoint | collaboration | platform. Individual application names
+    also work.
+  default:
+  - identity
+  - admin
+- name: workspace_applications
+  type: array
+  required: false
+  description: Explicit Reports API application list, overriding workspace_app_groups (for example login,
+    admin, token, saml, drive).
+  default: []
+- name: workspace_service_account_id
+  type: string
+  required: false
+  description: Account ID for the Workspace connector service account, separate from the Pub/Sub one so
+    domain-wide delegation can be revoked on its own.
+  default: abstract-workspace-reader
+- name: acknowledge_high_volume
+  type: bool
+  required: false
+  description: Required to include gmail or drive.
+  default: false
+- name: include_directory_enrichment_scopes
+  type: bool
+  required: false
+  description: Also print the Admin SDK Directory API scopes (admin.directory.user.readonly, admin.directory.group.readonly)
+    in the delegation step. Abstract's Google Workspace integration does not request these scopes today,
+    so leave this false unless another consumer needs them.
+  default: false
+outputs:
+- workspace_applications_selected
+- workspace_onboarding
+abstract:
+  integration: google_workspace
+verify:
+- check: The Reports API answers
+  healthy: Events return; a 401 means delegation has not propagated or the admin email is not actually
+    an admin.
+cost: The data application group (Gmail and Drive) dwarfs everything else; add it only after measuring.
+when_to_use: 'Who signed in to Google Workspace: the identity group covers login, SAML, token, user accounts
+  and context-aware access.'
+when_not_to_use: Collecting Workspace logs through a Cloud Logging sink; this template is the Reports
+  API path only.
+live_test: canary

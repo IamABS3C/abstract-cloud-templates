@@ -1,0 +1,163 @@
+id: aws-foundation-log-delivery-helper
+title: Log delivery lookup helper
+cloud: aws
+role: foundation
+scope: account
+summary: 'A Lambda-backed custom resource that does at deploy time what plain CloudFormation cannot: resolve a KMS
+  alias, a queue name, a stream or a web ACL to its ARN, validate a bucket, check a log group, and optionally switch
+  on S3 server access logging or load balancer access logs. Other stacks call it through its exported ServiceToken.'
+formats:
+- cloudformation
+- script
+permissions:
+- role: Create IAM roles, Lambda functions and CloudWatch log groups
+  where: The target AWS account
+  why: 'Deployer: the stack creates the helper function and its execution role.'
+- role: Read-only describe and list calls (KMS, SQS, S3, Kinesis, WAFv2, CloudWatch Logs)
+  where: The helper's execution role
+  why: 'Helper: resolve names to ARNs and validate resources.'
+- role: s3:PutBucketLogging, elasticloadbalancing:ModifyLoadBalancerAttributes
+  where: The helper's execution role, only with AllowProducerWiring=true or an Enable* operation
+  why: 'Helper: switch on producer logging when asked to.'
+creates:
+- A Lambda function <stack-name>-helper with inline Python source, and its CloudWatch log group
+- 'The function''s execution role: read-only lookups, plus write permissions only when producer wiring is allowed'
+- One custom-resource invocation when Operation is not None, whose result is a stack output
+- An export <stack-name>-ServiceToken other stacks use to call the helper
+never_touches:
+- 'Any resource it only resolves or validates: lookups are read-only'
+- Producer settings, unless Operation is EnableS3SourceLogging or EnableAlbAccessLogs, or AllowProducerWiring=true
+prerequisites:
+- AWS CLI v2, authenticated, and jq for deploy.sh
+parameters:
+- name: Operation
+  type: string
+  required: false
+  description: None just deploys the reusable function (export ServiceToken). The Resolve*/ Validate*/Check* operations
+    look something up and return it in the outputs. Enable* operations wire a producer (write).
+  default: None
+  allowed:
+  - None
+  - ResolveKmsKey
+  - ResolveQueue
+  - ValidateBucket
+  - ResolveStream
+  - ResolveWebAcl
+  - CheckLogGroup
+  - EnableS3SourceLogging
+  - EnableAlbAccessLogs
+- name: AllowProducerWiring
+  type: string
+  required: false
+  description: Attach the write permissions (S3 PutBucketLogging, ELB ModifyLoadBalancerAttributes) so the exported
+    function can perform Enable* operations later. Auto-on when Operation is an Enable* operation.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: KmsAlias
+  type: string
+  required: false
+  description: 'KMS alias to resolve (e.g. alias/my-key) for ResolveKmsKey. Find it with: aws kms list-aliases'
+  default: ''
+  find_it: aws kms list-aliases
+- name: QueueName
+  type: string
+  required: false
+  description: 'SQS queue NAME to resolve to URL+ARN for ResolveQueue. Find it with: aws sqs list-queues'
+  default: ''
+  find_it: aws sqs list-queues
+- name: BucketName
+  type: string
+  required: false
+  description: 'S3 bucket to validate exists (ValidateBucket). Find it with: aws s3 ls'
+  default: ''
+  find_it: aws s3 ls
+- name: StreamName
+  type: string
+  required: false
+  description: 'Kinesis stream name to resolve to ARN (ResolveStream). Find it with: aws kinesis list-streams'
+  default: ''
+  find_it: aws kinesis list-streams
+- name: WebAclName
+  type: string
+  required: false
+  description: 'WAF WebACL name to resolve to ARN (ResolveWebAcl). Find it with: aws wafv2 list-web-acls --scope
+    REGIONAL'
+  default: ''
+  find_it: aws wafv2 list-web-acls --scope REGIONAL
+- name: WebAclScope
+  type: string
+  required: false
+  description: Scope for ResolveWebAcl (CLOUDFRONT must run in us-east-1).
+  default: REGIONAL
+  allowed:
+  - REGIONAL
+  - CLOUDFRONT
+- name: LogGroupName
+  type: string
+  required: false
+  description: 'CloudWatch log group to check exists (CheckLogGroup). Find it with: aws logs describe-log-groups
+    --query logGroups[].logGroupName'
+  default: ''
+  find_it: aws logs describe-log-groups --query logGroups[].logGroupName
+- name: SourceBucketName
+  type: string
+  required: false
+  description: 'S3 bucket to enable server-access logging ON (EnableS3SourceLogging). Find it with: aws s3 ls'
+  default: ''
+  find_it: aws s3 ls
+- name: TargetBucketName
+  type: string
+  required: false
+  description: 'Destination log bucket for EnableS3SourceLogging / EnableAlbAccessLogs. Find it with: aws s3 ls'
+  default: ''
+  find_it: aws s3 ls
+- name: TargetPrefix
+  type: string
+  required: false
+  description: Key prefix in the destination bucket.
+  default: ''
+- name: LoadBalancerArn
+  type: string
+  required: false
+  description: 'ARN of the ALB/NLB to enable access logs on (EnableAlbAccessLogs). Find it with: aws elbv2 describe-load-balancers
+    --query LoadBalancers[].LoadBalancerArn'
+  default: ''
+  find_it: aws elbv2 describe-load-balancers --query LoadBalancers[].LoadBalancerArn
+- name: LogRetentionDays
+  type: int
+  required: false
+  description: Retention, in days, of the helper function's CloudWatch log group.
+  default: 30
+  allowed:
+  - 1
+  - 3
+  - 5
+  - 7
+  - 14
+  - 30
+  - 60
+  - 90
+  - 180
+  - 365
+- name: FunctionTimeout
+  type: int
+  required: false
+  description: Timeout of the helper Lambda function, in seconds.
+  default: 60
+outputs:
+- ServiceToken
+- KmsKeyArn
+- QueueUrl
+- QueueArn
+- ValidatedBucket
+- StreamArn
+- WebAclArn
+verify:
+- check: The helper exported its service token
+  command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
+  healthy: ServiceToken is present, and the output for the chosen Operation holds the resolved value.
+when_to_use: A deploy needs a value CloudFormation cannot look up by name (a KMS alias, a queue name, a web ACL
+  name), or needs S3 access logging or load balancer access logs switched on.
+live_test: canary

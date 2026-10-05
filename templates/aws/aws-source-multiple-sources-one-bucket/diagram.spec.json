@@ -1,0 +1,192 @@
+{
+ "title": "aws.multi-source",
+ "theme": "dark",
+ "animate": false,
+ "pages": [
+  {
+   "name": "aws.multi-source",
+   "groups": [
+    {
+     "id": "acct",
+     "label": "Customer AWS account",
+     "kind": "account",
+     "x": 40,
+     "y": 40,
+     "w": 800,
+     "h": 620,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 900,
+     "y": 40,
+     "w": 260,
+     "h": 620,
+     "color": "#FF216B"
+    },
+    {
+     "id": "nest",
+     "label": "Nested stacks, one per source",
+     "kind": "plain",
+     "parent": "acct",
+     "x": 200,
+     "y": 50,
+     "w": 560,
+     "h": 545,
+     "color": "#f5c61e"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "master",
+     "label": "Master stack",
+     "icon": "aws:cloudformation",
+     "parent": "acct",
+     "x": 40,
+     "y": 250,
+     "sublabel": "one deploy"
+    },
+    {
+     "id": "role",
+     "label": "IAM roles",
+     "icon": "aws:role",
+     "parent": "nest",
+     "x": 380,
+     "y": 20,
+     "sublabel": "one per source"
+    },
+    {
+     "id": "prod",
+     "label": "Log producers",
+     "icon": "aws:cloudtrail",
+     "parent": "nest",
+     "x": 40,
+     "y": 150,
+     "sublabel": "CloudTrail on by default"
+    },
+    {
+     "id": "s3",
+     "label": "Log buckets",
+     "icon": "aws:s3",
+     "parent": "nest",
+     "x": 210,
+     "y": 150,
+     "sublabel": "per S3 source"
+    },
+    {
+     "id": "sqs",
+     "label": "SQS + DLQ",
+     "icon": "aws:sqs",
+     "parent": "nest",
+     "x": 380,
+     "y": 150,
+     "sublabel": "per S3 source"
+    },
+    {
+     "id": "kin",
+     "label": "Kinesis stream",
+     "icon": "aws:kinesis_data_streams",
+     "parent": "nest",
+     "x": 210,
+     "y": 280,
+     "sublabel": "optional"
+    },
+    {
+     "id": "lake",
+     "label": "Lake subscriber",
+     "icon": "aws:data_lake_resource_icon",
+     "parent": "nest",
+     "x": 380,
+     "y": 410,
+     "sublabel": "Security Lake source"
+    },
+    {
+     "id": "plat",
+     "label": "Abstract platform",
+     "sublabel": "one config per source",
+     "icon": "img:../../app/web/public/logo-mark.svg",
+     "parent": "abs",
+     "x": 75,
+     "y": 224,
+     "w": 110,
+     "h": 98
+    }
+   ],
+   "edges": [
+    {
+     "from": "master",
+     "to": "nest",
+     "label": "nests",
+     "tone": "muted",
+     "entry": [
+      0,
+      0.43
+     ]
+    },
+    {
+     "from": "prod",
+     "to": "s3",
+     "label": "",
+     "tone": "brand"
+    },
+    {
+     "from": "s3",
+     "to": "sqs",
+     "label": "",
+     "tone": "brand"
+    },
+    {
+     "from": "sqs",
+     "to": "plat",
+     "label": "poll SQS",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.15
+     ],
+     "label_x": -0.3
+    },
+    {
+     "from": "lake",
+     "to": "plat",
+     "label": "SQS notice",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.85
+     ],
+     "label_x": -0.7
+    },
+    {
+     "from": "kin",
+     "to": "plat",
+     "label": "GetRecords",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.5
+     ],
+     "label_x": -0.6
+    },
+    {
+     "from": "plat",
+     "to": "role",
+     "label": "AssumeRole + External ID",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0.5,
+      0
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.45
+    }
+   ]
+  }
+ ]
+}

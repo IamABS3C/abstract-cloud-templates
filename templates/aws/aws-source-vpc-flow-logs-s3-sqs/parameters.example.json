@@ -1,0 +1,162 @@
+[
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "abstract"
+  },
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "MaxSessionDurationSeconds",
+    "ParameterValue": "3600"
+  },
+  {
+    "ParameterKey": "PermissionsBoundaryArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "StoreCredentialsInSecretsManager",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "BucketMode",
+    "ParameterValue": "CreateNew"
+  },
+  {
+    "ParameterKey": "BucketName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "LogPrefix",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "LogRetentionDays",
+    "ParameterValue": "365"
+  },
+  {
+    "ParameterKey": "NoncurrentRetentionDays",
+    "ParameterValue": "30"
+  },
+  {
+    "ParameterKey": "NotificationPath",
+    "ParameterValue": "S3ToSQS"
+  },
+  {
+    "ParameterKey": "QueueMode",
+    "ParameterValue": "CreateNew"
+  },
+  {
+    "ParameterKey": "ExistingQueueArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ExistingQueueUrl",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "QueueVisibilityTimeoutSeconds",
+    "ParameterValue": "900"
+  },
+  {
+    "ParameterKey": "MessageRetentionSeconds",
+    "ParameterValue": "345600"
+  },
+  {
+    "ParameterKey": "DlqMaxReceiveCount",
+    "ParameterValue": "5"
+  },
+  {
+    "ParameterKey": "SubscriptionEmail",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "BucketEncryption",
+    "ParameterValue": "SSE-S3"
+  },
+  {
+    "ParameterKey": "QueueEncryption",
+    "ParameterValue": "SSE-SQS"
+  },
+  {
+    "ParameterKey": "KmsMode",
+    "ParameterValue": "None"
+  },
+  {
+    "ParameterKey": "ExistingKmsKeyArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "RequireAclHeader",
+    "ParameterValue": "auto"
+  },
+  {
+    "ParameterKey": "RestrictBySourceAccount",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "SourceArnCondition",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "LogDeliveryPrincipalOverride",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "VpcFlowResourceType",
+    "ParameterValue": "VPC"
+  },
+  {
+    "ParameterKey": "VpcFlowResourceId",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "VpcFlowTrafficType",
+    "ParameterValue": "ALL"
+  },
+  {
+    "ParameterKey": "VpcFlowMaxAggregationInterval",
+    "ParameterValue": "600"
+  },
+  {
+    "ParameterKey": "VpcFlowLogFormat",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "EnableDlqAlarm",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "DlqAlarmThreshold",
+    "ParameterValue": "1"
+  },
+  {
+    "ParameterKey": "EnableQueueAgeAlarm",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "QueueAgeAlarmSeconds",
+    "ParameterValue": "3600"
+  },
+  {
+    "ParameterKey": "EnableDashboard",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "AlarmEmail",
+    "ParameterValue": ""
+  }
+]

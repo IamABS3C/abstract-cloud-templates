@@ -1,0 +1,144 @@
+id: gcp-source-billing-account-logs
+title: Billing account audit logs
+cloud: gcp
+role: source
+scope: billing-account
+summary: A Cloud Logging sink on the billing account, which sits outside the organization hierarchy, so
+  no organization sink sees it. It routes the billing account's Admin Activity audit logs (IAM changes,
+  project link and unlink, account changes) to Pub/Sub for Abstract. It is not a cost export.
+formats:
+- terraform
+- script
+- cloud-shell
+permissions:
+- role: roles/logging.configWriter
+  where: The billing account
+  why: 'Deployer: Create the billing-account sink.'
+- role: roles/pubsub.admin
+  where: The logging project
+  why: 'Deployer: Create the topic, subscription and IAM bindings.'
+- role: roles/iam.serviceAccountAdmin
+  where: The logging project
+  why: 'Deployer: Create Abstract''s service account.'
+- role: roles/pubsub.publisher
+  where: The topic
+  why: 'Sink writer identity: granted by this template.'
+- role: roles/pubsub.subscriber
+  where: The subscription only
+  why: 'Abstract service account: Abstract pulls; not publisher, not project-wide.'
+creates:
+- A Pub/Sub topic (default abstract-billing-audit-logs) and a never-expiring pull subscription (default
+  abstract-billing-audit-logs-sub)
+- A billing-account sink (default abstract-billing-audit-sink) routing Admin Activity audit logs
+- roles/pubsub.publisher for the sink's writer identity on the topic
+- A service account (default abstract-billing-reader) with roles/pubsub.subscriber on the subscription
+  only
+never_touches:
+- Organization, folder and project sinks
+- Budgets, cost exports and the billing account's own IAM
+prerequisites:
+- 'The billing account ID: gcloud billing accounts list --filter=open=true (pick the right one; there
+  may be several)'
+- A dedicated logging project for the topic and subscription
+parameters:
+- name: billing_account_id
+  type: string
+  required: true
+  description: 'GCP billing account ID formatted e.g. 012345-567890-ABCDEF. Find it with: gcloud billing
+    accounts list'
+  find_it: gcloud billing accounts list --filter=open=true
+- name: log_project
+  type: string
+  required: true
+  description: 'DEDICATED logging or security project holding the topic and subscription. Not a workload
+    project — Pub/Sub publish quota is consumed here, and a workload owner should not be able to read
+    or break the security pipeline. Find it with: gcloud projects list. If no dedicated logging project
+    exists yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project
+    = true) — do not point this at a workload project.'
+  find_it: gcloud projects list --format='value(projectId)'
+  example: acme-security-logging
+- name: topic_name
+  type: string
+  required: false
+  description: Renaming this FORCE-REPLACES the topic and cascades to the subscription, discarding every
+    un-acked message. prevent_destroy blocks it; that is intentional.
+  default: abstract-billing-audit-logs
+- name: subscription_name
+  type: string
+  required: false
+  description: Pub/Sub subscription name Abstract pulls from.
+  default: abstract-billing-audit-logs-sub
+- name: sink_name
+  type: string
+  required: false
+  description: Name of the Cloud Logging billing account sink.
+  default: abstract-billing-audit-sink
+- name: service_account_id
+  type: string
+  required: false
+  description: Service account ID created for Abstract Security pull access.
+  default: abstract-billing-reader
+- name: retention_days
+  type: int
+  required: false
+  description: 'Pub/Sub message retention, 1-31. THIS IS YOUR ENTIRE RECOVERY WINDOW: when the oldest
+    unacked message reaches it, the data is deleted permanently with no error and no backfill. 7 gives
+    you a long weekend.'
+  default: 7
+- name: ack_deadline_seconds
+  type: int
+  required: false
+  description: Pub/Sub subscriber acknowledgement deadline in seconds.
+  default: 60
+- name: labels
+  type: object
+  required: false
+  description: Resource labels applied to the Pub/Sub topic and subscription.
+  default: {}
+  example:
+    owner: security
+    managed_by: terraform
+- name: log_categories
+  type: array
+  required: false
+  description: Named sources to route. Cloud Billing writes Admin Activity audit logs (IAM policy changes,
+    project billing links and unlinks, account create, close, reopen, rename and move) and Data Access
+    audit logs, and no System Event logs (https://docs.cloud.google.com/billing/docs/audit-logging). Defaults
+    to admin_activity. See _modules/log-export/log_catalog.tf for the catalog.
+  default:
+  - admin_activity
+- name: exclusions
+  type: array
+  required: false
+  description: Sink exclusion filters for known noise. Exclusions cost nothing to evaluate while ingestion
+    and Pub/Sub throughput are billed. Max 50 per sink.
+  default: []
+- name: custom_filter
+  type: string
+  required: false
+  description: Replace the assembled filter entirely. Bypasses every guard in the catalog -- you own the
+    volume.
+  default: ''
+outputs:
+- abstract_onboarding
+- effective_filter
+- selected_log_sources
+- service_account_email
+- sink_writer_identity
+- subscription_id
+- topic_id
+- volume_profile
+abstract:
+  integration: google_cloud_pub_sub
+verify:
+- check: The sink exists and points at the topic
+  command: gcloud logging sinks describe abstract-billing-audit-sink --billing-account=<billing-account-id>
+    --format="value(name,destination,writerIdentity)"
+  healthy: The destination is the abstract-billing-audit-logs topic.
+- check: No sink errors
+  command: gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project=<log-project-id>
+  healthy: No sink_error entries.
+cost: Billing-account audit logs are low volume; Pub/Sub throughput is negligible.
+when_to_use: Detecting billing-account takeover, project link changes and billing IAM changes.
+when_not_to_use: 'Cost or usage data: that is the Cloud Billing export to BigQuery, not a log sink.'
+live_test: static

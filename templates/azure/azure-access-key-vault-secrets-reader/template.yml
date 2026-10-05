@@ -1,0 +1,59 @@
+id: azure-access-key-vault-secrets-reader
+title: Key Vault secrets reader
+cloud: azure
+role: access
+scope: resource-group
+summary: A small helper that grants one role to one principal on an existing Key Vault. The Sentinel destination
+  templates call it as a module to give their identities Key Vault Secrets Officer or Secrets User on
+  the vault that holds the client secret.
+formats:
+- bicep
+- arm
+- portal-ui
+- script
+depends_on: []
+permissions:
+- role: Rights to create role assignments on the vault
+  where: The Key Vault's resource group
+  why: 'Deployer: For a vault in another resource group, the deployer needs role-assignment rights there
+    too.'
+creates:
+- One role assignment scoped to the named Key Vault, with a deterministic name derived from the vault,
+  principal and role
+never_touches:
+- The Key Vault itself, its secrets, keys, access policies and network rules (it is referenced as an existing resource)
+- Any other role assignment on the vault or anywhere else
+prerequisites:
+- An existing Key Vault in the target resource group
+- The principal's object ID and the role definition ID; set principalType for a freshly created identity
+  to avoid PrincipalNotFound
+parameters:
+- name: keyVaultName
+  type: string
+  required: true
+  description: 'Name of the existing Key Vault the role is granted on, in the deployment resource group.'
+  find_it: az keyvault list -g <resource-group> --query [].name -o tsv
+- name: principalId
+  type: string
+  required: true
+  description: Object ID of the identity receiving the role (a service principal, user or group), not its application (client) ID.
+  find_it: az ad sp show --id <application-client-id> --query id -o tsv
+- name: roleDefinitionId
+  type: string
+  required: true
+  description: Full resource ID of the role definition to grant, for example the built-in Key Vault Secrets User or Key Vault Secrets Officer role.
+  find_it: az role definition list --name "Key Vault Secrets User" --query [].id -o tsv
+- name: principalType
+  type: string
+  required: false
+  description: Principal type of principalId. Set it for a freshly created identity to avoid PrincipalNotFound
+    while the directory replicates; leave empty when the type is not known (for example a user or group
+    supplied by the deployer).
+  default: ''
+  allowed:
+  - ''
+  - ServicePrincipal
+  - User
+  - Group
+outputs: []
+live_test: static

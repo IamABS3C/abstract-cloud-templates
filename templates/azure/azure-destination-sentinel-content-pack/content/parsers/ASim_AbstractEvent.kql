@@ -1,0 +1,63 @@
+// =============================================================================
+// ASim_AbstractEvent  —  ASIM-style normalizing parser for Abstract Security
+// -----------------------------------------------------------------------------
+// Source : AbstractEventLogs_CL  (the custom table the Sentinel Destination
+//          template creates: one column per top-level ACS key, as the Abstract
+//          integration sends the event, with nested objects as dynamic).
+//          Tables created with the older wrapped schema (TimeGenerated,
+//          Message, AbstractEvent:dynamic) are read the same way: the first
+//          extend uses the AbstractEvent column when it exists, and otherwise
+//          packs the row's columns into one bag.
+// Purpose: project the Abstract Common Schema (ACS) into ASIM-aligned column
+//          names so Abstract-delivered data lights up Microsoft's ASIM-based
+//          analytics, and add convenient ACS pass-through fields.
+//
+// Deploy : Logs > New query > paste > Save as function, Function alias:
+//          ASim_AbstractEvent   (Legacy category: ASIM)
+//          Then query it like a table:  ASim_AbstractEvent | take 50
+//
+// Field mapping is grounded in the live ACS catalog (473 fields). Log Analytics
+// reserves the id and type column names, so the destination's transformation
+// stores them as acs_id and acs_type; the coalesce() calls read either form.
+// =============================================================================
+let ASim_AbstractEvent = (disabled: bool = false) {
+    AbstractEventLogs_CL
+    | extend AbstractEvent = iff(isnotnull(column_ifexists('AbstractEvent', dynamic(null))), column_ifexists('AbstractEvent', dynamic(null)), pack_all()), Message = tostring(column_ifexists('Message', ''))
+    | where not(disabled)
+    | extend e = AbstractEvent
+    // ---- core / ASIM common ----
+    | extend
+        EventVendor      = tostring(e.vendor),
+        EventProduct     = tostring(e.product),
+        EventType        = coalesce(tostring(e.type), tostring(e.acs_type)),
+        EventResult      = tostring(e.action),
+        EventSeverity    = tostring(e.severity),
+        EventMessage     = coalesce(tostring(e.message), Message),
+        EventCount       = toreal(e.aggregation_count),
+        EventRiskScore   = toreal(e.risk_score)
+    // ---- network ----
+    | extend
+        SrcIpAddr        = coalesce(tostring(e.source_ipv4), tostring(e.source_ipv6), tostring(e.source_address)),
+        DstIpAddr        = coalesce(tostring(e.dest_ipv4), tostring(e.dest_ipv6), tostring(e.dest_address)),
+        SrcPortNumber    = toint(e.source_port),
+        DstPortNumber    = toint(e.dest_port),
+        DvcIpAddr        = coalesce(tostring(e.host_ipv4), tostring(e.host_ipv6), tostring(e.host_address)),
+        DvcHostname      = tostring(e.host_name)
+    // ---- identity ----
+    | extend
+        ActorUsername    = coalesce(tostring(e.user_name), tostring(e.user_id)),
+        TargetUsername   = coalesce(tostring(e.user.target.name), tostring(e['user.target.name'])),
+        UserAgent        = tostring(e.user_agent)
+    // ---- correlation back to Abstract ----
+    | extend
+        AbstractEventId    = coalesce(tostring(e.id), tostring(e.acs_id)),
+        AbstractIdentity   = tostring(e.identity),
+        AbstractMatchedRules = e.matched_rules,
+        AbstractTags       = e.tags,
+        AbstractTimestamp  = coalesce(todatetime(e['@timestamp']), todatetime(e.timestamp))
+    | project-reorder
+        TimeGenerated, EventVendor, EventProduct, EventType, EventResult, EventSeverity,
+        SrcIpAddr, DstIpAddr, SrcPortNumber, DstPortNumber, ActorUsername, EventMessage,
+        EventRiskScore, AbstractEventId, AbstractIdentity
+};
+ASim_AbstractEvent

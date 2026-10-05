@@ -1,0 +1,71 @@
+# Where the sink binds: organization Everything, current and future, by containment (recommended).
+# folder All projects within a folder and subfolders. project ONE project (requires
+# acknowledge_pilot_scope = true). sink_scope must be one of: organization, folder, project.
+# sink_scope = "organization"
+
+# Organization ID. Required when sink_scope = organization. Find it with: gcloud organizations list
+# org_id = ""
+
+# Folder ID. Required when sink_scope = folder.
+# folder_id = ""
+
+# Project to bind the sink to when sink_scope = project. Defaults to log_project.
+# sink_project = ""
+
+# DEDICATED logging or security project holding the topic and subscription. Find it with: gcloud
+# projects list.
+log_project = "acme-security-logging"
+
+# Required when sink_scope = project to acknowledge single-project scope.
+# acknowledge_pilot_scope = false
+
+# Named sources to route from the log catalog. The network threat default is firewall, dns_queries,
+# load_balancer (global external Application Load Balancer, with its Cloud Armor decisions) and
+# load_balancer_regional_internal (regional external and internal Application Load Balancers).
+# log_categories = ["firewall", "dns_queries", "load_balancer", "load_balancer_regional_internal"]
+
+# Extra raw logName clauses to route. Defaults to Cloud IDS threat logs
+# (ids.googleapis.com%2Fthreat).
+# platform_log_filters = ["ids.googleapis.com%2Fthreat"]
+
+# Cloud Audit Log streams to route. Set to empty by default for network threat focus.
+# audit_streams = []
+
+# Required when any high- or extreme-tier category is selected (the defaults dns_queries,
+# load_balancer and load_balancer_regional_internal are high tier). These can dominate the bill;
+# measure a 7-day baseline first.
+# acknowledge_high_volume = false
+
+# Pub/Sub topic name for network threat logs.
+# topic_name = "abstract-network-threats"
+
+# Pub/Sub pull subscription name for Abstract.
+# subscription_name = "abstract-network-threats-sub"
+
+# Log sink name.
+# sink_name = "abstract-network-threats-sink"
+
+# Service account ID for Abstract subscriber identity.
+# service_account_id = "abstract-net-threat-reader"
+
+# Pub/Sub message retention in days (1-31). This is your recovery window. retention_days must be
+# between 1 and 31.
+# retention_days = 7
+
+# Pub/Sub subscription acknowledgement deadline in seconds.
+# ack_deadline_seconds = 60
+
+# Send repeatedly failing messages to a dead-letter topic.
+# enable_dead_letter = false
+
+# Deliveries attempted before sending message to dead-letter topic (5-100).
+# dead_letter_max_delivery_attempts = 5
+
+# Override the assembled filter completely. Bypasses catalog compilation.
+# custom_filter = ""
+
+# Sink exclusion filters for known noise (e.g. internal health check probers).
+# exclusions = [{"name": "exclude-health-checks", "description": "GCP health-check prober traffic. High volume, zero security signal.", "filter": "protoPayload.requestMetadata.callerSuppliedUserAgent=~\"GoogleHC\""}]
+
+# Resource labels applied to Pub/Sub topic and subscription.
+# labels = {"environment": "security", "managed_by": "terraform"}

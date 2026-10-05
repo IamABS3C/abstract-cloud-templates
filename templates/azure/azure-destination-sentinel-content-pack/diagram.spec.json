@@ -1,0 +1,192 @@
+{
+ "title": "Abstract Sentinel solution (managed app)",
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Managed app",
+   "groups": [
+    {
+     "id": "az",
+     "label": "Customer Azure tenant",
+     "kind": "plain",
+     "x": 40,
+     "y": 40,
+     "w": 920,
+     "h": 520,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 1000,
+     "y": 40,
+     "w": 220,
+     "h": 520,
+     "color": "#FF216B"
+    },
+    {
+     "id": "ws",
+     "label": "Existing Sentinel workspace",
+     "kind": "plain",
+     "x": 40,
+     "y": 50,
+     "w": 850,
+     "h": 420,
+     "color": "#f5c61e",
+     "parent": "az"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "tbl",
+     "label": "AbstractEventLogs_CL",
+     "icon": "azure:table",
+     "parent": "ws",
+     "x": 50,
+     "y": 90,
+     "sublabel": "existing, not created"
+    },
+    {
+     "id": "parser",
+     "label": "ASIM parser",
+     "icon": "azure:functions",
+     "parent": "ws",
+     "x": 250,
+     "y": 90,
+     "sublabel": "ASim_AbstractEvent"
+    },
+    {
+     "id": "hunt",
+     "label": "Hunting queries",
+     "icon": "azure:log_search",
+     "parent": "ws",
+     "x": 430,
+     "y": 90,
+     "sublabel": "3 saved searches"
+    },
+    {
+     "id": "wb",
+     "label": "Workbooks",
+     "icon": "azure:dashboard",
+     "parent": "ws",
+     "x": 590,
+     "y": 90,
+     "sublabel": "3 workbooks"
+    },
+    {
+     "id": "conn",
+     "label": "Connector tiles",
+     "icon": "azure:connectors",
+     "parent": "ws",
+     "x": 750,
+     "y": 90,
+     "sublabel": "2 definitions"
+    },
+    {
+     "id": "pkg",
+     "label": "Solution package",
+     "icon": "azure:pack",
+     "parent": "ws",
+     "x": 50,
+     "y": 280,
+     "sublabel": "contentPackages record"
+    },
+    {
+     "id": "ar",
+     "label": "Analytics rules",
+     "icon": "azure:alerts",
+     "parent": "ws",
+     "x": 250,
+     "y": 280,
+     "sublabel": "2, disabled on install"
+    },
+    {
+     "id": "auto",
+     "label": "Automation rules",
+     "icon": "azure:automation",
+     "parent": "ws",
+     "x": 430,
+     "y": 280,
+     "sublabel": "3, disabled on install"
+    },
+    {
+     "id": "pb",
+     "label": "Playbooks",
+     "icon": "azure:logic_apps",
+     "parent": "ws",
+     "x": 610,
+     "y": 280,
+     "sublabel": "enrich, verdict, tune"
+    },
+    {
+     "id": "api",
+     "label": "Abstract API",
+     "icon": "azure:monitor",
+     "parent": "abs",
+     "x": 71,
+     "y": 330,
+     "sublabel": "abstractBaseUrl"
+    }
+   ],
+   "edges": [
+    {
+     "from": "tbl",
+     "to": "parser",
+     "tone": "muted",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "reads"
+    },
+    {
+     "from": "ar",
+     "to": "auto",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "incidents"
+    },
+    {
+     "from": "auto",
+     "to": "pb",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "runs"
+    },
+    {
+     "from": "pb",
+     "to": "api",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "API calls"
+    }
+   ]
+  }
+ ]
+}

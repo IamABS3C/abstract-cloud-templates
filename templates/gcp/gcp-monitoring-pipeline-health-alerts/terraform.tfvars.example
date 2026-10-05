@@ -1,0 +1,34 @@
+# DEDICATED logging or security project holding this pipeline. Not a workload project. Find it with:
+# gcloud projects list. If no dedicated logging project exists yet, create one first with
+# templates/gcp/gcp-foundation-logging-project (set create_project = true).
+log_project = "acme-security-logging"
+
+# Topic NAME (not the full path), from gcp-source-audit-logs-organization.
+# topic_id = "abstract-audit-logs"
+
+# Subscription NAME (not the full path), from gcp-source-audit-logs-organization.
+# subscription_id = "abstract-audit-logs-sub"
+
+# Dead-letter topic to watch. Empty disables that policy.
+# dead_letter_topic_id = ""
+
+# Channel IDs. List them with: gcloud beta monitoring channels list --format='value(name)'
+# notification_channels = []
+
+# Deploy the policies with no notification channel. They then fire into nothing; set it only while a
+# channel is being arranged.
+# acknowledge_no_channel = false
+
+# Pub/Sub message retention in days. This is the entire recovery window: unacked messages older than
+# this are deleted.
+# retention_days = 7
+
+# Fire when the oldest unacked message is older than this. Default one hour, a small fraction of a
+# 7-day window.
+# unacked_age_threshold_seconds = 3600
+
+# Fire when nothing has been published for this long. Default one hour.
+# absence_threshold_seconds = 3600
+
+# Alert display-name prefix, so the policies are findable among existing ones.
+# prefix = "Abstract log pipeline"

@@ -1,0 +1,242 @@
+id: azure-destination-sentinel
+title: Sentinel destination
+cloud: azure
+role: destination
+scope: resource-group
+summary: 'Prepares Azure for the Abstract Azure Sentinel Destination: a Data Collection Endpoint, a Data
+  Collection Rule and the custom Abstract table, in a new or existing workspace, with Monitoring Metrics
+  Publisher on the DCR for the app you created. Recommended for production; no privileged identity is
+  involved.'
+formats:
+- bicep
+- arm
+- portal-ui
+- script
+depends_on: []
+permissions:
+- role: Owner, or Contributor plus User Access Administrator
+  where: The resource group
+  why: 'Deployer: Create the resources and the DCR role assignments.'
+- role: Rights to register an app
+  where: The Entra tenant
+  why: 'Deployer: Create the Abstract app registration beforehand.'
+- role: Monitoring Metrics Publisher
+  where: The DCR only
+  why: 'Abstract runtime app: All the Logs Ingestion API needs; it cannot read data or change rules.'
+- role: Monitoring Contributor
+  where: The DCR, only if grantMonitoringContributor
+  why: 'Abstract runtime app: Off by default: it would let a leaked credential rewrite or delete the DCR.'
+creates:
+- A Log Analytics workspace and Microsoft Sentinel onboarding, only when createWorkspace=true
+- The custom table AbstractEventLogs_CL, with columns generated from the ACS catalog
+- A Data Collection Endpoint (default abstract-dce) and a Data Collection Rule (default abstract-dcr)
+- A diagnostic setting abstract-dcr-errors sending the DCR's ingestion errors to DCRLogErrors (enableDcrErrorLogs,
+  on by default)
+- Monitoring Metrics Publisher on the DCR for the supplied service principal, and Monitoring Contributor
+  only if grantMonitoringContributor
+- Optional ASIM dataflows into Microsoft's ASim tables (enableAsim, off by default)
+never_touches:
+- Microsoft Sentinel analytics rules, automation rules, hunting queries, bookmarks, incidents, watchlists,
+  workbooks, data connectors, threat intelligence or settings
+- Workspace functions, saved searches or parsers, including every ASIM parser
+- Any table other than the Abstract table
+- An existing workspace's SKU, retention, daily cap, access mode, network settings or workspace transformation
+  DCR
+- Any other DCR, DCE or diagnostic setting, unless it has the same name as one the template creates
+prerequisites:
+- An Entra app registration for Abstract; run scripts/new-app-registration.sh first to create it (it
+  can also call this template), then pass its service principal object ID (not the client ID) as principalId
+- 'For an existing workspace: it must be in this resource group, and the DCE and DCR must match its region
+  (existingWorkspaceLocation)'
+- Unique DCE and DCR names per destination; a same-named DCR in the resource group is replaced
+- Deploy in Incremental mode only; Complete mode would delete an existing workspace and everything else
+  in the resource group
+- Check whether AbstractEventLogs_CL already exists; columns not in the generated schema are removed on
+  update
+parameters:
+- name: location
+  type: string
+  required: false
+  description: Azure region for the workspace, DCE and DCR. Keep these consistent (the DCE/DCR must be
+    in the same region as the workspace).
+  default: '[resourceGroup().location]'
+- name: tags
+  type: object
+  required: false
+  description: Tags applied to every created resource that supports tags.
+  default: {}
+- name: tagsByResource
+  type: object
+  required: false
+  description: Resource-specific tags, keyed by fully qualified Azure resource type.
+  default: {}
+- name: createWorkspace
+  type: bool
+  required: false
+  description: Create a new Log Analytics workspace. Set false to target an EXISTING workspace in THIS
+    resource group (provide its name in workspaceName).
+  default: true
+- name: workspaceName
+  type: string
+  required: false
+  description: 'Workspace name. When creating: leave empty to auto-generate (abstract-sentinel-<hash>).
+    When using an existing workspace: the exact name of that workspace (must live in this resource group).'
+  default: ''
+  find_it: az monitor log-analytics workspace list -g <resource-group> --query [].name -o tsv
+- name: workspaceSku
+  type: string
+  required: false
+  description: Workspace pricing tier. PerGB2018 is the standard pay-as-you-go tier.
+  default: PerGB2018
+  allowed:
+  - PerGB2018
+  - CapacityReservation
+  - Free
+  - Standalone
+  - PerNode
+- name: workspaceRetentionDays
+  type: int
+  required: false
+  description: Workspace data retention in days. Only applied when creating a new workspace; an existing
+    workspace is never modified. The Abstract table's own retention is customTableRetentionDays.
+  default: 90
+- name: enableSentinel
+  type: bool
+  required: false
+  description: Enable Microsoft Sentinel on the workspace (only applied when creating a new workspace;
+    assumed already enabled for existing workspaces).
+  default: true
+- name: existingWorkspaceLocation
+  type: string
+  required: false
+  description: Region of the EXISTING workspace (Existing mode only). The DCE and DCR MUST be created
+    in the same region as the target workspace, so if your existing workspace is in a different region
+    than this deployment, set it here (e.g. eastus2). Leave empty to use the deployment location.
+  default: ''
+- name: dataCollectionEndpointName
+  type: string
+  required: false
+  description: Name of the Data Collection Endpoint (DCE) that receives data from Abstract.
+  default: abstract-dce
+- name: dataCollectionRuleName
+  type: string
+  required: false
+  description: Name of the Data Collection Rule (DCR) that routes data into the workspace table.
+  default: abstract-dcr
+- name: customTableName
+  type: string
+  required: false
+  description: Custom log table name. MUST end in _CL. Enter this (as the stream Custom-<table>) in the
+    "Log Stream Name" field of the Abstract destination modal.
+  default: AbstractEventLogs_CL
+- name: tableColumns
+  type: array
+  required: false
+  description: 'Custom table columns. Leave empty (recommended) to use the generated ACS schema: one column
+    per top-level key of the event Abstract sends, with a DCR transformation that sets TimeGenerated.
+    Supply columns only for a custom payload shape; the DCR stream then uses the same columns and transformKql.'
+  default: []
+- name: transformKql
+  type: string
+  required: false
+  description: DCR transformation used only when tableColumns is supplied. The generated schema carries
+    its own transformation.
+  default: source
+- name: enableDcrErrorLogs
+  type: bool
+  required: false
+  description: Send the Data Collection Rule's ingestion errors (rejected requests, malformed payloads,
+    limit and transformation errors) to the DCRLogErrors table in the workspace. Without it, data Azure
+    refuses or drops is invisible to the customer and to Abstract.
+  default: true
+- name: enableAsim
+  type: bool
+  required: false
+  description: 'Also write each event into Microsoft''s ASIM normalized tables (ASimAuthenticationEventLogs
+    and the others listed in asimSchemas), mapped from the Abstract Common Schema by solutions/asim. Off
+    by default. Microsoft''s built-in ASIM parsers read those tables, so once this is on every ASIM analytics
+    rule, hunting query and workbook already running in the workspace also sees Abstract data: expect
+    new alerts, duplicates where Microsoft''s own connector collects the same vendor, and a second copy
+    of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time
+    with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns
+    left empty). Every event still also lands in the Abstract table.'
+  default: false
+- name: asimSchemas
+  type: array
+  required: false
+  description: ASIM schemas to write, by name (for example ['Authentication', 'NetworkSession']). ['*']
+    (default) writes every schema solutions/asim maps; [] writes none.
+  default:
+  - '*'
+- name: customTableRetentionDays
+  type: int
+  required: false
+  description: Retention of the Abstract table in days. 0 (default) sends no retention, so an existing
+    table keeps its retention and a new table uses the workspace default. A value shortens or lengthens
+    the table's total retention; shortening deletes data older than the new value.
+  default: 0
+- name: customTablePlan
+  type: string
+  required: false
+  description: 'Table plan for the Abstract table. Keep (default) keeps the plan an existing table already
+    has, and create a new table as Analytics: a redeploy then never changes a table''s plan, or its cost,
+    by accident. Analytics runs analytics rules and our content pack on it. Auxiliary is the Sentinel
+    data lake tier: cheap long retention and KQL jobs, but no analytics rules or alerts. Basic sits between
+    them. Setting a plan on an existing table switches it; Azure applies the new plan to the whole table.'
+  default: Keep
+  allowed:
+  - Keep
+  - Analytics
+  - Basic
+  - Auxiliary
+- name: grantMonitoringContributor
+  type: bool
+  required: false
+  description: 'Also grant Monitoring Contributor on the DCR. Off by default: sending data through the
+    Logs Ingestion API needs only Monitoring Metrics Publisher, and Monitoring Contributor would let a
+    leaked Abstract credential rewrite or delete the DCR and its error-log setting. Turn on only if your
+    Abstract destination setup specifically asks for it.'
+  default: false
+- name: principalId
+  type: string
+  required: false
+  description: Object ID of the service principal Abstract authenticates as (the Enterprise Application
+    object ID, NOT the Application/client ID). Leave empty to skip role assignments and grant them yourself
+    later.
+  default: ''
+  find_it: az ad sp show --id <application-client-id> --query id -o tsv
+- name: principalType
+  type: string
+  required: false
+  description: Type of the principal being granted RBAC (avoids PrincipalNotFound on freshly created SPNs).
+  default: ServicePrincipal
+  allowed:
+  - ServicePrincipal
+  - User
+  - Group
+outputs:
+- workspaceName
+- workspaceResourceId
+- customTableName
+- dataCollectionRuleImmutableId
+- dataCollectionEndpointUrl
+- logStreamName
+- rbacAssigned
+- abstractSentinelOnboarding
+verify:
+- check: The outputs carry the three values the Abstract destination needs
+  command: az deployment group show -g <resource-group> -n <deployment-name> --query properties.outputs
+  healthy: dataCollectionRuleImmutableId, dataCollectionEndpointUrl and logStreamName (Custom-AbstractEventLogs_CL)
+    are present.
+- check: Events are landing in the Abstract table
+  command: AbstractEventLogs_CL | where TimeGenerated > ago(1h) | summarize count() by vendor, product
+  healthy: A count that matches the event count Abstract reports for the route.
+- check: Azure is not rejecting rows
+  command: DCRLogErrors | where TimeGenerated > ago(1h) | summarize count() by OperationName, Message
+  healthy: No rows.
+cost: Ingestion into the Abstract table is charged at the table's plan (Analytics by default), and ASIM,
+  when on, adds a further copy of each mapped event. Retention beyond the free period is charged; DCE
+  and DCR billing is not verified.
+when_to_use: Production, when you create the Entra app registration yourself.
+when_not_to_use: When the template should create the app registration for you; use the Graph variant.
+live_test: static

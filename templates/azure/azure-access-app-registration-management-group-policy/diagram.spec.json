@@ -1,0 +1,216 @@
+{
+ "title": "App registrations through Azure Policy",
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Policy app registration",
+   "groups": [
+    {
+     "id": "mg",
+     "label": "Management group",
+     "kind": "plain",
+     "x": 40,
+     "y": 40,
+     "w": 920,
+     "h": 620,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 1000,
+     "y": 40,
+     "w": 220,
+     "h": 620,
+     "color": "#FF216B"
+    },
+    {
+     "id": "sub",
+     "label": "Each targeted subscription",
+     "kind": "plain",
+     "x": 210,
+     "y": 160,
+     "w": 690,
+     "h": 250,
+     "color": "#f5c61e",
+     "parent": "mg"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "mi",
+     "label": "Graph identity",
+     "icon": "azure:user_permissions",
+     "parent": "mg",
+     "x": 50,
+     "y": 50,
+     "sublabel": "prerequisite, tier-0"
+    },
+    {
+     "id": "pol",
+     "label": "DINE policy",
+     "icon": "azure:policy",
+     "parent": "mg",
+     "x": 50,
+     "y": 260,
+     "sublabel": "definition and assignment"
+    },
+    {
+     "id": "rg",
+     "label": "Resource group",
+     "icon": "azure:resource_group",
+     "parent": "sub",
+     "x": 50,
+     "y": 100,
+     "sublabel": "rg-abstract-appreg"
+    },
+    {
+     "id": "ds",
+     "label": "Deployment script",
+     "icon": "azure:script_file",
+     "parent": "sub",
+     "x": 240,
+     "y": 100,
+     "sublabel": "ACI and storage"
+    },
+    {
+     "id": "app",
+     "label": "Entra app",
+     "icon": "azure:active_directory",
+     "parent": "sub",
+     "x": 430,
+     "y": 100,
+     "sublabel": "one per subscription"
+    },
+    {
+     "id": "rbac",
+     "label": "Subscription RBAC",
+     "icon": "azure:roles",
+     "parent": "sub",
+     "x": 590,
+     "y": 100,
+     "sublabel": "Reader, Data Receiver"
+    },
+    {
+     "id": "kv",
+     "label": "Central Key Vault",
+     "icon": "azure:key_vault",
+     "parent": "mg",
+     "x": 550,
+     "y": 490,
+     "sublabel": "prerequisite"
+    },
+    {
+     "id": "plat",
+     "label": "Abstract platform",
+     "icon": "azure:monitor",
+     "parent": "abs",
+     "x": 71,
+     "y": 260,
+     "sublabel": "signs in per subscription"
+    }
+   ],
+   "edges": [
+    {
+     "from": "pol",
+     "to": "rg",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "remediation"
+    },
+    {
+     "from": "rg",
+     "to": "ds",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "ds",
+     "to": "app",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "Graph calls"
+    },
+    {
+     "from": "app",
+     "to": "rbac",
+     "tone": "muted",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "granted"
+    },
+    {
+     "from": "mi",
+     "to": "ds",
+     "tone": "muted",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0.5,
+      0
+     ],
+     "label": "runs as"
+    },
+    {
+     "from": "ds",
+     "to": "kv",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.8
+     ],
+     "entry": [
+      0.5,
+      0
+     ],
+     "label": "secret"
+    },
+    {
+     "from": "plat",
+     "to": "app",
+     "tone": "muted",
+     "exit": [
+      0.5,
+      0
+     ],
+     "entry": [
+      0.5,
+      0
+     ],
+     "label": "signs in as",
+     "dashed": true
+    }
+   ]
+  }
+ ]
+}

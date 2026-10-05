@@ -1,0 +1,223 @@
+id: azure-source-all-logs-management-group-policy
+title: Azure logs, every subscription
+cloud: azure
+role: source
+scope: management-group
+summary: Assign once at a management group and every subscription in it, today's and every one added later,
+  streams to the Abstract Event Hub and drifts back into compliance if a setting is removed. Covers the
+  Activity Log, resource logs, Azure SQL auditing and Defender for Cloud export, each a separate Azure
+  mechanism.
+formats:
+- bicep
+- arm
+- portal-ui
+- script
+depends_on:
+- azure-foundation-event-hub
+permissions:
+- role: Resource Policy Contributor
+  where: The target management group
+  why: 'Deployer: Create the policy definition and assignments.'
+- role: User Access Administrator or Role Based Access Control Administrator
+  where: The target management group
+  why: 'Deployer: The assignment creates role assignments for the DeployIfNotExists identities.'
+- role: Global Administrator with Access management for Azure resources elevation
+  where: Tenant root management group only
+  why: 'Deployer: Required only when assigning at the tenant root.'
+- role: Monitoring Contributor
+  where: The management group
+  why: 'Policy remediation identity: Writes diagnostic settings across in-scope subscriptions.'
+- role: listKeys on the Event Hub authorization rule
+  where: The Event Hubs namespace, usually in a different subscription
+  why: 'Policy remediation identity: Needed to create settings that stream to the hub; the Grant action
+    gives Azure Event Hubs Data Owner, which works but is broader than a custom listKeys role.'
+creates:
+- A custom DeployIfNotExists policy definition and assignment for Activity Log to Event Hub (no Microsoft
+  built-in exists for it)
+- One assignment of the built-in resource-log initiative per region
+- One assignment of the built-in Azure SQL auditing policy per region
+- An optional Defender for Cloud continuous-export assignment
+- A system-assigned managed identity per assignment, with role assignments at the management group for
+  remediation
+never_touches:
+- 'Event Hubs: Azure Policy never creates hubs, so every hub name passed in must already exist'
+prerequisites:
+- Deploy the Event Hub source stack first; one namespace per region that holds regional resources, each
+  with a Send-capable rule
+- Hub names passed here must match hubs the source stack actually created; add resource to its hubSources
+  for a resource-log hub
+- 'Decide report-only versus enforce before assigning. ./deploy.sh assigns report-only by default
+  (examples/default.parameters.json: effect AuditIfNotExists, enforcementMode DoNotEnforce), which changes
+  nothing; read the compliance counts, then re-run with --enforce to use parameters.example.json and the
+  template defaults (DeployIfNotExists, Default), which write settings everywhere'
+- At most 5 diagnostic settings per resource; existing exports count
+parameters:
+- name: assignmentLocation
+  type: string
+  required: false
+  description: Region the policy assignments' managed identities are created in. Unrelated to where logs
+    are collected - any region you operate in is fine.
+  default: eastus
+- name: namePrefix
+  type: string
+  required: false
+  description: 'Prefix for every policy assignment name created here. Capped at 6: management-group policy
+    assignment names have a 24-character limit (verified in the Azure resource naming rules), and the
+    longest name built here is <prefix>-r-<13-char hash> = 22.'
+  default: abs
+- name: effect
+  type: string
+  required: false
+  description: Policy effect. Use AuditIfNotExists for a dry run that reports what WOULD be onboarded
+    without changing anything, then switch to DeployIfNotExists.
+  default: DeployIfNotExists
+  allowed:
+  - DeployIfNotExists
+  - AuditIfNotExists
+  - Disabled
+- name: enforcementMode
+  type: string
+  required: false
+  description: Assignments are created but not enforced when DoNotEnforce - use it to preview compliance
+    before letting the policy deploy anything.
+  default: Default
+  allowed:
+  - Default
+  - DoNotEnforce
+- name: enableActivityLog
+  type: bool
+  required: false
+  description: Onboard every subscription's Activity Log to the Abstract Event Hub.
+  default: true
+- name: activityLogAuthorizationRuleId
+  type: string
+  required: false
+  description: 'Resource ID of an Event Hubs namespace authorization rule with Send rights, used for the
+    Activity Log stream. Use the abstractDiagnosticsAuthRuleId output of main.bicep. Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.EventHub/namespaces/{ns}/authorizationrules/{rule}'
+  default: ''
+  find_it: az eventhubs namespace authorization-rule list -g <resource-group> --namespace-name <namespace> --query "[?name=='abstract-diagnostics-send'].id" -o tsv
+- name: activityLogEventHubName
+  type: string
+  required: false
+  description: Event Hub that receives the Activity Log stream. It must already exist - Azure Policy never
+    creates hubs.
+  default: abs-prod-activity
+  find_it: az eventhubs eventhub list -g <resource-group> --namespace-name <namespace> --query [].name -o tsv
+- name: activityLogCategories
+  type: array
+  required: false
+  description: Activity Log categories to export. Default is all eight.
+  default:
+  - Administrative
+  - Security
+  - ServiceHealth
+  - Alert
+  - Recommendation
+  - Policy
+  - Autoscale
+  - ResourceHealth
+- name: enableResourceLogs
+  type: bool
+  required: false
+  description: Onboard resource logs (Key Vault, NSG, Front Door, AKS, Cosmos DB, ~140 resource types)
+    to the Abstract Event Hub.
+  default: true
+- name: categoryGroup
+  type: string
+  required: false
+  description: Which category group to collect. allLogs is everything the resource emits; audit is the
+    control-plane/data-access subset. allLogs is the Abstract default - filtering happens in the pipeline,
+    not at the source.
+  default: allLogs
+  allowed:
+  - allLogs
+  - audit
+- name: regions
+  type: array
+  required: false
+  description: "One entry per region that holds regional resources. Azure Monitor REQUIRES the\nEvent\
+    \ Hub to be in the same region as the monitored resource, so each region\nneeds its own namespace\
+    \ and its own assignment.\n  [ { location: 'eastus', authorizationRuleId: '/subscriptions/.../authorizationrules/abstract-diagnostics-send',\
+    \ eventHubName: 'abs-prod-resource' } ]\n"
+  default: []
+- name: resourceTypeList
+  type: array
+  required: false
+  description: Restrict the resource-log initiative to specific resource types. Empty = every supported
+    type (recommended).
+  default: []
+- name: diagnosticSettingName
+  type: string
+  required: false
+  description: Name given to the diagnostic settings the policy creates. Pick something recognisable so
+    operators know not to delete it by hand.
+  default: abstract-logstream
+- name: enableSqlAuditing
+  type: bool
+  required: false
+  description: Also enable Azure SQL server auditing to the Event Hub. SQL auditing is NOT a diagnostic
+    setting, so the resource-log initiative does not cover it.
+  default: false
+- name: enableDefenderExport
+  type: bool
+  required: false
+  description: Also export Defender for Cloud alerts, recommendations and secure-score data to the Event
+    Hub. Another separate mechanism (continuous export), not a diagnostic setting.
+  default: false
+- name: defenderExportResourceGroup
+  type: string
+  required: false
+  description: Resource group the Defender continuous-export resource is created in, inside every in-scope
+    subscription.
+  default: rg-abstract-defender-export
+- name: defenderEventHubAuthorizationRuleId
+  type: string
+  required: false
+  description: 'HUB-level Event Hubs authorization rule for the Defender export. Unlike the other policies
+    here this one wants a rule scoped to the hub, not the namespace: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.EventHub/namespaces/{ns}/eventhubs/{hub}/authorizationRules/{rule}.
+    Set perHubSasRules=true in main.bicep to have one created.'
+  default: ''
+  find_it: az eventhubs eventhub authorization-rule list -g <resource-group> --namespace-name <namespace> --eventhub-name <hub> --query [].id -o tsv
+- name: defenderExportedDataTypes
+  type: array
+  required: false
+  description: Defender for Cloud data types to export.
+  default:
+  - Alerts
+- name: defenderAlertSeverities
+  type: array
+  required: false
+  description: Alert severities exported from Defender for Cloud.
+  default:
+  - High
+  - Medium
+  - Low
+outputs:
+- managementGroupId
+- eventHubsDataOwnerRoleId
+- activityLogPrincipalId
+- resourceLogPrincipalIds
+- sqlAuditPrincipalIds
+- onboardingSummary
+abstract:
+  integration: azure_eventhub
+verify:
+- check: The assignments exist and carry managed identities
+  command: az policy assignment list --scope /providers/Microsoft.Management/managementGroups/<mg-id>
+    --query "[].{name:name,identity:identity.principalId,enforcement:enforcementMode}"
+  healthy: One assignment per enabled feature, each with a non-null principalId.
+- check: Compliance is being evaluated
+  command: az policy state summarize --management-group <mg-id>
+  healthy: Non-zero resource counts, with non-compliant resources falling after remediation.
+- check: A remediation task actually ran and succeeded
+  healthy: Policy, Remediation shows a completed task, not merely a compliance report.
+- check: Diagnostic settings now exist on a sample resource
+  command: az monitor diagnostic-settings list --resource <resource-id> --query "[].{name:name,eventHub:eventHubName}"
+  healthy: A setting pointing at the expected hub.
+cost: Azure Policy and diagnostic settings are free; the volume they switch on is not. Run report-only
+  first and read the resource counts before enforcing, because allLogs across an uninventoried estate
+  is the surprise.
+when_to_use: Any estate with more than about three subscriptions, or any estate that will grow.
+when_not_to_use: A genuine single-subscription estate or short pilot (use the Activity Log template),
+  and Entra ID identity logs, which are tenant-scope.
+live_test: canary

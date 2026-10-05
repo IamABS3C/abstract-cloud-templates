@@ -1,0 +1,169 @@
+{
+ "title": "aws.s3-sqs.cloudformation",
+ "theme": "dark",
+ "animate": false,
+ "pages": [
+  {
+   "name": "aws.s3-sqs.cloudformation",
+   "groups": [
+    {
+     "id": "acct",
+     "label": "Customer AWS account",
+     "kind": "account",
+     "x": 40,
+     "y": 40,
+     "w": 800,
+     "h": 470,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 900,
+     "y": 40,
+     "w": 260,
+     "h": 470,
+     "color": "#FF216B"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "prod",
+     "label": "Log producer",
+     "icon": "aws:cloudtrail",
+     "parent": "acct",
+     "x": 60,
+     "y": 120,
+     "sublabel": "CloudTrail, Flow Logs, WAF"
+    },
+    {
+     "id": "s3",
+     "label": "Log bucket",
+     "icon": "aws:s3",
+     "parent": "acct",
+     "x": 270,
+     "y": 120,
+     "sublabel": "hardened, versioned"
+    },
+    {
+     "id": "sqs",
+     "label": "SQS queue",
+     "icon": "aws:sqs",
+     "parent": "acct",
+     "x": 500,
+     "y": 120,
+     "sublabel": "+ dead-letter queue"
+    },
+    {
+     "id": "sns",
+     "label": "SNS topic",
+     "icon": "aws:sns",
+     "parent": "acct",
+     "x": 385,
+     "y": 300,
+     "sublabel": "optional fan-out"
+    },
+    {
+     "id": "role",
+     "label": "IAM role",
+     "icon": "aws:role",
+     "parent": "acct",
+     "x": 640,
+     "y": 300,
+     "sublabel": "trusts Abstract only"
+    },
+    {
+     "id": "kms",
+     "label": "KMS key",
+     "icon": "aws:key_management_service",
+     "parent": "acct",
+     "x": 60,
+     "y": 300,
+     "sublabel": "optional"
+    },
+    {
+     "id": "plat",
+     "label": "Abstract platform",
+     "sublabel": "polls SQS, reads S3",
+     "icon": "img:../../app/web/public/logo-mark.svg",
+     "parent": "abs",
+     "x": 85,
+     "y": 143,
+     "w": 90,
+     "h": 80
+    }
+   ],
+   "edges": [
+    {
+     "from": "prod",
+     "to": "s3",
+     "label": "writes logs",
+     "tone": "brand"
+    },
+    {
+     "from": "s3",
+     "to": "sqs",
+     "label": "ObjectCreated",
+     "tone": "brand"
+    },
+    {
+     "from": "s3",
+     "to": "sns",
+     "label": "",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      1,
+      0.85
+     ],
+     "entry": [
+      0.5,
+      0
+     ]
+    },
+    {
+     "from": "sns",
+     "to": "sqs",
+     "label": "",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.85
+     ]
+    },
+    {
+     "from": "sqs",
+     "to": "plat",
+     "label": "poll",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.2
+     ]
+    },
+    {
+     "from": "plat",
+     "to": "role",
+     "label": "AssumeRole + External ID",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.85
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.35
+    }
+   ]
+  }
+ ]
+}

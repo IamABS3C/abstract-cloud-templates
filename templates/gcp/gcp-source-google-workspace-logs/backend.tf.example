@@ -1,0 +1,28 @@
+# Rename to backend.tf BEFORE your first apply.
+#
+# WHY THIS MATTERS MORE HERE THAN USUAL: with no backend, state is a local file.
+# The Open in Cloud Shell buttons start a temporary session, and Google deletes its
+# files, that state file included, when the session ends.
+#
+# Lose the state for an ORGANIZATION-SCOPED SINK and the sink, topic,
+# subscription, service account and every IAM binding become unmanaged. Re-running
+# gives you "already exists" errors, and the only way back is hand-importing an
+# org sink.
+#
+# It also makes drift detection possible at all — `tofu plan -detailed-exitcode`
+# needs somewhere to compare against.
+#
+#   gcloud storage buckets create gs://acme-abstract-tfstate \
+#     --project=acme-security-logging --location=US --uniform-bucket-level-access
+#   gcloud storage buckets update gs://acme-abstract-tfstate --versioning
+#
+# Versioning is not optional: it is the only recovery path from a corrupted or
+# truncated state write.
+
+terraform {
+  backend "gcs" {
+    bucket = "acme-abstract-tfstate"
+    # State key: this folder's original name, kept so existing state is found. Never change it.
+    prefix = "04-workspace"
+  }
+}

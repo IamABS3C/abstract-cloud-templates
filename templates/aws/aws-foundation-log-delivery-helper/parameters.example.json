@@ -1,0 +1,62 @@
+[
+  {
+    "ParameterKey": "Operation",
+    "ParameterValue": "None"
+  },
+  {
+    "ParameterKey": "AllowProducerWiring",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "KmsAlias",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "QueueName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "BucketName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "StreamName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "WebAclName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "WebAclScope",
+    "ParameterValue": "REGIONAL"
+  },
+  {
+    "ParameterKey": "LogGroupName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "SourceBucketName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "TargetBucketName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "TargetPrefix",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "LoadBalancerArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "LogRetentionDays",
+    "ParameterValue": "30"
+  },
+  {
+    "ParameterKey": "FunctionTimeout",
+    "ParameterValue": "60"
+  }
+]

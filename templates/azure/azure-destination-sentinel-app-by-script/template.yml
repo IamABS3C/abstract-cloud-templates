@@ -1,0 +1,301 @@
+id: azure-destination-sentinel-app-by-script
+title: Sentinel destination, app by script
+cloud: azure
+role: destination
+scope: resource-group
+summary: 'The portal-wizard variant of the Sentinel destination: a deployment script creates the Entra
+  app registration and, with Key Vault, its client secret, then the template builds the same ingestion
+  stack. It runs as a tier-0 managed identity you create beforehand, so it suits portal-only teams and
+  labs.'
+formats:
+- bicep
+- arm
+- portal-ui
+- script
+depends_on:
+- azure-access-key-vault-secrets-reader
+permissions:
+- role: Owner, or Contributor plus User Access Administrator
+  where: The resource group
+  why: 'Deployer: Create the role assignments.'
+- role: Microsoft Graph Application.ReadWrite.All, admin-consented once
+  where: The Entra tenant
+  why: 'Provisioning identity (user-assigned): Creates the app and secret; it can add a credential to
+    any app, so treat it as tier-0.'
+- role: Key Vault Secrets Officer
+  where: The new vault, or your existing vault
+  why: 'Provisioning identity (user-assigned): Stores the client secret.'
+- role: Monitoring Metrics Publisher
+  where: The DCR only
+  why: 'Abstract runtime app: All the Logs Ingestion API needs.'
+creates:
+- Everything the standard Sentinel destination creates, with the DCR role assignment always going to the
+  service principal the script creates
+- A Key Vault (RBAC authorization, soft delete, purge protection) when keyVaultMode=Create
+- Key Vault Secrets Officer for the provisioning identity on the new or existing vault; Key Vault Secrets
+  User for secretReaderObjectId when supplied
+- A deployment script abstract-create-app that runs as the provisioning identity
+- 'In Entra ID, outside ARM: an app registration with no API permissions, its service principal, and one
+  client secret when a Key Vault is used'
+never_touches:
+- Microsoft Sentinel analytics rules, automation rules, hunting queries, bookmarks, incidents, watchlists,
+  workbooks, data connectors, threat intelligence or settings
+- Workspace functions, saved searches or parsers, including every ASIM parser
+- Any table other than the Abstract table
+- An existing workspace's SKU, retention, daily cap, access mode, network settings or workspace transformation
+  DCR
+- Any other DCR, DCE or diagnostic setting, unless it has the same name as one the template creates
+prerequisites:
+- A user-assigned managed identity granted Graph Application.ReadWrite.All with admin consent by a Global
+  Administrator
+- Keep that identity in a resource group only administrators can write to, and remove its Graph permission
+  after onboarding
+- For an existing vault in another resource group, role-assignment rights there too
+- Deploy in Incremental mode only
+parameters:
+- name: location
+  type: string
+  required: false
+  description: Azure region for the workspace, DCE, DCR, Key Vault and deployment script.
+  default: '[resourceGroup().location]'
+- name: tags
+  type: object
+  required: false
+  description: Tags applied to every created resource that supports tags.
+  default: {}
+- name: tagsByResource
+  type: object
+  required: false
+  description: Resource-specific tags, keyed by fully qualified Azure resource type.
+  default: {}
+- name: managedIdentityResourceId
+  type: string
+  required: true
+  description: Resource ID of the user-assigned provisioning identity. Tenant bootstrap must grant it
+    Microsoft Graph Application.ReadWrite.All with admin consent; this template does not use AppRoleAssignment.ReadWrite.All.
+  find_it: az identity list --query "[].{name:name,id:id}" -o table
+- name: appDisplayName
+  type: string
+  required: false
+  description: Display name for the Entra app registration created for Abstract.
+  default: Abstract-Sentinel-App
+- name: secretValidityYears
+  type: int
+  required: false
+  description: Client-secret validity in years when a Key Vault mode generates the secret.
+  default: 1
+- name: secretReaderObjectId
+  type: string
+  required: false
+  description: Optional user or group object ID granted Key Vault Secrets User when Key Vault is enabled.
+  default: ''
+  find_it: az ad user show --id <user-principal-name> --query id -o tsv
+- name: azCliVersion
+  type: string
+  required: false
+  description: Azure CLI version for the deployment script container. Verify the selected image version
+    is available before changing this value.
+  default: 2.60.0
+- name: secretName
+  type: string
+  required: false
+  description: Name of the Key Vault secret holding the client secret.
+  default: abstract-sentinel-client-secret
+- name: forceSecretRotation
+  type: bool
+  required: false
+  description: 'Force a NEW client secret even when the vault already holds a valid one.
+
+
+    Leave false. The script now rotates only when no secret exists or the existing one
+
+    expires within 30 days, which makes re-running this template safe - the previous
+
+    behaviour minted a fresh secret on every deployment, so a re-run silently created a
+
+    new Key Vault version while Abstract kept using the old value.
+
+
+    Set true only for a deliberate rotation, and update Abstract with the new value.
+
+    '
+  default: false
+- name: keyVaultMode
+  type: string
+  required: false
+  description: Create a new Key Vault, use an existing vault by resource ID, or skip Key Vault. In None
+    mode, create the client secret in Entra after deployment.
+  default: Create
+  allowed:
+  - Create
+  - Existing
+  - None
+- name: keyVaultName
+  type: string
+  required: false
+  description: Key Vault name (3-24 lowercase alphanumerics/hyphens, globally unique). Leave empty to
+    auto-generate abstract-kv-<hash>.
+  default: ''
+- name: existingKeyVaultResourceId
+  type: string
+  required: false
+  description: Full resource ID of the existing Key Vault. Used only when keyVaultMode is Existing.
+  default: '[resourceGroup().id]'
+- name: createWorkspace
+  type: bool
+  required: false
+  description: Create a new Log Analytics workspace. Set false to target an EXISTING workspace in THIS
+    resource group.
+  default: true
+- name: workspaceName
+  type: string
+  required: false
+  description: 'Workspace name. Creating: empty auto-generates abstract-sentinel-<hash>. Existing: the
+    exact name (in this resource group).'
+  default: ''
+- name: existingWorkspaceLocation
+  type: string
+  required: false
+  description: Region of the EXISTING workspace (Existing mode only). DCE/DCR must match it. Empty = use
+    the deployment location.
+  default: ''
+- name: workspaceSku
+  type: string
+  required: false
+  description: Workspace pricing tier. PerGB2018 is the standard pay-as-you-go tier.
+  default: PerGB2018
+  allowed:
+  - PerGB2018
+  - CapacityReservation
+  - Free
+  - Standalone
+  - PerNode
+- name: workspaceRetentionDays
+  type: int
+  required: false
+  description: Workspace data retention in days. Only applied when creating a new workspace; an existing
+    workspace is never modified. The Abstract table's own retention is customTableRetentionDays.
+  default: 90
+- name: enableSentinel
+  type: bool
+  required: false
+  description: Enable Microsoft Sentinel on the workspace (only applied when creating a new workspace; assumed already enabled for existing workspaces).
+  default: true
+- name: dataCollectionEndpointName
+  type: string
+  required: false
+  description: Name of the Data Collection Endpoint (DCE) that receives data from Abstract.
+  default: abstract-dce
+- name: dataCollectionRuleName
+  type: string
+  required: false
+  description: Name of the Data Collection Rule (DCR) that routes data into the workspace table.
+  default: abstract-dcr
+- name: customTableName
+  type: string
+  required: false
+  description: Custom log table name. MUST end in _CL.
+  default: AbstractEventLogs_CL
+- name: tableColumns
+  type: array
+  required: false
+  description: 'Custom table columns. Leave empty (recommended) to use the generated ACS schema: one column
+    per top-level key of the event Abstract sends, with a DCR transformation that sets TimeGenerated.
+    Supply columns only for a custom payload shape; the DCR stream then uses the same columns and transformKql.'
+  default: []
+- name: transformKql
+  type: string
+  required: false
+  description: DCR transformation used only when tableColumns is supplied. The generated schema carries
+    its own transformation.
+  default: source
+- name: enableDcrErrorLogs
+  type: bool
+  required: false
+  description: Send the Data Collection Rule's ingestion errors (rejected requests, malformed payloads,
+    limit and transformation errors) to the DCRLogErrors table in the workspace. Without it, data Azure
+    refuses or drops is invisible to the customer and to Abstract.
+  default: true
+- name: enableAsim
+  type: bool
+  required: false
+  description: 'Also write each event into Microsoft''s ASIM normalized tables (ASimAuthenticationEventLogs
+    and the others listed in asimSchemas), mapped from the Abstract Common Schema by solutions/asim. Off
+    by default. Microsoft''s built-in ASIM parsers read those tables, so once this is on every ASIM analytics
+    rule, hunting query and workbook already running in the workspace also sees Abstract data: expect
+    new alerts, duplicates where Microsoft''s own connector collects the same vendor, and a second copy
+    of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time
+    with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns
+    left empty). Every event still also lands in the Abstract table.'
+  default: false
+- name: asimSchemas
+  type: array
+  required: false
+  description: ASIM schemas to write, by name (for example ['Authentication', 'NetworkSession']). ['*']
+    (default) writes every schema solutions/asim maps; [] writes none.
+  default:
+  - '*'
+- name: customTableRetentionDays
+  type: int
+  required: false
+  description: Retention of the Abstract table in days. 0 (default) sends no retention, so an existing
+    table keeps its retention and a new table uses the workspace default. A value shortens or lengthens
+    the table's total retention; shortening deletes data older than the new value.
+  default: 0
+- name: grantMonitoringContributor
+  type: bool
+  required: false
+  description: 'Also grant Monitoring Contributor on the DCR. Off by default: sending data through the
+    Logs Ingestion API needs only Monitoring Metrics Publisher, and Monitoring Contributor would let a
+    leaked Abstract credential rewrite or delete the DCR and its error-log setting. Turn on only if your
+    Abstract destination setup specifically asks for it.'
+  default: false
+- name: customTablePlan
+  type: string
+  required: false
+  description: 'Table plan for the Abstract table. Keep (default) keeps the plan an existing table already
+    has, and create a new table as Analytics: a redeploy then never changes a table''s plan, or its cost,
+    by accident. Analytics runs analytics rules and our content pack on it. Auxiliary is the Sentinel
+    data lake tier: cheap long retention and KQL jobs, but no analytics rules or alerts. Basic sits between
+    them. Setting a plan on an existing table switches it; Azure applies the new plan to the whole table.'
+  default: Keep
+  allowed:
+  - Keep
+  - Analytics
+  - Basic
+  - Auxiliary
+outputs:
+- clientId
+- applicationTenantId
+- servicePrincipalObjectId
+- clientSecretKeyVaultUri
+- keyVaultName
+- workspaceName
+- customTableName
+- dataCollectionRuleImmutableId
+- dataCollectionEndpointUrl
+- logStreamName
+- secretCreationInstructions
+- abstractModalHint
+verify:
+- check: The outputs carry the three values the Abstract destination needs
+  command: az deployment group show -g <resource-group> -n <deployment-name> --query properties.outputs
+  healthy: dataCollectionRuleImmutableId, dataCollectionEndpointUrl and logStreamName (Custom-AbstractEventLogs_CL)
+    are present.
+- check: Events are landing in the Abstract table
+  command: AbstractEventLogs_CL | where TimeGenerated > ago(1h) | summarize count() by vendor, product
+  healthy: A count that matches the event count Abstract reports for the route.
+- check: Azure is not rejecting rows
+  command: DCRLogErrors | where TimeGenerated > ago(1h) | summarize count() by OperationName, Message
+  healthy: No rows.
+cost: Ingestion into the Abstract table is charged at the table's plan (Analytics by default), and ASIM,
+  when on, adds a further copy of each mapped event. Retention beyond the free period is charged; DCE
+  and DCR billing is not verified. The with-app variant adds Key Vault operations and a few cents per
+  deployment-script run.
+when_to_use: Portal-only teams and labs.
+when_not_to_use: Production where a standing privileged identity is unwelcome; the standard or Graph template
+  avoids it.
+live_test: static
+lint_skip:
+- check: 'arm-ttk:Password params must be secure'
+  reason: Name-based false positives, secretValidityYears is a number of years and secretReaderObjectId is an Entra object id, not a secret.

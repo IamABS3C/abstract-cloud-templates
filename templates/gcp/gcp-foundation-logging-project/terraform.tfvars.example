@@ -1,0 +1,31 @@
+# FALSE (default) only enables APIs on an existing project. TRUE also creates it, which needs
+# billing_account_id and project-creator rights.
+# create_project = false
+
+# Project ID to use, or to create when create_project = true (globally unique, 6-30 characters,
+# lowercase).
+project_id = "<project_id>"
+
+# Display name when creating the project.
+# project_name = "Abstract Security Logging"
+
+# Organization to create the project under (create_project = true). Find it with: gcloud
+# organizations list
+# org_id = ""
+
+# Create the project under this folder instead of directly under the organization.
+# folder_id = ""
+
+# Required when create_project = true. A project with no billing account cannot publish to Pub/Sub.
+# Globally unique, 6-30 chars, lowercase. This is the ID you are creating, not one to look up —
+# confirm it is still free with: gcloud projects list
+# billing_account_id = ""
+
+# Also enable the Admin SDK API, for gcp-source-google-workspace-logs.
+# enable_workspace_api = false
+
+# Also enable the Security Command Center API, for gcp-source-security-command-center-findings.
+# enable_scc_api = false
+
+# Labels applied to every resource this template creates.
+# labels = {}

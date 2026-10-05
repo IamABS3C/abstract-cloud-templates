@@ -1,0 +1,120 @@
+id: gcp-source-asset-and-iam-changes
+title: Asset and IAM changes
+cloud: gcp
+role: source
+scope: organization
+summary: Cloud Asset Inventory publishes to Pub/Sub through its own feed, which no log sink can carry.
+  It records what an IAM policy now is and what it was before, the diff a detection wants, alongside the
+  audit log of who called which API.
+formats:
+- terraform
+- script
+- cloud-shell
+permissions:
+- role: roles/cloudasset.owner
+  where: The organization
+  why: 'Deployer: Create the organization feed.'
+- role: roles/pubsub.publisher
+  where: The topic
+  why: 'Cloud Asset Inventory service agent: The feed publishes as its own agent; without the grant it
+    delivers nothing.'
+- role: roles/pubsub.subscriber
+  where: The asset subscription
+  why: 'Abstract service account: Pull the changes.'
+creates:
+- A Pub/Sub topic and subscription for asset changes
+- roles/pubsub.publisher for the Cloud Asset Inventory service agent on the topic
+- An organization asset feed (IAM_POLICY by default) over a security-first set of asset types
+- roles/pubsub.subscriber for Abstract's service account on the subscription
+never_touches:
+- Existing asset feeds
+- 'The audit-log topic, subscription and sink: the feed has its own topic'
+- 'Abstract''s service account: reused from the audit-log template, not created'
+prerequisites:
+- Abstract's service account from gcp-source-audit-logs-organization, read from its state or pasted as
+  subscriber_service_account_email
+- An empty asset_types feeds every asset type and is refused without acknowledge_all_asset_types
+- roles/cloudasset.owner at the organization, and the Cloud Asset API on the billing project, whose service
+  agent (service-<project-number>@gcp-sa-cloudasset.iam.gserviceaccount.com) publishes
+- 'A separate Abstract configuration for this subscription with parsers/cloud-asset-inventory.yml attached
+  to it, never to the audit-log configuration: a configuration-level parser replaces the managed one'
+parameters:
+- name: org_id
+  type: string
+  required: true
+  description: 'Organization ID the inventory feed binds to. Find it with: gcloud organizations list'
+  find_it: gcloud organizations list --format='value(ID)'
+- name: log_project
+  type: string
+  required: true
+  description: 'DEDICATED logging or security project holding this pipeline. Not a workload project. Find
+    it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project
+    (set create_project = true).'
+  find_it: gcloud projects list --format='value(projectId)'
+  example: acme-security-logging
+- name: remote_state_bucket
+  type: string
+  required: false
+  description: GCS bucket holding gcp-source-audit-logs-organization's state. Set this and Abstract's
+    identity is READ rather than retyped. Empty falls back to subscriber_service_account_email.
+  default: ''
+- name: remote_state_prefix
+  type: string
+  required: false
+  description: State key of gcp-source-audit-logs-organization. It keeps that folder's original name,
+    01-organization, so existing state is found.
+  default: 01-organization
+- name: subscriber_service_account_email
+  type: string
+  required: false
+  description: Fallback when remote_state_bucket is empty. From gcp-source-audit-logs-organization's abstract_onboarding
+    output.
+  default: ''
+- name: content_type
+  type: string
+  required: false
+  description: IAM_POLICY (default, highest security value) | RESOURCE | ORG_POLICY | ACCESS_POLICY |
+    OS_INVENTORY | RELATIONSHIP
+  default: IAM_POLICY
+- name: asset_types
+  type: array
+  required: false
+  description: Asset types to watch. Empty means everything and requires acknowledge_all_asset_types.
+  default:
+  - cloudresourcemanager.googleapis.com/Project
+  - cloudresourcemanager.googleapis.com/Folder
+  - iam.googleapis.com/ServiceAccount
+  - iam.googleapis.com/ServiceAccountKey
+  - storage.googleapis.com/Bucket
+  - compute.googleapis.com/Firewall
+- name: acknowledge_all_asset_types
+  type: bool
+  required: false
+  description: Required when asset_types is empty, which feeds every asset type in the organization.
+  default: false
+- name: retention_days
+  type: int
+  required: false
+  description: 'Pub/Sub message retention in days. This is the entire recovery window: unacked messages
+    older than this are deleted.'
+  default: 7
+- name: labels
+  type: object
+  required: false
+  description: Labels applied to every resource this template creates.
+  default: {}
+outputs:
+- abstract_onboarding
+- cai_service_agent
+abstract:
+  integration: google_cloud_pub_sub
+  parser: parsers/cloud-asset-inventory.yml
+verify:
+- check: The service agent that must publish
+  command: terraform output cai_service_agent
+  healthy: The agent is listed and holds publisher on the topic.
+cost: Asset feeds are free; Pub/Sub throughput follows the rate of IAM and resource changes.
+when_to_use: Alongside gcp-source-audit-logs-organization, for policy diffs and asset inventory.
+when_not_to_use: As a replacement for the audit-log sink; the two answer different questions. Configure
+  it as a separate source in Abstract.
+live_test: canary

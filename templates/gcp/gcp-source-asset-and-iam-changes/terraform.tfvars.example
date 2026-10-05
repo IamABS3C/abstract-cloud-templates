@@ -1,0 +1,36 @@
+# Organization ID the inventory feed binds to. Find it with: gcloud organizations list
+org_id = "<org_id>"
+
+# DEDICATED logging or security project holding this pipeline. Not a workload project. Find it with:
+# gcloud projects list. If no dedicated logging project exists yet, create one first with
+# templates/gcp/gcp-foundation-logging-project (set create_project = true).
+log_project = "acme-security-logging"
+
+# GCS bucket holding gcp-source-audit-logs-organization's state. Set this and Abstract's identity is
+# READ rather than retyped. Empty falls back to subscriber_service_account_email.
+# remote_state_bucket = ""
+
+# State key of gcp-source-audit-logs-organization. It keeps that folder's original name,
+# 01-organization, so existing state is found.
+# remote_state_prefix = "01-organization"
+
+# Fallback when remote_state_bucket is empty. From gcp-source-audit-logs-organization's
+# abstract_onboarding output.
+# subscriber_service_account_email = ""
+
+# IAM_POLICY (default, highest security value) | RESOURCE | ORG_POLICY | ACCESS_POLICY |
+# OS_INVENTORY | RELATIONSHIP
+# content_type = "IAM_POLICY"
+
+# Asset types to watch. Empty means everything and requires acknowledge_all_asset_types.
+# asset_types = ["cloudresourcemanager.googleapis.com/Project", "cloudresourcemanager.googleapis.com/Folder", "iam.googleapis.com/ServiceAccount", "iam.googleapis.com/ServiceAccountKey", "storage.googleapis.com/Bucket", "compute.googleapis.com/Firewall"]
+
+# Required when asset_types is empty, which feeds every asset type in the organization.
+# acknowledge_all_asset_types = false
+
+# Pub/Sub message retention in days. This is the entire recovery window: unacked messages older than
+# this are deleted.
+# retention_days = 7
+
+# Labels applied to every resource this template creates.
+# labels = {}

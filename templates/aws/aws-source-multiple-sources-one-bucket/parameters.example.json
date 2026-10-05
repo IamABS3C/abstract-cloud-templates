@@ -1,0 +1,114 @@
+[
+  {
+    "ParameterKey": "TemplateBaseUrl",
+    "ParameterValue": "<TemplateBaseUrl>"
+  },
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "StoreCredentialsInSecretsManager",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "BucketEncryption",
+    "ParameterValue": "SSE-S3"
+  },
+  {
+    "ParameterKey": "QueueEncryption",
+    "ParameterValue": "SSE-SQS"
+  },
+  {
+    "ParameterKey": "KmsMode",
+    "ParameterValue": "None"
+  },
+  {
+    "ParameterKey": "ExistingKmsKeyArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "EnableDlqAlarm",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableDashboard",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "AlarmEmail",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "EnableCloudTrail",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "EnableCloudFront",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableLoadBalancer",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableRoute53",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableS3AccessLogs",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableVPCFlowLogs",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableWAF",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableCloudWatchLogs",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableKinesis",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableSecurityLake",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "VpcFlowResourceId",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "WafWebAclArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "KinesisStreamName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "SecurityLakeDataLakeArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "SecurityLakeSourceName",
+    "ParameterValue": "WAFV2"
+  }
+]

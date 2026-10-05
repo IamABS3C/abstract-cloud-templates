@@ -1,0 +1,59 @@
+# Organization ID the archive sink binds to. Find it with: gcloud organizations list
+org_id = "<org_id>"
+
+# DEDICATED logging or security project holding the archive sink. Find it with: gcloud projects
+# list. If no dedicated logging project exists yet, create one first with
+# templates/gcp/gcp-foundation-logging-project (set create_project = true) — do not point this at a
+# workload project.
+log_project = "acme-security-logging"
+
+# Globally unique across ALL of GCS, so prefix it with your org: acme-abstract-audit-archive.
+# Existing buckets: gcloud storage buckets list
+archive_bucket_name = "<archive_bucket_name>"
+
+# Fallback filter, used only when remote_state_bucket and stream_filter are both empty. Prefer
+# remote state: an archive that quietly captures LESS than the stream is worse than no archive,
+# because you will trust it during an investigation.
+# filter = ""
+
+# Name of the Cloud Logging sink.
+# sink_name = "abstract-org-audit-sink"
+
+# US, EU, or a region. Consider data-residency obligations before defaulting.
+# archive_bucket_location = "US"
+
+# Retention period in days; 0 disables. On its own this is a DEFAULT that anyone with
+# storage.buckets.update can shorten or remove. Pair it with archive_retention_locked to make it
+# immutable.
+# archive_retention_days = 0
+
+# Move archived objects to Nearline after this many days.
+# archive_nearline_after_days = 30
+
+# Labels applied to every resource this template creates.
+# labels = {}
+
+# LOCK the retention policy. IRREVERSIBLE — once set, the period cannot be shortened or removed for
+# the life of the bucket, by anyone. This is what makes the archive evidentiary; it is also why it
+# is not the default.
+# archive_retention_locked = false
+
+# Keep superseded object versions.
+# archive_versioning = true
+
+# Customer-managed KMS key. The Cloud Storage service agent needs
+# roles/cloudkms.cryptoKeyEncrypterDecrypter on it.
+# archive_cmek_key = ""
+
+# Optional. Paste `terraform output -raw effective_filter` from gcp-source-audit-logs-organization
+# here and a check block asserts the archive matches the stream. Empty skips the check — but then
+# nothing stops the two diverging.
+# stream_filter = ""
+
+# GCS bucket holding gcp-source-audit-logs-organization's state. Set it and the value below is READ
+# rather than retyped. Empty uses the literal.
+# remote_state_bucket = ""
+
+# State key of gcp-source-audit-logs-organization. It keeps that folder's original name,
+# 01-organization, so existing state is found.
+# remote_state_prefix = "01-organization"

@@ -1,0 +1,336 @@
+#!/usr/bin/env bash
+# =============================================================================
+#   Abstract Security — Google Cloud Estate Security & Telemetry Audit
+#
+#   READ-ONLY assessment script that inspects your GCP resource hierarchy,
+#   existing log sinks, Pub/Sub pipelines, Data Access configs, network security
+#   logging (Armor, IDS, DNS, Firewalls), Billing, SCC, Asset Feeds, and
+#   Infrastructure Manager readiness.
+# =============================================================================
+set -uo pipefail
+
+B=$'\033[1m'; P=$'\033[38;5;198m'; G=$'\033[0;32m'; Y=$'\033[0;33m'; R=$'\033[0;31m'; C=$'\033[0;36m'; D=$'\033[2m'; O=$'\033[0m'
+banner() {
+  printf "%s" "$P"
+  cat <<'EOF'
+    _   _         _                  _     ___                      _ _         
+   /_\ | |__  ___| |_ _ _ __ _  __ _| |_  / __| ___ __ _  _ _ _(_) |_ _  _ 
+  / _ \| '_ \(_-<  _| '_/ _` |/ _` |  _| \__ \/ -_) _| || | '_| |  _| || |
+ /_/ \_\_.__/__/\__|_| \__,_|\__, |\__| |___/\___\__|\_,_|_| |_|\__|\_, |
+                              |___/                                   |__/ 
+EOF
+  printf "%s" "$O"
+  printf "%s   Google Cloud Platform Estate Security & Telemetry Audit%s\n\n" "$D" "$O"
+}
+
+heading() { printf "\n%s━━ %s %s━━%s\n" "$P" "$1" "$2" "$O"; }
+pass()    { printf "  %s✓%s %s\n" "$G" "$O" "$*"; PASS_COUNT=$((PASS_COUNT+1)); }
+warn()    { printf "  %s!%s %s\n" "$Y" "$O" "$*"; WARN_COUNT=$((WARN_COUNT+1)); }
+fail()    { printf "  %s✗%s %s\n" "$R" "$O" "$*"; FAIL_COUNT=$((FAIL_COUNT+1)); }
+info()    { printf "  %s•%s %s\n" "$C" "$O" "$*"; }
+dim()     { printf "%s     %s%s\n" "$D" "$*" "$O"; }
+
+PASS_COUNT=0; WARN_COUNT=0; FAIL_COUNT=0
+JSON_OUTPUT=false
+TARGET_ORG=""
+TARGET_PROJECT=""
+REC_LIST=()
+add_rec() { REC_LIST+=("$1"); }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --org-id) TARGET_ORG="$2"; shift 2 ;;
+    --project) TARGET_PROJECT="$2"; shift 2 ;;
+    --json) JSON_OUTPUT=true; shift ;;
+    -h|--help)
+      echo "Usage: ./tools/gcp-guided-setup/audit-gcp-estate.sh [--org-id <ORG_ID>] [--project <PROJECT_ID>] [--json]"
+      exit 0
+      ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+
+! $JSON_OUTPUT && banner
+
+# 1. Identity & Active Context
+! $JSON_OUTPUT && heading "1. Identity & Authenticated Context" "━━━━━━━━━━━━━━━━━━━━━━━━"
+ACTIVE_ACCOUNT=$(gcloud config get-value account 2>/dev/null | grep -v "^(unset)$" || true)
+if [[ -z "$ACTIVE_ACCOUNT" ]]; then
+  ACTIVE_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null | head -n1 || true)
+fi
+
+if [[ -n "$ACTIVE_ACCOUNT" ]]; then
+  ! $JSON_OUTPUT && pass "Authenticated as: ${B}$ACTIVE_ACCOUNT${O}"
+else
+  ! $JSON_OUTPUT && fail "No active gcloud authentication detected. Run 'gcloud auth login' first."
+  exit 1
+fi
+
+TOKEN=$(gcloud auth print-access-token 2>/dev/null || true)
+
+# 2. Resource Hierarchy Discovery
+! $JSON_OUTPUT && heading "2. Resource Hierarchy Discovery" "━━━━━━━━━━━━━━━━━━━━━━━"
+DISCOVERED_ORGS=$(gcloud organizations list --format="value(ID,displayName)" 2>/dev/null || true)
+ORG_COUNT=$(echo "$DISCOVERED_ORGS" | grep -c . || true)
+
+if [[ -z "$TARGET_ORG" && "$ORG_COUNT" -gt 0 ]]; then
+  TARGET_ORG=$(echo "$DISCOVERED_ORGS" | head -n1 | awk '{print $1}')
+fi
+
+if [[ -n "$TARGET_ORG" ]]; then
+  ORG_NAME=$(echo "$DISCOVERED_ORGS" | grep "^$TARGET_ORG" | awk '{print $2}' || echo "Org $TARGET_ORG")
+  ! $JSON_OUTPUT && pass "Google Cloud Organization: ${B}$TARGET_ORG${O} (${ORG_NAME:-Primary Organization})"
+else
+  ! $JSON_OUTPUT && warn "No Google Cloud Organization detected. Operating at Folder or Project scope."
+  add_rec "Organization scope provides centralized coverage. If you have an Org ID, specify via --org-id."
+fi
+
+# Discover Folders
+if [[ -n "$TARGET_ORG" ]]; then
+  FOLDERS=$(gcloud resource-manager folders list --organization="$TARGET_ORG" --format="value(ID,displayName)" 2>/dev/null || true)
+  FOLDER_COUNT=$(echo "$FOLDERS" | grep -c . || true)
+  if [[ "$FOLDER_COUNT" -gt 0 ]]; then
+    ! $JSON_OUTPUT && info "Discovered $FOLDER_COUNT top-level folder(s) under Organization $TARGET_ORG"
+  fi
+fi
+
+# Discover Projects
+ALL_PROJECTS=$(gcloud projects list --format="value(projectId,name)" 2>/dev/null || true)
+PROJECT_COUNT=$(echo "$ALL_PROJECTS" | grep -c . || true)
+! $JSON_OUTPUT && info "Discovered $PROJECT_COUNT accessible GCP project(s)"
+
+CANDIDATE_LOG_PROJECTS=()
+while IFS=$'\t' read -r pid pname; do
+  [[ -z "$pid" ]] && continue
+  if [[ "$pid" =~ (log|audit|security|sec|siem|abstract) ]] || [[ "$pname" =~ (log|audit|security|sec|siem|abstract) ]]; then
+    CANDIDATE_LOG_PROJECTS+=("$pid")
+  fi
+done <<< "$ALL_PROJECTS"
+
+if [[ ${#CANDIDATE_LOG_PROJECTS[@]} -gt 0 ]]; then
+  ! $JSON_OUTPUT && pass "Candidate Centralized Logging Project(s): ${B}${CANDIDATE_LOG_PROJECTS[*]}${O}"
+  if [[ -z "$TARGET_PROJECT" ]]; then
+    TARGET_PROJECT="${CANDIDATE_LOG_PROJECTS[0]}"
+  fi
+fi
+
+CURRENT_PROJECT=$(gcloud config get-value project 2>/dev/null | grep -v "^(unset)$" || true)
+if [[ -z "$TARGET_PROJECT" ]]; then
+  TARGET_PROJECT="$CURRENT_PROJECT"
+fi
+! $JSON_OUTPUT && info "Active audit inspection target project: ${B}${TARGET_PROJECT:-none}${O}"
+
+# 3. Permissions & Policy Governance
+! $JSON_OUTPUT && heading "3. Permissions & Policy Governance" "━━━━━━━━━━━━━━━━━━━━━━"
+if [[ -n "$TARGET_ORG" && -n "$TOKEN" ]]; then
+  ORG_PERMS_TEST=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+    "https://cloudresourcemanager.googleapis.com/v1/organizations/${TARGET_ORG}:testIamPermissions" \
+    -d '{"permissions":["logging.sinks.create","resourcemanager.organizations.setIamPolicy","securitycenter.notificationconfigs.create","cloudasset.feeds.create"]}' 2>/dev/null || true)
+
+  if echo "$ORG_PERMS_TEST" | grep -q "logging.sinks.create"; then
+    ! $JSON_OUTPUT && pass "Organization Sink Creator (roles/logging.configWriter) is HELD"
+  else
+    ! $JSON_OUTPUT && fail "Organization Sink Creator (roles/logging.configWriter) is MISSING on Organization $TARGET_ORG"
+    add_rec "Request 'roles/logging.configWriter' on Organization $TARGET_ORG to create aggregated organization-wide sinks."
+  fi
+
+  if echo "$ORG_PERMS_TEST" | grep -q "resourcemanager.organizations.setIamPolicy"; then
+    ! $JSON_OUTPUT && pass "Organization IAM Admin (resourcemanager.organizations.setIamPolicy) is HELD"
+  else
+    ! $JSON_OUTPUT && warn "Organization IAM Admin is MISSING. Needed for templates/gcp/gcp-foundation-data-access-audit-logs (Data Access Audit Configs)."
+  fi
+
+  if echo "$ORG_PERMS_TEST" | grep -q "securitycenter.notificationconfigs.create"; then
+    ! $JSON_OUTPUT && pass "SCC Notification Editor (securitycenter.notificationconfigs.create) is HELD"
+  else
+    ! $JSON_OUTPUT && warn "SCC Notification Editor is MISSING. Needed for templates/gcp/gcp-source-security-command-center-findings."
+  fi
+
+  if echo "$ORG_PERMS_TEST" | grep -q "cloudasset.feeds.create"; then
+    ! $JSON_OUTPUT && pass "Cloud Asset Owner (cloudasset.feeds.create) is HELD"
+  else
+    ! $JSON_OUTPUT && warn "Cloud Asset Owner is MISSING. Needed for templates/gcp/gcp-source-asset-and-iam-changes."
+  fi
+fi
+
+# Check Target Project permissions
+if [[ -n "$TARGET_PROJECT" && -n "$TOKEN" ]]; then
+  PROJ_PERMS_TEST=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+    "https://cloudresourcemanager.googleapis.com/v1/projects/${TARGET_PROJECT}:testIamPermissions" \
+    -d '{"permissions":["pubsub.topics.create","pubsub.subscriptions.create","iam.serviceAccounts.create","iam.serviceAccountKeys.create","serviceusage.services.enable"]}' 2>/dev/null || true)
+
+  if echo "$PROJ_PERMS_TEST" | grep -q "pubsub.topics.create" && echo "$PROJ_PERMS_TEST" | grep -q "pubsub.subscriptions.create"; then
+    ! $JSON_OUTPUT && pass "Pub/Sub Admin on project '$TARGET_PROJECT' is HELD"
+  else
+    ! $JSON_OUTPUT && fail "Pub/Sub topic/subscription creation is MISSING on '$TARGET_PROJECT'"
+  fi
+
+  KEY_POLICY=$(gcloud resource-manager org-policies describe iam.disableServiceAccountKeyCreation \
+    --project="$TARGET_PROJECT" --effective --format="value(booleanPolicy.enforced)" 2>/dev/null || true)
+  if [[ "$KEY_POLICY" == "True" ]]; then
+    ! $JSON_OUTPUT && warn "Org Policy 'iam.disableServiceAccountKeyCreation' is ENFORCED on $TARGET_PROJECT"
+    dim "Abstract connector requires a Service Account Key."
+    add_rec "Request an Org Policy exemption for 'iam.disableServiceAccountKeyCreation' on project $TARGET_PROJECT."
+  else
+    ! $JSON_OUTPUT && pass "Org Policy allows Service Account key creation on $TARGET_PROJECT"
+  fi
+fi
+
+# 4. Existing Log Sinks & Pub/Sub Pipelines
+! $JSON_OUTPUT && heading "4. Existing Log Sinks & Telemetry Streams" "━━━━━━━━━━━━━━━━━━━━"
+if [[ -n "$TARGET_ORG" ]]; then
+  ORG_SINKS=$(gcloud logging sinks list --organization="$TARGET_ORG" --format="value(name,destination)" 2>/dev/null || true)
+  ORG_SINK_COUNT=$(echo "$ORG_SINKS" | grep -c . || true)
+  if [[ "$ORG_SINK_COUNT" -gt 0 ]]; then
+    ! $JSON_OUTPUT && pass "Found $ORG_SINK_COUNT Organization-level log sink(s)"
+  else
+    ! $JSON_OUTPUT && warn "No Organization-level log sinks configured. Org audit logs are not routed to central SIEM."
+    add_rec "Deploy templates/gcp/gcp-source-audit-logs-organization to stream org-wide audit logs to Abstract Security."
+  fi
+fi
+
+if [[ -n "$TARGET_PROJECT" ]]; then
+  PUBSUB_TOPICS=$(gcloud pubsub topics list --project="$TARGET_PROJECT" --format="value(name)" 2>/dev/null || true)
+  if echo "$PUBSUB_TOPICS" | grep -q "abstract-audit-logs"; then
+    ! $JSON_OUTPUT && pass "Dedicated topic 'abstract-audit-logs' exists in '$TARGET_PROJECT'"
+  fi
+  PUBSUB_SUBS=$(gcloud pubsub subscriptions list --project="$TARGET_PROJECT" --format="value(name)" 2>/dev/null || true)
+  if echo "$PUBSUB_SUBS" | grep -q "abstract-audit-logs-sub"; then
+    ! $JSON_OUTPUT && pass "Dedicated subscription 'abstract-audit-logs-sub' exists in '$TARGET_PROJECT'"
+  fi
+fi
+
+# 5. Data Access Audit Logging Assessment
+! $JSON_OUTPUT && heading "5. Data Access Audit Logging Assessment" "━━━━━━━━━━━━━━━━━━━━"
+if [[ -n "$TARGET_ORG" ]]; then
+  ORG_AUDIT_CONFIG=$(gcloud organizations get-iam-policy "$TARGET_ORG" --format=json 2>/dev/null || true)
+  AUDIT_SERVICES=$(echo "$ORG_AUDIT_CONFIG" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+configs = data.get("auditConfigs", [])
+svcs = [c.get("service") for c in configs]
+print(",".join(svcs))
+' 2>/dev/null || true)
+
+  if echo "$AUDIT_SERVICES" | grep -q "allServices"; then
+    ! $JSON_OUTPUT && warn "allServices is enabled for Data Access at Organization scope! (High volume & cost hazard)"
+    add_rec "Scope Data Access logs to specific high-signal services via templates/gcp/gcp-foundation-data-access-audit-logs to optimize cost."
+  elif [[ -n "$AUDIT_SERVICES" ]]; then
+    ! $JSON_OUTPUT && pass "Scoped Data Access logging is active for: ${B}$AUDIT_SERVICES${O}"
+  else
+    ! $JSON_OUTPUT && warn "Data Access audit logging is DISABLED at Organization scope."
+    dim "Admin Activity logs are on by default, but Data Access (BigQuery, GCS, IAM token minting) is off."
+    add_rec "Deploy templates/gcp/gcp-foundation-data-access-audit-logs to enable Data Access logging for BigQuery, Storage, KMS, and IAM."
+  fi
+
+  # Granular Identity & Workload Authentication Telemetry Checks
+  if echo "$AUDIT_SERVICES" | grep -qE "(allServices|iamcredentials.googleapis.com)"; then
+    ! $JSON_OUTPUT && pass "Service Account Impersonation & Token Minting (iamcredentials.googleapis.com) is AUDITED"
+  else
+    ! $JSON_OUTPUT && warn "Service Account Impersonation (iamcredentials.googleapis.com) is NOT audited in Data Access"
+    dim "Calls to GenerateAccessToken and SignBlob (e.g. gcloud --impersonate-service-account) will not produce audit events."
+    add_rec "Add 'iamcredentials.googleapis.com' to Data Access auditConfigs to monitor service account impersonation."
+  fi
+
+  if echo "$AUDIT_SERVICES" | grep -qE "(allServices|sts.googleapis.com)"; then
+    ! $JSON_OUTPUT && pass "Workload Identity Federation (sts.googleapis.com) token exchange is AUDITED"
+  else
+    ! $JSON_OUTPUT && warn "Workload Identity Federation (sts.googleapis.com) token exchange is NOT audited in Data Access"
+    dim "External identity token exchanges (GitHub Actions OIDC, AWS/Azure federation) will not produce audit events."
+    add_rec "Add 'sts.googleapis.com' to Data Access auditConfigs to monitor Workload Identity Federation exchanges."
+  fi
+fi
+
+# 6. Network Threat Telemetry Assessment
+! $JSON_OUTPUT && heading "6. Network Threat Telemetry Assessment" "━━━━━━━━━━━━━━━━━━━━━"
+BACKEND_SERVICES=$(gcloud compute backend-services list --format="value(name,logConfig.enable)" 2>/dev/null || true)
+BS_COUNT=$(echo "$BACKEND_SERVICES" | grep -c . || true)
+if [[ "$BS_COUNT" -gt 0 ]]; then
+  LOGGED_BS=$(echo "$BACKEND_SERVICES" | grep "True" | wc -l | tr -d " " || true)
+  if [[ "$LOGGED_BS" -gt 0 ]]; then
+    ! $JSON_OUTPUT && pass "Discovered $LOGGED_BS Backend Service(s) with request/Cloud Armor logging enabled"
+  else
+    ! $JSON_OUTPUT && warn "Backend services exist but none have request logging enabled (Cloud Armor WAF decisions not logged)."
+    add_rec "Enable 'logConfig { enable = true }' on Backend Services to capture Cloud Armor WAF events."
+  fi
+fi
+
+DNS_POLICIES=$(gcloud dns policies list --format="value(name,enableLogging)" 2>/dev/null || true)
+DNS_LOG_COUNT=$(echo "$DNS_POLICIES" | grep "True" | wc -l | tr -d " " || true)
+if [[ "$DNS_LOG_COUNT" -gt 0 ]]; then
+  ! $JSON_OUTPUT && pass "Discovered $DNS_LOG_COUNT Cloud DNS server policy/policies with query logging ENABLED"
+else
+  ! $JSON_OUTPUT && warn "No Cloud DNS Server Policies with query logging enabled. DNS query telemetry (C2/exfil detection) is OFF."
+  add_rec "Enable DNS Query Logging on VPC networks to capture high-value C2 beaconing and data exfiltration telemetry."
+fi
+
+FIREWALL_LOGS=$(gcloud compute firewall-rules list --format="value(name,logConfig.enable)" 2>/dev/null || true)
+FW_LOGGED=$(echo "$FIREWALL_LOGS" | grep "True" | wc -l | tr -d " " || true)
+if [[ "$FW_LOGGED" -gt 0 ]]; then
+  ! $JSON_OUTPUT && pass "$FW_LOGGED Firewall rule(s) have logging enabled"
+else
+  ! $JSON_OUTPUT && warn "Zero firewall rules have rule logging enabled. Ingress/egress allow/deny decisions are not recorded."
+  add_rec "Enable logging on critical ingress/deny firewall rules, then deploy templates/gcp/gcp-source-network-threat-logs."
+fi
+
+# 7. Out-of-Hierarchy Billing Account Audit
+! $JSON_OUTPUT && heading "7. Billing Account Telemetry Assessment" "━━━━━━━━━━━━━━━━━━━━"
+BILLING_ACCOUNTS=$(gcloud billing accounts list --filter="open=true" --format="value(name,displayName)" 2>/dev/null || true)
+BA_COUNT=$(echo "$BILLING_ACCOUNTS" | grep -c . || true)
+if [[ "$BA_COUNT" -gt 0 ]]; then
+  while IFS=$'\t' read -r ba_id ba_name; do
+    [[ -z "$ba_id" ]] && continue
+    BA_RAW_ID=$(basename "$ba_id")
+    ! $JSON_OUTPUT && pass "Active Billing Account: ${B}$BA_RAW_ID${O} ('$ba_name')"
+    BA_SINKS=$(gcloud logging sinks list --billing-account="$BA_RAW_ID" --format="value(name)" 2>/dev/null || true)
+    if [[ -n "$BA_SINKS" ]]; then
+      ! $JSON_OUTPUT && pass "Billing Account $BA_RAW_ID has active log sink(s): $(echo "$BA_SINKS" | head -n1)"
+    else
+      ! $JSON_OUTPUT && warn "Billing Account $BA_RAW_ID has NO log sink. Billing changes & project linkings are invisible to Org sinks."
+      add_rec "Deploy templates/gcp/gcp-source-billing-account-logs to capture out-of-hierarchy billing IAM and project association changes."
+    fi
+  done <<< "$BILLING_ACCOUNTS"
+fi
+
+# 8. Security Command Center & Cloud Asset Inventory
+! $JSON_OUTPUT && heading "8. SCC Findings & Asset Feeds Assessment" "━━━━━━━━━━━━━━━━━━"
+if [[ -n "$TARGET_ORG" ]]; then
+  SCC_NOTIFS=$(gcloud scc notifications list "organizations/$TARGET_ORG" --format="value(name)" 2>/dev/null || true)
+  if [[ -n "$SCC_NOTIFS" ]]; then
+    ! $JSON_OUTPUT && pass "Security Command Center Notification Config found"
+  else
+    ! $JSON_OUTPUT && warn "No Security Command Center Notification Configs discovered at Organization scope."
+    add_rec "Deploy templates/gcp/gcp-source-security-command-center-findings to stream real-time threat, vulnerability, and posture findings to Abstract."
+  fi
+
+  ASSET_FEEDS=$(gcloud asset feeds list --organization="$TARGET_ORG" --format="value(name)" 2>/dev/null || true)
+  if [[ -n "$ASSET_FEEDS" ]]; then
+    ! $JSON_OUTPUT && pass "Cloud Asset Inventory real-time feed(s) discovered"
+  else
+    ! $JSON_OUTPUT && info "No Cloud Asset Inventory organization feeds configured."
+    add_rec "Deploy templates/gcp/gcp-source-asset-and-iam-changes for real-time drift detection and IAM policy diff tracking."
+  fi
+fi
+
+# Final Summary
+! $JSON_OUTPUT && heading "Audit Summary & Prioritized Action Plan" "━━━━━━━━━━━━━━━━━━━━━"
+if ! $JSON_OUTPUT; then
+  printf "\n  Audit Score: %s%d checks passed%s, %s%d warnings%s, %s%d critical blockers%s\n\n" \
+    "$G" "$PASS_COUNT" "$O" "$Y" "$WARN_COUNT" "$O" "$R" "$FAIL_COUNT" "$O"
+
+  if [[ ${#REC_LIST[@]} -gt 0 ]]; then
+    printf "%sRecommended Actions in Priority Order:%s\n" "$B" "$O"
+    idx=1
+    for r in "${REC_LIST[@]}"; do
+      printf "  %s%d.%s %s\n" "$P" "$idx" "$O" "$r"
+      idx=$((idx+1))
+    done
+  else
+    printf "  %sAll security, audit, and telemetry controls are optimal!%s\n" "$G" "$O"
+  fi
+
+  printf "\n%sOnboarding & Standalone Setup Options:%s\n" "$B" "$O"
+  printf "  • Guided interactive walkthrough:  %scloudshell launch-tutorial WALKTHROUGH.md%s\n" "$C" "$O"
+  printf "  • Guided setup:                     %s./tools/gcp-guided-setup/abstract-gcp-setup.sh%s\n" "$C" "$O"
+  printf "  • One template per source:          %stemplates/gcp/<template-id>/ (README.md and TUTORIAL.md)%s\n\n" "$C" "$O"
+fi

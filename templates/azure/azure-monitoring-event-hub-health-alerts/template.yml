@@ -1,0 +1,142 @@
+id: azure-monitoring-event-hub-health-alerts
+title: Pipeline health alerts
+cloud: azure
+role: monitoring
+scope: resource-group
+summary: Event Hubs publishes no consumer-lag metric, so when the Abstract consumer stalls, incoming traffic
+  keeps arriving, nothing errors, and retention quietly expires the backlog. These alert rules watch for
+  outgoing traffic collapsing while incoming continues, plus the producer-side and capacity failures.
+formats:
+- bicep
+- arm
+- portal-ui
+- script
+depends_on:
+- azure-foundation-event-hub
+permissions:
+- role: Monitoring Contributor
+  where: The resource group holding the Event Hubs namespace
+  why: 'Deployer: Create metric alert rules and scheduled query rules.'
+creates:
+- A scheduled query rule that fires when outgoing traffic collapses while incoming continues (consumer
+  stalled)
+- A metric alert for ingestion stopped (no incoming messages)
+- A metric alert for throttled requests
+- A metric alert for user errors, usually an expired or revoked SAS key
+- A metric alert for quota-exceeded errors
+never_touches:
+- The Event Hubs namespace, its hubs, consumer groups and authorization rules (it only reads their metrics)
+- Existing alert rules, action groups and diagnostic settings
+- Workload resources in the resource group
+prerequisites:
+- An existing Event Hubs namespace; deploy azure-foundation-event-hub first, into the same resource group
+- An Action Group, if anyone is to be notified
+- The namespace's platform metrics must reach a Log Analytics workspace the stall rule can query
+parameters:
+- name: namespaceName
+  type: string
+  required: true
+  description: 'Name of the existing Event Hubs namespace to monitor. Must already exist - deploy eventhub-source.bicep
+    first. Find it with: az eventhubs namespace list --query [].name -o tsv'
+  find_it: az eventhubs namespace list -g <resource-group> --query [].name -o tsv
+- name: location
+  type: string
+  required: false
+  description: Location for the scheduled query rule. Metric alerts are global; this only affects the
+    log-search rule.
+  default: '[resourceGroup().location]'
+- name: alertPrefix
+  type: string
+  required: false
+  description: Prefix for every alert rule name created here.
+  default: abstract-eh
+- name: actionGroupId
+  type: string
+  required: false
+  description: Action Group resource ID to notify. Leave empty to create the rules WITHOUT notifications
+    - they will still show in Azure Monitor, but nobody will be told. Strongly recommended to supply one.
+  default: ''
+  find_it: az monitor action-group list -g <resource-group> --query [].id -o tsv
+- name: createDisabled
+  type: bool
+  required: false
+  description: Create the rules in a disabled state so they can be reviewed before they start firing.
+  default: false
+- name: tags
+  type: object
+  required: false
+  description: Tags applied to every resource created by this template.
+  default: {}
+- name: consumerStallWindowMinutes
+  type: int
+  required: false
+  description: Minutes of collapsed outgoing traffic before the consumer is considered stalled. Keep this
+    comfortably longer than the consumer poll interval so a normal quiet period does not page anyone.
+  default: 30
+- name: minIncomingToAlert
+  type: int
+  required: false
+  description: Incoming messages over the window ABOVE which a flat outgoing count is treated as a stall.
+    Guards against alerting on a genuinely idle hub, where zero-in/zero-out is correct and healthy.
+  default: 100
+- name: ingestionStoppedWindowMinutes
+  type: int
+  required: false
+  description: Minutes with zero incoming messages before ingestion is considered stopped. This is the
+    producer side - a deleted diagnostic setting, a revoked Send key, or a firewall change.
+  default: 60
+- name: throttleThreshold
+  type: int
+  required: false
+  description: Throttled requests over 5 minutes before alerting. Any sustained throttling means throughput
+    units are saturated.
+  default: 10
+- name: dataLossSeverity
+  type: int
+  required: false
+  description: Severity for the data-loss alerts (consumer stalled, ingestion stopped). 0 = critical.
+  default: 1
+  allowed:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+- name: capacitySeverity
+  type: int
+  required: false
+  description: Severity for the capacity and cost alerts.
+  default: 2
+  allowed:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+outputs:
+- consumerStalledRuleId
+- ingestionStoppedRuleId
+- alertRuleNames
+- notificationsConfigured
+- monitoringSummary
+verify:
+- check: The five rules exist and are enabled
+  command: 'az monitor metrics alert list -g <resource-group> --query "[?contains(name,''abstract-eh'')].{name:name,enabled:enabled,severity:severity}"
+    -o table
+
+    az monitor scheduled-query list -g <resource-group> --query "[?contains(name,''abstract-eh'')].{name:name,enabled:enabled}"
+    -o table'
+  healthy: Four metric alerts and one scheduled query rule, all enabled.
+- check: The consumer-stall rule is evaluating, not sitting in Insufficient data
+  healthy: The rule's history shows evaluations on schedule with a result.
+- check: The alert path works end to end
+  healthy: A test notification from the Action Group arrives.
+cost: Four metric alert rules and one log search rule, a fixed cost per namespace. The template does not
+  alert on the Auto-Inflate throughput-unit ratchet; review provisioned units by hand monthly.
+when_to_use: Immediately after the Event Hub source, on every deployment.
+when_not_to_use: As a replacement for absence-of-data alerting on the Abstract side, which catches failures
+  after the hub; both layers are needed.
+live_test: static
+lint_skip:
+- check: 'arm-ttk:Min And Max Value Are Numbers'
+  reason: minIncomingToAlert and throttleThreshold have no natural upper bound; a @maxValue would reject valid tuning.

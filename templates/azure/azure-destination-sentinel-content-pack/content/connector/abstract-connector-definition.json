@@ -1,0 +1,100 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Abstract Security - Sentinel data connector tile (Customizable / CCF)",
+    "description": "Registers a branded 'Abstract Security' connector in the Microsoft Sentinel Data connectors gallery for the workspace. Because Abstract delivers via the Logs Ingestion API (push, through a DCR), this is a Customizable connector: it documents setup and shows a live ingestion-status graph against the custom table, rather than polling a remote API.",
+    "author": "Abstract Security - Solutions Engineering"
+  },
+  "parameters": {
+    "workspaceName": { "type": "string", "metadata": { "description": "Log Analytics / Sentinel workspace name." } },
+    "customTableName": { "type": "string", "defaultValue": "AbstractEventLogs_CL" },
+    "logoUrl": { "type": "string", "defaultValue": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJBYnN0cmFjdCBTZWN1cml0eSBtYXJrIj4KICA8ZGVmcz4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ibWdsb3ciIGN4PSI1MCUiIGN5PSI1MCUiIHI9IjU1JSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI0ZGMjE2QiIgc3RvcC1vcGFjaXR5PSIwLjU1Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMC42IiBzdG9wLWNvbG9yPSIjRTgwMDVEIiBzdG9wLW9wYWNpdHk9IjAuMTUiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMDYwNjA4IiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImFibS1ncmFkMiIgeDE9IjY2LjA0MTciIHkxPSI5LjA2NzQiIHgyPSIxMTIuOTkyIiB5Mj0iNTguNDU5MSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRkYyMTZCIi8+PHN0b3Agb2Zmc2V0PSIwLjY3MTcwMiIgc3RvcC1jb2xvcj0iI0U4MDA1RCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIHJ4PSIzMCIgZmlsbD0iIzA2MDYwOCIvPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiByeD0iMzAiIGZpbGw9InVybCgjbWdsb3cpIi8+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMjguMiAzNi4yNSkgc2NhbGUoMC44NSkiPgogICAgPHBhdGggZmlsbD0iI0U4MDA1RCIgZD0iTTE1My4yNjggMTQ2LjYyNUwxMzMuMjI4IDEwOS42MjJDMTQyLjI1IDEwNy45NzggMTUyLjY0MSAxMDcuODY0IDE2MC45NzEgMTEyLjEyOUMxNjMuMTY0IDExMy4yNTIgMTY1LjIyNiAxMTQuNzE3IDE2Ni41OTUgMTE2LjczNkMxNzEuMDY1IDEyMy4yOTcgMTY4LjUyNSAxMzQuMzY3IDE2NC4wNTUgMTQwLjI2QzE2MS42OCAxNDMuMzg1IDE1OC4zOTcgMTQ2LjIwMSAxNTQuMjkxIDE0OC42MjdDMTU0LjA2IDE0OC4xODggMTUzLjc0NiAxNDcuNTY5IDE1My4yODQgMTQ2LjYyNUgxNTMuMjY4WiIvPgogICAgPHBhdGggZmlsbD0iI0MyMDA0QyIgZD0iTTE2LjQwOTYgMTE4LjQxMUMxNS41MzU0IDExOC4zMTMgMTQuNjk0MiAxMTguMDg1IDEzLjkwMjUgMTE3LjY5NEMxMi4wODgyIDExNi43ODIgMTAuNzg1MiAxMTUuMDc0IDEwLjAxIDExMy4yMThDNy4xMDY5OCAxMDYuMjMzIDkuMTUyMjggOTcuMjk2IDExLjc3NDggOTAuNTU2NkMxNC4yNjU0IDg0LjE3NTQgMTguNTA0MyA3OC4zNDcxIDIyLjAxNzYgNzIuNDg2NUMyNS40MzE5IDY1Ljc0NzEgMjkuOTAxNyA1OS4zNjU2IDMzLjc5NDMgNTIuODg2NUMzNS45MDU1IDQ5LjM1MzkgMzkuMDU1OCA0Ni42MzUyIDQyLjg4MjUgNDUuMDIzNkM0Ny4xNzA5IDQzLjIxNjYgNTMuNzAyNSA0MS4wODQgNjAuNTE0NSA0MS4wODRDNjAuNTE0NSA0MS4wODQgNjEuMDc1MyA0MS4wODQgNjEuMjIzNyA0MS4wODRINjEuNTg2Nkg2MS43MTg2SDYyLjA0ODVDNjYuOTMwOCA0MS4yNzk0IDcxLjYxNTEgNDIuNDM1MiA3Ni4wMTg5IDQ0LjUxODlDNzUuNDU4IDQ0LjI1ODUgNjkuMzIyMSA1Mi4yNjc4IDY4Ljc3ODEgNTIuOTUxNkM2NS40NDU5IDU3LjA3MDMgNjIuMjk1OSA2MS4zMTkxIDU5LjI3NzUgNjUuNjY1OUM1My43ODUgNzMuNTQ0NiA0OC44MjAzIDgxLjc2NjEgNDQuMjAyIDkwLjE4MjJDNDEuOTkxOCA5NC4yMDMxIDM5LjY0OTcgOTguMjU2OCAzNy42ODY5IDEwMi4zOTJDMzUuNzI0MSAxMDYuNTI3IDM0LjQzNzUgMTEwLjQwMSAzMS4wMDY4IDExMy4zOEMyOC41NjU3IDExNS40OTcgMjUuNDk3OCAxMTYuNzM0IDIyLjM4MDUgMTE3LjY0NUMyMC40NTA3IDExOC4xOTkgMTguMzcyNCAxMTguNjM4IDE2LjQwOTYgMTE4LjQxMVoiLz4KICAgIDxwYXRoIGZpbGw9InVybCgjYWJtLWdyYWQyKSIgZD0iTTEwOC40NTggNjQuNjYxQzEwMy45MjIgNTcuNDk4MSA5Ni4yODUyIDQ3LjY0OTEgODUuNDQ4NyA0MC45MDk1TDgzLjA1NzQgMzkuNDc2OUM3Ni41NTg0IDM1LjYzNSA2OS40ODI4IDMzLjU4MzggNjIuMDI3NSAzMy4zNTU5QzYxLjU2NTcgMzMuMzM5NiA2MS4wNzA4IDMzLjMzOTYgNjAuNTkyNSAzMy4zMzk2QzU0LjI0MjMgMzMuMzM5NiA0OC41MDI0IDM0LjYyNTcgNDMuNzg1MiAzNi4yMjExTDQ3LjI2NTQgMzAuNDQxOUw0OC43MTY4IDI4LjA4MTRMNTAuODQ0NiAyNC41MzI1TDUxLjgzNDIgMjIuODg4NEM1NC42MDUyIDE4LjI2NSA1Ny43MDYxIDE0LjIyNzggNjEuMDIxNCAxMC44NTc5TDYxLjM2NzcgMTAuNTE2MUM2Mi4wNjA1IDkuODQ4NjQgNjIuNzM2NSA5LjE5NzQ0IDYzLjQyOTUgOC41OTUxNUM2NC4yMDQ1IDcuOTExNDEgNjUuMDI5NSA3LjI0Mzk3IDY1Ljg4NzEgNi42MDkwOEM2Ni43Nzc5IDUuOTQxNiA2Ny42NTE4IDUuMzM5MjcgNjguNTI2MyA0Ljc4NTc3QzY4Ljg3MjUgNC41NTc4NiA2OS4xNTI5IDQuMzc4NzkgNjkuNDMzNCA0LjI0ODU2TDY5Ljg3ODQgNC4wMjA2NUw2OS45NjExIDMuOTM5MjVDNzAuMTI2MyAzLjg0MTU4IDcwLjI5MSAzLjc0MzkgNzAuNDU2MiAzLjY0NjIyTDcwLjkxNzYgMy40MTgzMkM3MS42NDM3IDMuMDQzODkgNzIuNDE4NyAyLjY2OTQ3IDczLjM3NTIgMi4yNDYyMUw3My41MjM2IDIuMTgxMDlDNzQuNzExMSAxLjcwODk5IDc1Ljc5OTcgMS4zMzQ1NyA3Ni44Mzg4IDEuMDI1MjZMNzcuMDUzNSAwLjk3NjQyM0M3Ny42MzA3IDAuODI5OTEzIDc4LjE1ODQgMC42ODMzOTYgNzguNzM2MiAwLjU4NTcyMkw4MC42OTg3IDAuMjQzODU3QzgxLjgwMzYgMC4wOTczNDM4IDgyLjkwOTEgMC4wMzIyMjY2IDg0LjAxMzkgMC4wMzIyMjY2Qzg1LjAxOTkgMC4wMzIyMjY2IDg2LjA5MjIgMC4wOTczNDM5IDg3LjIxNCAwLjIyNzU3OEM4Ny42MDk2IDAuMjc2NDE2IDg4LjAyMjEgMC4zNDE1MzMgODguNDE3OCAwLjQwNjY1TDg4LjQ1MSAwLjQzOTIwOUw4OS40NDA2IDAuNjAyMDAxQzg5LjYzODUgMC42MzQ1NTkgODkuODM2MyAwLjY4MzM5NiA5MC4wNjczIDAuNzMyMjMzQzkwLjU0NTUgMC44NDYxOSA5MC45NzQzIDAuOTYwMTQ2IDkxLjM3MDYgMS4wOTAzOEw5MS43NjYyIDEuMjA0MzRDOTIuMDYyOSAxLjMwMjAxIDkyLjM3NjUgMS4zODM0MSA5Mi42NzMzIDEuNDk3MzZMOTMuMzE2OCAxLjcyNTI3TDkzLjk1OTcgMS45Njk0NkM5NC4zNTU5IDIuMTMyMjUgOTQuNzg0NyAyLjMxMTMyIDk1LjIxMzUgMi41MDY2OEM5Ni4xMDQzIDIuODk3MzggOTcuMDExNCAzLjM1MzIgOTcuOTM0NyAzLjg5MDQxQzk4LjgyNTUgNC4zOTUwNyA5OS43MTYzIDQuOTQ4NTcgMTAwLjY3MyA1LjU5OTc0QzEwMy4zOTUgNy41MDQ0MyAxMDYuMDUgOS45MTM3MyAxMDguNTQgMTIuNzEzOEMxMDkuODI3IDE0LjE2MjYgMTExLjA5NyAxNS43OTA2IDExMi4zMzQgMTcuNTMyNEMxMTMuNzM2IDE5LjUwMjMgMTE0Ljk1NyAyMS43OTc2IDExNS45OCAyNC4zODZDMTE2LjQwOCAyNS40NDQyIDExNi43MjEgMjYuNTUxMSAxMTYuOTIgMjcuNjc0NEMxMTcuMzMyIDI5LjkzNzIgMTE3LjYxMiAzMS43NjA1IDExNy43MTEgMzIuOTMyNkMxMTcuNzQ0IDMzLjI5MDggMTE3Ljc3NyAzMy42NDg5IDExNy43NzcgMzMuOTkwOFYzNC4xODYxQzExNy44MSAzNC40MzA0IDExNy44MjcgMzQuNjU4MyAxMTcuODI3IDM0LjkxODdWMzUuMDgxNUMxMTcuODU5IDM1LjY4MzggMTE3Ljg3NiAzNi4zMDI0IDExNy44NzYgMzYuOTUzNkMxMTcuODc2IDQyLjc4MTYgMTE2LjgwNCA0OC40MTQzIDExNC42OTIgNTMuNzA1TDExNC42MjcgNTMuODY3OEMxMTQuNTc3IDUzLjk5OCAxMTQuNTI4IDU0LjExMiAxMTQuNDc4IDU0LjIyNTlMMTE0LjM5NiA1NC40MDVMMTE0LjMzIDU0LjU4NDFMMTE0LjI2NCA1NC43MzA2TDExNC4yMTQgNTQuODc3MUMxMTQuMjE0IDU0Ljg3NzEgMTE0LjE0OCA1NS4wMzk5IDExNC4xMTUgNTUuMTIxM0MxMTIuNjQ3IDU4LjQ3NDggMTEwLjc1MSA2MS42ODE4IDEwOC40NDEgNjQuNzI2MUwxMDguNDU4IDY0LjY2MVoiLz4KICAgIDxwYXRoIGZpbGw9IiNGRjIxNkIiIGQ9Ik0yOC4yOTMgMTQ5Ljk3N0MyNi41NjExIDE0OS45NzcgMjQuODI5MiAxNDkuODMgMjMuMTMwMyAxNDkuNTA1QzE5LjAwNjggMTQ4LjcyMyAxNS4xMTQyIDE0Ni45NDkgMTEuNzMzIDE0NC41MjNDOC4zNTE3MSAxNDIuMDk4IDUuMzY2MyAxMzguODkxIDMuMjg4MDUgMTM1LjIyOEMyLjgwOTczIDEzNC4zOTggMi4zOTczOCAxMzMuNTM1IDIuMDE4MDIgMTMyLjY1NUMxLjQyNDIzIDEzMS4yMzkgMC45NjI0MDMgMTI5Ljc5MSAwLjYzMjUyNSAxMjguMjkzQzAuNTUwMDUzIDEyNy44NyAwLjQ2NzU4MyAxMjcuNDQ2IDAuMzg1MTEzIDEyNy4wMDdMMC4zMDI2NDMgMTI2LjU2N0MwLjIzNjY2OCAxMjYuMTc2IDAuMTg3MTg2IDEyNS43MjEgMC4xMzc3MDQgMTI1LjI0OEMwLjA4ODIyMTUgMTI0Ljc0NCAwLjA1NTIzMzcgMTI0LjIwNyAwLjAzODczOTcgMTIzLjcxOVYxMjMuMzI4QzAuMDA1NzUxNzggMTIyLjg1NiAtMC4wMTA3NDIyIDEyMi40NjUgLTAuMDEwNzQyMiAxMjIuMDlDLTAuMDEwNzQyMiAxMjEuNTIxIDAuMDg4MjIxNSAxMTkuMTExIDAuMTM3NzA0IDExOC43NTNDMC4xMzc3MDQgMTE4Ljc1MyAwLjIyMDE3MyAxMTcuOTA3IDAuMjY5NjU2IDExNy42MTRMMC40MTgxMDEgMTE2LjUyM0MwLjQxODEwMSAxMTYuNTIzIDAuNTgzMDQxIDExNS41MyAwLjU4MzA0MSAxMTUuNDk3QzAuNTgzMDQxIDExNS40OTcgMS4yMjYzMSAxMTIuMzIzIDEuMzA4NzggMTEyLjAzQzEuODIwMDkgMTE1LjE4OCAyLjc5MzIzIDExNy44NTggNC4yMTE3MSAxMTkuOTlDNi4zNTU5MyAxMjMuMDY3IDkuNDg5NzYgMTI1LjA4NiAxMy4xODQ0IDEyNS44NjdDMTYuMzg0MyAxMjYuNTM1IDE5LjczMjUgMTI2LjI5IDIyLjkxNTkgMTI1LjYwN0MyOC45MTk3IDEyNC4zMDQgMzQuMTgxMyAxMjEuNDA3IDM5LjYyNDMgMTE4LjczN0M0Mi40Nzc4IDExNy4zMzcgNDUuMjY1MiAxMTUuODIzIDQ4LjAzNjIgMTE0LjI5M0M1Ni4wNjg4IDEwOS45MTQgNjMuOTg1OCAxMDUuMzA3IDcxLjg1MzMgMTAwLjY1MUM3OC42NjUzIDk2LjYyOTUgODUuNjU4OCA5Mi43NzE2IDkyLjI1NjggODguNDI0N0w5My4xNDY5IDg3Ljg3MTJMOTMuNzkwNSA4Ny40OTY4TDkzLjgyMzYgODcuNDY0NkM5NC4xMDQxIDg3LjMwMTYgOTQuMzg0NSA4Ny4xMjI0IDk0LjY2NSA4Ni45NDMzTDk1LjcyMDQgODYuMzA4Nkw5NS44MDMgODYuMjExM0MxMDEuNTc2IDgyLjUzMTkgMTA2LjU3MyA3OC40NDYgMTEwLjY5NyA3NC4wMTc5QzExNS4zMTUgNjkuMDUyNCAxMTguOTI3IDYzLjU4MyAxMjEuNDE4IDU3LjczODVDMTIzLjgxIDUyLjE4NzMgMTI1LjE5NSA0Ni4yNzc5IDEyNS41NTggNDAuMTQwNkwxMzQuMTE4IDU1LjI4MDRMMTM2LjEzMSA1OC43NDc5TDE1Mi4xOTUgODcuMDA4NEwxNTMuMDM3IDg4LjUwNjVDMTU0LjQzOSA5MC45OTcgMTU3Ljk4NSA5Ny40MTExIDE2MS4xODUgMTAzLjgyNUMxNTkuOTk3IDEwMy4zNyAxNTguNzQ0IDEwMi45NzggMTU3LjM5MSAxMDIuNjIxQzE1Ni45MyAxMDIuNDc0IDE1Ni40NjggMTAyLjM2IDE1NS45OSAxMDIuMjQ2QzE1NS4yNjMgMTAyLjA4MyAxNTQuNTU0IDEwMS45MiAxNTMuNzk1IDEwMS43OUwxNTIuNzQgMTAxLjU5NUMxNTEuODY2IDEwMS40NDkgMTUwLjkyNiAxMDEuMzE4IDE0OS45ODYgMTAxLjIwNEwxNDkuNzcxIDEwMS4xNzJIMTQ5LjU1N0MxNDkuMjkzIDEwMS4xMjMgMTQ5LjAxMiAxMDEuMDkgMTQ4LjcxNSAxMDEuMDc0QzE0OC4zMDMgMTAxLjAyNSAxNDcuODkxIDEwMS4wMDkgMTQ3LjQ3OSAxMDAuOTc2QzE0Ni4xOTIgMTAwLjg5NSAxNDUuMDIxIDEwMC44NjIgMTQzLjggMTAwLjg2MkMxMzguMzA4IDEwMC44NjIgMTMyLjQyIDEwMS42NDQgMTI2LjMxNyAxMDMuMTc0QzExNy44ODggMTA1LjMyMyAxMDguOTE2IDEwOC45MzcgOTkuNTk2NSAxMTMuOTY3TDk5LjEzNDUgMTE0LjExNEw5OC45MzY3IDExNC4yOTNMOTguODcwNCAxMTQuMzI1TDk4LjgyMDkgMTE0LjM3NEM5NC41OTg2IDExNi44ODEgOTAuMzYgMTE5LjM4OCA4Ni4xMzcxIDEyMS44OTVDODIuMTYyMSAxMjQuMjU1IDc4LjE4NyAxMjYuNiA3NC4yMTIgMTI4Ljk0NEM3MC42IDEzMS4wNzcgNjYuOTcxMiAxMzMuMjI2IDYzLjM0MjkgMTM1LjM1OEM2MC4xNzU4IDEzNy4yMyA1Ny4wMDkgMTM5LjA4NiA1My44NDIxIDE0MC45NDJDNTAuMzc4MyAxNDIuOTc3IDQ2Ljk0NzYgMTQ1LjA2MSA0My4yMzY1IDE0Ni42NEM0MS4zMDY3IDE0Ny40NyAzOS4zNDM5IDE0OC4xNyAzNy4zMTUyIDE0OC43MjNDMzQuMzYyNyAxNDkuNTIxIDMxLjI5NDggMTQ5Ljk5MyAyOC4yMjcgMTQ5Ljk3N0gyOC4yOTNaIi8+CiAgPC9nPgo8L3N2Zz4K" }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/providers/dataConnectorDefinitions",
+      "apiVersion": "2022-09-01-preview",
+      "name": "[concat(parameters('workspaceName'), '/Microsoft.SecurityInsights/AbstractSecurityConnector')]",
+      "kind": "Customizable",
+      "properties": {
+        "connectorUiConfig": {
+          "id": "AbstractSecurityConnector",
+          "title": "Abstract Security (Security Data Pipeline)",
+          "publisher": "Abstract Security",
+          "logo": "[parameters('logoUrl')]",
+          "descriptionMarkdown": "**Abstract Security** delivers normalized, enriched, cost-reduced security telemetry into Microsoft Sentinel through the Azure Monitor Logs Ingestion API (Data Collection Rule). Use this connector to confirm delivery and jump to the deployment + setup steps.",
+          "graphQueriesTableName": "[parameters('customTableName')]",
+          "graphQueries": [
+            {
+              "metricName": "Abstract events received",
+              "legend": "AbstractEventLogs_CL",
+              "baseQuery": "[parameters('customTableName')]"
+            }
+          ],
+          "sampleQueries": [
+            {
+              "description": "All Abstract events (last 24h)",
+              "query": "AbstractEventLogs_CL\n| where TimeGenerated > ago(24h)\n| sort by TimeGenerated desc"
+            },
+            {
+              "description": "Abstract events by product",
+              "query": "AbstractEventLogs_CL\n| extend AbstractEvent = iff(isnotnull(column_ifexists('AbstractEvent', dynamic(null))), column_ifexists('AbstractEvent', dynamic(null)), pack_all()), Message = tostring(column_ifexists('Message', ''))\n| where TimeGenerated > ago(7d)\n| summarize count() by tostring(AbstractEvent.product)"
+            }
+          ],
+          "dataTypes": [
+            {
+              "name": "[parameters('customTableName')]",
+              "lastDataReceivedQuery": "AbstractEventLogs_CL\n| summarize Time = max(TimeGenerated)\n| where isnotempty(Time)"
+            }
+          ],
+          "connectivityCriteria": [
+            {
+              "type": "HasDataConnectors"
+            },
+            {
+              "type": "IsConnectedQuery",
+              "value": [
+                "AbstractEventLogs_CL\n| where TimeGenerated > ago(7d)\n| summarize LastLogReceived = max(TimeGenerated)\n| project IsConnected = LastLogReceived > ago(3d)"
+              ]
+            }
+          ],
+          "availability": { "isPreview": true },
+          "permissions": {
+            "resourceProvider": [
+              {
+                "provider": "Microsoft.OperationalInsights/workspaces",
+                "permissionsDisplayText": "read and write permissions are required.",
+                "providerDisplayName": "Workspace",
+                "scope": "Workspace",
+                "requiredPermissions": { "read": true, "write": true, "delete": true }
+              }
+            ],
+            "customs": [
+              { "name": "Abstract Security tenant", "description": "An Abstract Security account with a configured Azure Sentinel destination integration." },
+              { "name": "Entra app registration", "description": "An app registration whose service principal holds Monitoring Metrics Publisher on the Data Collection Rule (deployed by the Sentinel Destination template)." }
+            ]
+          },
+          "instructionSteps": [
+            {
+              "title": "1. Deploy the Azure ingestion stack",
+              "description": "Deploy the **Azure Sentinel Destination** template (workspace + Sentinel + Data Collection Endpoint + custom table + Data Collection Rule + RBAC) from the Abstract Azure repo."
+            },
+            {
+              "title": "2. Create the Entra app",
+              "description": "Register an app + client secret and grant its service principal **Monitoring Metrics Publisher** on the DCR (the template does this when you pass the SP object id)."
+            },
+            {
+              "title": "3. Configure the destination in Abstract",
+              "description": "In Abstract, add the **Azure Sentinel Destination** integration and paste the Client ID / Secret / Tenant ID, the **DCR Immutable ID**, the **DCE URL**, and the **Log Stream Name** (Custom-<table>) from the deployment outputs."
+            },
+            {
+              "title": "4. Route data and confirm",
+              "description": "Route a pipeline to the destination. Within minutes the graph above should turn green as events land in the custom table."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

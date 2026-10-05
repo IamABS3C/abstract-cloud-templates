@@ -1,0 +1,164 @@
+{
+ "title": "aws.waf-security-lake",
+ "theme": "dark",
+ "animate": false,
+ "pages": [
+  {
+   "name": "aws.waf-security-lake",
+   "groups": [
+    {
+     "id": "acct",
+     "label": "Customer AWS account",
+     "kind": "account",
+     "x": 40,
+     "y": 40,
+     "w": 800,
+     "h": 470,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 900,
+     "y": 40,
+     "w": 260,
+     "h": 470,
+     "color": "#FF216B"
+    },
+    {
+     "id": "sub",
+     "label": "Subscriber (this template)",
+     "kind": "plain",
+     "parent": "acct",
+     "x": 560,
+     "y": 70,
+     "w": 220,
+     "h": 370,
+     "color": "#f5c61e"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "waf",
+     "label": "AWS WAF",
+     "icon": "aws:waf",
+     "parent": "acct",
+     "x": 40,
+     "y": 120,
+     "sublabel": "web ACL logs"
+    },
+    {
+     "id": "lake",
+     "label": "Security Lake",
+     "icon": "aws:data_lake_resource_icon",
+     "parent": "acct",
+     "x": 220,
+     "y": 120,
+     "sublabel": "existing data lake"
+    },
+    {
+     "id": "s3",
+     "label": "Lake bucket",
+     "icon": "aws:s3",
+     "parent": "acct",
+     "x": 400,
+     "y": 120,
+     "sublabel": "OCSF objects"
+    },
+    {
+     "id": "sqs",
+     "label": "Notification queue",
+     "icon": "aws:sqs",
+     "parent": "sub",
+     "x": 71,
+     "y": 50,
+     "sublabel": "SQS"
+    },
+    {
+     "id": "role",
+     "label": "Subscriber role",
+     "icon": "aws:role",
+     "parent": "sub",
+     "x": 71,
+     "y": 220,
+     "sublabel": "made by Security Lake"
+    },
+    {
+     "id": "plat",
+     "label": "Abstract platform",
+     "sublabel": "polls SQS, reads S3",
+     "icon": "img:../../app/web/public/logo-mark.svg",
+     "parent": "abs",
+     "x": 85,
+     "y": 150,
+     "w": 90,
+     "h": 80
+    }
+   ],
+   "edges": [
+    {
+     "from": "waf",
+     "to": "lake",
+     "label": "WAFV2",
+     "tone": "brand"
+    },
+    {
+     "from": "lake",
+     "to": "s3",
+     "label": "writes OCSF",
+     "tone": "brand"
+    },
+    {
+     "from": "s3",
+     "to": "sqs",
+     "label": "new object",
+     "tone": "brand",
+     "label_x": -0.4
+    },
+    {
+     "from": "sqs",
+     "to": "plat",
+     "label": "poll",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.12
+     ]
+    },
+    {
+     "from": "plat",
+     "to": "role",
+     "label": "AssumeRole + External ID",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.85
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.35
+    },
+    {
+     "from": "role",
+     "to": "s3",
+     "label": "S3 read",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.85
+     ],
+     "label_x": -0.3
+    }
+   ]
+  }
+ ]
+}

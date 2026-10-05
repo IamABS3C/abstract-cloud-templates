@@ -1,0 +1,90 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "basics": [
+      {
+        "name": "whatInfo",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "Info",
+          "text": "Grants one role to one identity on an existing Key Vault, and nothing else. Use it to give an identity read access to the secrets the Abstract deployment needs. The vault must already exist in the resource group you are deploying to."
+        }
+      },
+      {
+        "name": "keyVaultName",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Key Vault name",
+        "toolTip": "Name of the EXISTING Key Vault in this resource group. Find it with: az keyvault list -g <resource-group> --query [].name -o tsv",
+        "constraints": {
+          "required": true,
+          "validations": [
+            {
+              "regex": "^[a-zA-Z][a-zA-Z0-9-]{1,22}[a-zA-Z0-9]$",
+              "message": "3-24 characters, must start with a letter and end with a letter or number; letters, numbers and hyphens only."
+            }
+          ]
+        },
+        "visible": true
+      },
+      {
+        "name": "principalId",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Principal object ID",
+        "toolTip": "Object ID of the service principal, user or group that receives the role. This is the object ID, NOT the application (client) ID. Find a service principal's with: az ad sp show --id <application-client-id> --query id -o tsv",
+        "constraints": {
+          "required": true,
+          "validations": [
+            {
+              "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "message": "Enter a GUID, for example 00000000-0000-0000-0000-000000000000."
+            }
+          ]
+        },
+        "visible": true
+      },
+      {
+        "name": "roleDefinitionId",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Role definition resource ID",
+        "toolTip": "Full resource ID of the role to grant, for example the built-in Key Vault Secrets User role. Find it with: az role definition list --name \"Key Vault Secrets User\" --query [].id -o tsv",
+        "constraints": {
+          "required": true,
+          "validations": [
+            {
+              "regex": "^/subscriptions/[^/]+/providers/Microsoft\\.Authorization/roleDefinitions/[0-9a-fA-F-]{36}$",
+              "message": "Supply the full role definition resource ID, starting with /subscriptions/."
+            }
+          ]
+        },
+        "visible": true
+      },
+      {
+        "name": "principalType",
+        "type": "Microsoft.Common.DropDown",
+        "label": "Principal type",
+        "defaultValue": "Not specified",
+        "toolTip": "Set this for a freshly created identity to avoid PrincipalNotFound while the directory replicates. Leave it unspecified when the type is not known, for example a user or group you were given.",
+        "constraints": {
+          "required": true,
+          "allowedValues": [
+            { "label": "Not specified", "value": "" },
+            { "label": "Service principal", "value": "ServicePrincipal" },
+            { "label": "User", "value": "User" },
+            { "label": "Group", "value": "Group" }
+          ]
+        },
+        "visible": true
+      }
+    ],
+    "steps": [],
+    "outputs": {
+      "keyVaultName": "[basics('keyVaultName')]",
+      "principalId": "[basics('principalId')]",
+      "roleDefinitionId": "[basics('roleDefinitionId')]",
+      "principalType": "[basics('principalType')]"
+    }
+  }
+}

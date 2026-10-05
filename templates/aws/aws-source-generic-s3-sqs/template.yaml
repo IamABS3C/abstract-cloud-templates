@@ -1,0 +1,1091 @@
+# Generated from templates/aws/_snippets/s3-log-source.yaml with SourceType=GenericS3 by `python -m tools.templates generate`. Do not edit: edit the source and run generate.
+# YAML comments do not survive generation: the source's comments, including the reason for each cfn-lint suppression, are in the source.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Abstract Security - Any logs in an S3 bucket. Creates a hardened S3 bucket any log shipper can write to, the SQS queue S3 notifies, and the cross-account role Abstract assumes to read them.
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: 1. Source selection
+        Parameters: [NamePrefix]
+      - Label:
+          default: 2. Abstract access (how Abstract reads the data)
+        Parameters:
+          - AuthMode
+          - AbstractPrincipalArn
+          - ExternalId
+          - MaxSessionDurationSeconds
+          - PermissionsBoundaryArn
+          - StoreCredentialsInSecretsManager
+          - ExportToSsm
+      - Label:
+          default: 3. S3 log bucket
+        Parameters:
+          - BucketMode
+          - BucketName
+          - LogPrefix
+          - LogRetentionDays
+          - NoncurrentRetentionDays
+      - Label:
+          default: 4. Notification (S3/CloudTrail -> SQS)
+        Parameters:
+          - NotificationPath
+          - QueueMode
+          - ExistingQueueArn
+          - ExistingQueueUrl
+          - QueueVisibilityTimeoutSeconds
+          - MessageRetentionSeconds
+          - DlqMaxReceiveCount
+          - SubscriptionEmail
+      - Label:
+          default: 5. Encryption
+        Parameters: [BucketEncryption, QueueEncryption, KmsMode, ExistingKmsKeyArn]
+      - Label:
+          default: 6. Bucket-policy hardening (advanced)
+        Parameters:
+          - RequireAclHeader
+          - RestrictBySourceAccount
+          - SourceArnCondition
+          - LogDeliveryPrincipalOverride
+      - Label:
+          default: 10. Observability (optional)
+        Parameters:
+          - EnableDlqAlarm
+          - DlqAlarmThreshold
+          - EnableQueueAgeAlarm
+          - QueueAgeAlarmSeconds
+          - EnableDashboard
+          - AlarmEmail
+    ParameterLabels:
+      NamePrefix:
+        default: Name prefix for created resources
+      AuthMode:
+        default: Authentication method
+      AbstractPrincipalArn:
+        default: Abstract principal ARN or 12-digit account ID
+      ExternalId:
+        default: External ID (shared secret from Abstract)
+      MaxSessionDurationSeconds:
+        default: Max assumed-session duration (s)
+      PermissionsBoundaryArn:
+        default: Permissions boundary ARN (optional)
+      StoreCredentialsInSecretsManager:
+        default: Store credentials in Secrets Manager?
+      ExportToSsm:
+        default: Export outputs to SSM Parameter Store?
+      BucketMode:
+        default: Create a new bucket or use an existing one?
+      BucketName:
+        default: Bucket name (existing) or override (new)
+      LogPrefix:
+        default: Log key prefix
+      LogRetentionDays:
+        default: Expire log objects after N days (0=never)
+      NoncurrentRetentionDays:
+        default: Expire noncurrent versions after N days
+      NotificationPath:
+        default: Notification routing
+      QueueMode:
+        default: Create a new queue or use an existing one?
+      ExistingQueueArn:
+        default: Existing SQS queue ARN
+      ExistingQueueUrl:
+        default: Existing SQS queue URL
+      QueueVisibilityTimeoutSeconds:
+        default: Queue visibility timeout (s)
+      MessageRetentionSeconds:
+        default: Message retention (s)
+      DlqMaxReceiveCount:
+        default: Deliveries before message goes to DLQ
+      SubscriptionEmail:
+        default: Email for SNS notifications (optional)
+      BucketEncryption:
+        default: S3 bucket encryption
+      QueueEncryption:
+        default: SQS queue encryption
+      KmsMode:
+        default: KMS key handling
+      ExistingKmsKeyArn:
+        default: Existing KMS key ARN
+      RequireAclHeader:
+        default: Require bucket-owner-full-control ACL header?
+      RestrictBySourceAccount:
+        default: Restrict writes to this AWS account?
+      SourceArnCondition:
+        default: Restrict writes to this source ARN (optional)
+      LogDeliveryPrincipalOverride:
+        default: Override log-delivery service principal
+      EnableDlqAlarm:
+        default: Alarm when messages hit the dead-letter queue?
+      DlqAlarmThreshold:
+        default: DLQ alarm threshold (messages)
+      EnableQueueAgeAlarm:
+        default: Alarm when the oldest message ages out?
+      QueueAgeAlarmSeconds:
+        default: Queue age alarm threshold (seconds)
+      EnableDashboard:
+        default: Create a CloudWatch dashboard?
+      AlarmEmail:
+        default: Email for alarm notifications (optional)
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract
+    AllowedPattern: ^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$
+    ConstraintDescription: Lowercase letters, digits, hyphens (3-32 chars).
+    Description: Prefix for all created resource names.
+  AuthMode:
+    Type: String
+    Default: AssumeRole
+    AllowedValues: [AssumeRole, AccessKey]
+    Description: AssumeRole (recommended) creates a cross-account role Abstract assumes with an External ID. AccessKey creates a long-lived IAM user + keys (use only when Abstract cannot assume a role).
+  AbstractPrincipalArn:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^[0-9]{12}$|^arn:aws[a-z-]*:iam::[0-9]{12}:(root|(role|user)/.+)$
+    ConstraintDescription: A 12-digit account ID or a valid IAM ARN.
+    Description: Required for AssumeRole. The principal Abstract provides (full IAM ARN or bare 12-digit account ID, expanded to :root). Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract console. Note the console regenerates the External ID on each pass, so mint it once and give the SAME value to whoever deploys the role.
+  ExternalId:
+    Type: String
+    Default: ''
+    NoEcho: true
+    MaxLength: 1224
+    Description: Required for AssumeRole. Shared secret from Abstract, enforced on sts:AssumeRole (confused-deputy protection). Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract console. Note the console regenerates the External ID on each pass, so mint it once and give the SAME value to whoever deploys the role.
+  MaxSessionDurationSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 43200
+    Description: Maximum duration of an assumed session.
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$
+    Description: 'Optional IAM permissions-boundary policy ARN attached to the created role/user. Only if your account mandates a boundary on every role. Find it with: aws iam list-policies --scope Local --query Policies[].Arn'
+  StoreCredentialsInSecretsManager:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: When AuthMode=AccessKey, store the generated access key in AWS Secrets Manager (encrypted, never shown in stack outputs) instead of emitting the secret as a plaintext output. Recommended for production.
+  ExportToSsm:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Publish the non-secret outputs (role ARN, queue URL, bucket name) to SSM Parameter Store under /NamePrefix/SourceType/* so other stacks, regions, or tooling can look them up later with aws ssm get-parameter.
+  BucketMode:
+    Type: String
+    Default: CreateNew
+    AllowedValues: [CreateNew, UseExisting]
+    Description: CreateNew provisions a hardened bucket (and the producer, where possible). UseExisting references a bucket you already have (you wire notifications/producer yourself).
+  BucketName:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$
+    Description: 'For UseExisting, the existing bucket name (required). For CreateNew, an optional explicit name; leave blank to auto-generate. WAF requires the name to start with aws-waf-logs-. Find it with: aws s3 ls'
+  LogPrefix:
+    Type: String
+    Default: ''
+    Description: Key prefix that scopes reads/writes (e.g. AWSLogs/). CloudTrail and VPC Flow Logs prepend AWSLogs/ automatically; leave blank for those unless you want a custom top-level prefix.
+  LogRetentionDays:
+    Type: Number
+    Default: 365
+    MinValue: 0
+    MaxValue: 3650
+    Description: Lifecycle expiration for current log objects (0 = keep forever).
+  NoncurrentRetentionDays:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    MaxValue: 3650
+    Description: Days to keep noncurrent (overwritten/deleted) versions before expiry.
+  NotificationPath:
+    Type: String
+    Default: S3ToSQS
+    AllowedValues: [S3ToSQS, S3ToSNSToSQS, CloudTrailToSNSToSQS, None]
+    Description: How notifications reach the queue. S3ToSQS = S3 event -> SQS (most sources). S3ToSNSToSQS = S3 event -> SNS -> SQS (fan-out). CloudTrailToSNSToSQS = Trail -> SNS -> SQS (CloudTrail's native delivery). None = create the queue only (you wire delivery yourself; required when BucketMode=UseExisting and you cannot grant the stack notification rights).
+  QueueMode:
+    Type: String
+    Default: CreateNew
+    AllowedValues: [CreateNew, UseExisting]
+    Description: Create a new SQS queue (+DLQ) or attach policy/subscription to an existing queue.
+  ExistingQueueArn:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^arn:aws[a-z-]*:sqs:[a-z0-9-]+:[0-9]{12}:.+$
+    Description: 'Required when QueueMode=UseExisting. Find it with: aws sqs get-queue-attributes --queue-url QUEUE_URL --attribute-names QueueArn'
+  ExistingQueueUrl:
+    Type: String
+    Default: ''
+    Description: 'Required when QueueMode=UseExisting (used for the output and Abstract wizard). Find it with: aws sqs list-queues'
+  QueueVisibilityTimeoutSeconds:
+    Type: Number
+    Default: 900
+    MinValue: 0
+    MaxValue: 43200
+    Description: Visibility timeout for the created queue.
+  MessageRetentionSeconds:
+    Type: Number
+    Default: 345600
+    MinValue: 60
+    MaxValue: 1209600
+    Description: How long SQS retains a message (default 4 days, max 14).
+  DlqMaxReceiveCount:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 1000
+    Description: Number of failed receives before a message is moved to the dead-letter queue.
+  SubscriptionEmail:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^[^@\s]+@[^@\s]+\.[^@\s]+$
+    Description: Optional email subscribed to the SNS topic for operational alerts (only when an SNS path is used).
+  BucketEncryption:
+    Type: String
+    Default: SSE-S3
+    AllowedValues: [SSE-S3, SSE-KMS]
+    Description: SSE-S3 (AES256, AWS-managed) or SSE-KMS (customer-managed key).
+  QueueEncryption:
+    Type: String
+    Default: SSE-SQS
+    AllowedValues: [SSE-SQS, SSE-KMS]
+    Description: SSE-SQS (AWS-managed) or SSE-KMS (customer-managed key).
+  KmsMode:
+    Type: String
+    Default: None
+    AllowedValues: [None, CreateNew, UseExisting]
+    Description: When any encryption is SSE-KMS, choose CreateNew (the stack makes a CMK with the right key policy) or UseExisting (supply ExistingKmsKeyArn).
+  ExistingKmsKeyArn:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/.+$
+    Description: 'Required when KmsMode=UseExisting. Find it with: aws kms list-aliases'
+  RequireAclHeader:
+    Type: String
+    Default: auto
+    AllowedValues: [auto, 'true', 'false']
+    Description: Require s3:x-amz-acl=bucket-owner-full-control on PutObject. "auto" uses the correct default per source (CloudTrail/ALB/Route53/VPC need it; others don't).
+  RestrictBySourceAccount:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Add aws:SourceAccount = this account to the PutObject condition (recommended).
+  SourceArnCondition:
+    Type: String
+    Default: ''
+    Description: Optional aws:SourceArn value to further restrict who may write (e.g. a specific trail or distribution ARN).
+  LogDeliveryPrincipalOverride:
+    Type: String
+    Default: ''
+    Description: Override the log-delivery service principal (advanced; leave blank to use the correct default for the SourceType).
+  EnableDlqAlarm:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Create a CloudWatch alarm that fires when messages land in the dead-letter queue (Abstract failing to process). Requires QueueMode=CreateNew.
+  DlqAlarmThreshold:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    Description: Number of visible DLQ messages that triggers the alarm.
+  EnableQueueAgeAlarm:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Alarm when the oldest message in the main queue exceeds QueueAgeAlarmSeconds (ingestion lag). Requires QueueMode=CreateNew.
+  QueueAgeAlarmSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 60
+    Description: Age (seconds) of the oldest message that triggers the queue-age alarm.
+  EnableDashboard:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Create a CloudWatch dashboard for the queue/DLQ metrics. Requires QueueMode=CreateNew.
+  AlarmEmail:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^[^@\s]+@[^@\s]+\.[^@\s]+$
+    Description: Optional email subscribed to the alarm topic (separate from the notification SubscriptionEmail).
+Rules:
+  AssumeRoleNeedsIdentity:
+    RuleCondition: !Equals [!Ref AuthMode, AssumeRole]
+    Assertions:
+      - Assert: !Not
+          - !Equals [!Ref AbstractPrincipalArn, '']
+        AssertDescription: AbstractPrincipalArn is required for AssumeRole.
+      - Assert: !Not
+          - !Equals [!Ref ExternalId, '']
+        AssertDescription: ExternalId is required for AssumeRole.
+  ExistingBucketNeedsName:
+    RuleCondition: !Equals [!Ref BucketMode, UseExisting]
+    Assertions:
+      - Assert: !Not
+          - !Equals [!Ref BucketName, '']
+        AssertDescription: BucketName is required when BucketMode=UseExisting.
+  ExistingQueueNeedsArn:
+    RuleCondition: !Equals [!Ref QueueMode, UseExisting]
+    Assertions:
+      - Assert: !Not
+          - !Equals [!Ref ExistingQueueArn, '']
+        AssertDescription: ExistingQueueArn is required when QueueMode=UseExisting.
+      - Assert: !Not
+          - !Equals [!Ref ExistingQueueUrl, '']
+        AssertDescription: ExistingQueueUrl is required when QueueMode=UseExisting.
+  ExistingKmsNeedsArn:
+    RuleCondition: !Equals [!Ref KmsMode, UseExisting]
+    Assertions:
+      - Assert: !Not
+          - !Equals [!Ref ExistingKmsKeyArn, '']
+        AssertDescription: ExistingKmsKeyArn is required when KmsMode=UseExisting.
+Conditions:
+  IsAssumeRole: !Equals [!Ref AuthMode, AssumeRole]
+  IsAccessKey: !Equals [!Ref AuthMode, AccessKey]
+  StoreInSecrets: !And
+    - !Equals [!Ref AuthMode, AccessKey]
+    - !Equals [!Ref StoreCredentialsInSecretsManager, 'true']
+  ShowKeyOutputs: !And
+    - !Equals [!Ref AuthMode, AccessKey]
+    - !Equals [!Ref StoreCredentialsInSecretsManager, 'false']
+  DoSsmExport: !Equals [!Ref ExportToSsm, 'true']
+  DoSsmExportRole: !And
+    - !Equals [!Ref ExportToSsm, 'true']
+    - !Equals [!Ref AuthMode, AssumeRole]
+  DoDlqAlarm: !And
+    - !Condition CreateQueue
+    - !Equals [!Ref EnableDlqAlarm, 'true']
+  DoQueueAgeAlarm: !And
+    - !Condition CreateQueue
+    - !Equals [!Ref EnableQueueAgeAlarm, 'true']
+  DoDashboard: !And
+    - !Condition CreateQueue
+    - !Equals [!Ref EnableDashboard, 'true']
+  DoAlarms: !Or [!Condition DoDlqAlarm, !Condition DoQueueAgeAlarm]
+  HasAlarmEmail: !And
+    - !Condition DoAlarms
+    - !Not
+      - !Equals [!Ref AlarmEmail, '']
+  PrincipalIsBareAccount: !Equals
+    - !Select
+      - 0
+      - !Split [':', !Ref AbstractPrincipalArn]
+    - !Ref AbstractPrincipalArn
+  CreateBucket: !Equals [!Ref BucketMode, CreateNew]
+  HasBucketName: !Not
+    - !Equals [!Ref BucketName, '']
+  UseExistingBucket: !And
+    - !Not [!Condition CreateBucket]
+    - !Condition HasBucketName
+  AutoBucketName: !And
+    - !Equals [!Ref BucketMode, CreateNew]
+    - !Equals [!Ref BucketName, '']
+  HasPrefix: !Not
+    - !Equals [!Ref LogPrefix, '']
+  ExpireLogs: !Not
+    - !Equals [!Ref LogRetentionDays, 0]
+  CreateQueue: !Equals [!Ref QueueMode, CreateNew]
+  HasExistingQueueArn: !Not
+    - !Equals [!Ref ExistingQueueArn, '']
+  UseExistingQueue: !And
+    - !Not [!Condition CreateQueue]
+    - !Condition HasExistingQueueArn
+  UseSns: !Or
+    - !Equals [!Ref NotificationPath, S3ToSNSToSQS]
+    - !Equals [!Ref NotificationPath, CloudTrailToSNSToSQS]
+  S3EventToSqs: !And
+    - !Condition CreateBucket
+    - !Equals [!Ref NotificationPath, S3ToSQS]
+  S3EventToSns: !And
+    - !Condition CreateBucket
+    - !Equals [!Ref NotificationPath, S3ToSNSToSQS]
+  HasEmail: !And
+    - !Condition UseSns
+    - !Not
+      - !Equals [!Ref SubscriptionEmail, '']
+  BucketUsesKms: !Equals [!Ref BucketEncryption, SSE-KMS]
+  QueueUsesKms: !Equals [!Ref QueueEncryption, SSE-KMS]
+  CreateKmsKey: !Equals [!Ref KmsMode, CreateNew]
+  BucketKmsFromNew: !And [!Condition BucketUsesKms, !Condition CreateKmsKey]
+  HasExistingKmsKeyArn: !Not
+    - !Equals [!Ref ExistingKmsKeyArn, '']
+  UseExistingKmsKey: !And
+    - !Equals [!Ref KmsMode, UseExisting]
+    - !Condition HasExistingKmsKeyArn
+  BucketKmsFromExisting: !And
+    - !Condition BucketUsesKms
+    - !Equals [!Ref KmsMode, UseExisting]
+    - !Condition HasExistingKmsKeyArn
+  QueueKmsFromNew: !And [!Condition QueueUsesKms, !Condition CreateKmsKey]
+  QueueKmsFromExisting: !And
+    - !Condition QueueUsesKms
+    - !Equals [!Ref KmsMode, UseExisting]
+    - !Condition HasExistingKmsKeyArn
+  HasBoundary: !Not
+    - !Equals [!Ref PermissionsBoundaryArn, '']
+  RequireAcl: !Equals [!Ref RequireAclHeader, 'true']
+  RestrictAccount: !Equals [!Ref RestrictBySourceAccount, 'true']
+  HasSourceArn: !Not
+    - !Equals [!Ref SourceArnCondition, '']
+  HasPrincipalOverride: !Not
+    - !Equals [!Ref LogDeliveryPrincipalOverride, '']
+Resources:
+  AbstractKmsKey:
+    Type: AWS::KMS::Key
+    Condition: CreateKmsKey
+    Properties:
+      Description: CMK for Abstract GenericS3 log bucket/queue
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableRootAccountAdmin
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+          - Sid: AllowLogDeliveryServiceUse
+            Effect: Allow
+            Principal:
+              Service: !If [HasPrincipalOverride, !Ref LogDeliveryPrincipalOverride, s3.amazonaws.com]
+            Action: ['kms:GenerateDataKey*', 'kms:Decrypt', 'kms:DescribeKey']
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+          - Sid: AllowSnsServiceUse
+            Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action: ['kms:GenerateDataKey*', 'kms:Decrypt']
+            Resource: '*'
+          - Sid: AllowSqsServiceUse
+            Effect: Allow
+            Principal:
+              Service: sqs.amazonaws.com
+            Action: ['kms:GenerateDataKey*', 'kms:Decrypt']
+            Resource: '*'
+      Tags:
+        - Key: Purpose
+          Value: AbstractSecurity
+        - Key: ManagedBy
+          Value: CloudFormation
+  AbstractKmsAlias:
+    Type: AWS::KMS::Alias
+    Condition: CreateKmsKey
+    Properties:
+      AliasName: !Sub alias/${NamePrefix}-GenericS3
+      TargetKeyId: !Ref AbstractKmsKey
+  LogBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateBucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks: [W1030]
+    Properties:
+      BucketName: !If
+        - AutoBucketName
+        - !Sub ${NamePrefix}-generics3-${AWS::AccountId}-${AWS::Region}
+        - !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: !If [BucketUsesKms, true, !Ref 'AWS::NoValue']
+            ServerSideEncryptionByDefault: !If
+              - BucketUsesKms
+              - SSEAlgorithm: aws:kms
+                KMSMasterKeyID: !If [BucketKmsFromNew, !GetAtt AbstractKmsKey.Arn, !Ref ExistingKmsKeyArn]
+              - SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref NoncurrentRetentionDays
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: expire-current
+            Status: !If [ExpireLogs, Enabled, Disabled]
+            ExpirationInDays: !If [ExpireLogs, !Ref LogRetentionDays, 3650]
+      NotificationConfiguration:
+        QueueConfigurations: !If
+          - S3EventToSqs
+          - - Event: s3:ObjectCreated:*
+              Queue: !If [CreateQueue, !GetAtt NotificationQueue.Arn, !Ref ExistingQueueArn]
+              Filter: !If
+                - HasPrefix
+                - S3Key:
+                    Rules:
+                      - Name: prefix
+                        Value: !Ref LogPrefix
+                - !Ref AWS::NoValue
+          - !Ref AWS::NoValue
+        TopicConfigurations: !If
+          - S3EventToSns
+          - - Event: s3:ObjectCreated:*
+              Topic: !Ref NotificationTopic
+              Filter: !If
+                - HasPrefix
+                - S3Key:
+                    Rules:
+                      - Name: prefix
+                        Value: !Ref LogPrefix
+                - !Ref AWS::NoValue
+          - !Ref AWS::NoValue
+      Tags:
+        - Key: Purpose
+          Value: AbstractSecurity
+        - Key: Source
+          Value: GenericS3
+        - Key: ManagedBy
+          Value: CloudFormation
+  LogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: CreateBucket
+    Properties:
+      Bucket: !Ref LogBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource: [!GetAtt LogBucket.Arn, !Sub '${LogBucket.Arn}/*']
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+          - Sid: AllowLogDeliveryAclCheck
+            Effect: Allow
+            Principal:
+              Service: !If [HasPrincipalOverride, !Ref LogDeliveryPrincipalOverride, s3.amazonaws.com]
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt LogBucket.Arn
+            Condition: !If
+              - HasSourceArn
+              - StringEquals:
+                  aws:SourceArn: !Ref SourceArnCondition
+              - !Ref AWS::NoValue
+          - Sid: AllowLogDeliveryWrite
+            Effect: Allow
+            Principal:
+              Service: !If [HasPrincipalOverride, !Ref LogDeliveryPrincipalOverride, s3.amazonaws.com]
+            Action: s3:PutObject
+            Resource: !If [HasPrefix, !Sub '${LogBucket.Arn}/${LogPrefix}*', !Sub '${LogBucket.Arn}/*']
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: !If [RequireAcl, bucket-owner-full-control, !Ref 'AWS::NoValue']
+                aws:SourceAccount: !If [RestrictAccount, !Ref 'AWS::AccountId', !Ref 'AWS::NoValue']
+                aws:SourceArn: !If [HasSourceArn, !Ref SourceArnCondition, !Ref 'AWS::NoValue']
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Condition: CreateQueue
+    Properties:
+      QueueName: !Sub ${NamePrefix}-GenericS3-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: !If [QueueUsesKms, !Ref 'AWS::NoValue', true]
+      KmsMasterKeyId: !If
+        - QueueKmsFromNew
+        - !GetAtt AbstractKmsKey.Arn
+        - !If [QueueKmsFromExisting, !Ref ExistingKmsKeyArn, !Ref 'AWS::NoValue']
+      Tags:
+        - Key: Purpose
+          Value: AbstractSecurity
+  NotificationQueue:
+    Type: AWS::SQS::Queue
+    Condition: CreateQueue
+    Properties:
+      QueueName: !Sub ${NamePrefix}-GenericS3-queue
+      VisibilityTimeout: !Ref QueueVisibilityTimeoutSeconds
+      MessageRetentionPeriod: !Ref MessageRetentionSeconds
+      SqsManagedSseEnabled: !If [QueueUsesKms, !Ref 'AWS::NoValue', true]
+      KmsMasterKeyId: !If
+        - QueueKmsFromNew
+        - !GetAtt AbstractKmsKey.Arn
+        - !If [QueueKmsFromExisting, !Ref ExistingKmsKeyArn, !Ref 'AWS::NoValue']
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: !Ref DlqMaxReceiveCount
+      Tags:
+        - Key: Purpose
+          Value: AbstractSecurity
+        - Key: Source
+          Value: GenericS3
+  NotificationQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: CreateQueue
+    Properties:
+      Queues: [!Ref NotificationQueue]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: sqs:*
+            Resource: !GetAtt NotificationQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+          - !If
+            - S3EventToSqs
+            - Sid: AllowS3Notify
+              Effect: Allow
+              Principal:
+                Service: s3.amazonaws.com
+              Action: sqs:SendMessage
+              Resource: !GetAtt NotificationQueue.Arn
+              Condition:
+                ArnLike:
+                  aws:SourceArn: !GetAtt LogBucket.Arn
+                StringEquals:
+                  aws:SourceAccount: !Ref AWS::AccountId
+            - !Ref AWS::NoValue
+          - !If
+            - UseSns
+            - Sid: AllowSnsNotify
+              Effect: Allow
+              Principal:
+                Service: sns.amazonaws.com
+              Action: sqs:SendMessage
+              Resource: !GetAtt NotificationQueue.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Ref NotificationTopic
+            - !Ref AWS::NoValue
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Condition: UseSns
+    Properties:
+      TopicName: !Sub ${NamePrefix}-GenericS3-topic
+      KmsMasterKeyId: !If
+        - QueueKmsFromNew
+        - !GetAtt AbstractKmsKey.Arn
+        - !If [QueueKmsFromExisting, !Ref ExistingKmsKeyArn, !Ref 'AWS::NoValue']
+      Tags:
+        - Key: Purpose
+          Value: AbstractSecurity
+  NotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Condition: UseSns
+    Properties:
+      Topics: [!Ref NotificationTopic]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - !If
+            - S3EventToSns
+            - Sid: AllowS3Publish
+              Effect: Allow
+              Principal:
+                Service: s3.amazonaws.com
+              Action: sns:Publish
+              Resource: !Ref NotificationTopic
+              Condition:
+                ArnLike:
+                  aws:SourceArn: !GetAtt LogBucket.Arn
+                StringEquals:
+                  aws:SourceAccount: !Ref AWS::AccountId
+            - !Ref AWS::NoValue
+  TopicToQueueSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: UseSns
+    Properties:
+      TopicArn: !Ref NotificationTopic
+      Protocol: sqs
+      Endpoint: !If [CreateQueue, !GetAtt NotificationQueue.Arn, !Ref ExistingQueueArn]
+      RawMessageDelivery: false
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmail
+    Properties:
+      TopicArn: !Ref NotificationTopic
+      Protocol: email
+      Endpoint: !Ref SubscriptionEmail
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: DoAlarms
+    Properties:
+      TopicName: !Sub ${NamePrefix}-GenericS3-alarms
+      KmsMasterKeyId: !If
+        - QueueKmsFromNew
+        - !GetAtt AbstractKmsKey.Arn
+        - !If [QueueKmsFromExisting, !Ref ExistingKmsKeyArn, !Ref 'AWS::NoValue']
+      Tags:
+        - Key: Purpose
+          Value: AbstractSecurity
+  AlarmEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlarmEmail
+    Properties:
+      TopicArn: !Ref AlarmTopic
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
+  DlqDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: DoDlqAlarm
+    Properties:
+      AlarmName: !Sub ${NamePrefix}-GenericS3-dlq-not-empty
+      AlarmDescription: Messages have landed in the dead-letter queue - Abstract may be failing to process objects.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt DeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref DlqAlarmThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+  QueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: DoQueueAgeAlarm
+    Properties:
+      AlarmName: !Sub ${NamePrefix}-GenericS3-queue-age
+      AlarmDescription: Oldest message in the queue is older than the threshold - ingestion may be lagging.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt NotificationQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref QueueAgeAlarmSeconds
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Condition: DoDashboard
+    Properties:
+      DashboardName: !Sub ${NamePrefix}-GenericS3
+      DashboardBody: !Sub
+        - |
+          {
+            "widgets": [
+              {"type":"metric","x":0,"y":0,"width":12,"height":6,
+               "properties":{"title":"Queue backlog","region":"${AWS::Region}","stat":"Maximum","period":300,
+                 "metrics":[
+                   ["AWS/SQS","ApproximateNumberOfMessagesVisible","QueueName","${MainQ}"],
+                   ["AWS/SQS","ApproximateNumberOfMessagesVisible","QueueName","${DlqQ}"]
+                 ]}},
+              {"type":"metric","x":12,"y":0,"width":12,"height":6,
+               "properties":{"title":"Oldest message age (s)","region":"${AWS::Region}","stat":"Maximum","period":300,
+                 "metrics":[["AWS/SQS","ApproximateAgeOfOldestMessage","QueueName","${MainQ}"]]}},
+              {"type":"metric","x":0,"y":6,"width":12,"height":6,
+               "properties":{"title":"Messages sent / received / deleted","region":"${AWS::Region}","stat":"Sum","period":300,
+                 "metrics":[
+                   ["AWS/SQS","NumberOfMessagesSent","QueueName","${MainQ}"],
+                   ["AWS/SQS","NumberOfMessagesReceived","QueueName","${MainQ}"],
+                   ["AWS/SQS","NumberOfMessagesDeleted","QueueName","${MainQ}"]
+                 ]}}
+            ]
+          }
+        - MainQ: !GetAtt NotificationQueue.QueueName
+          DlqQ: !GetAtt DeadLetterQueue.QueueName
+  AbstractIngestRole:
+    Type: AWS::IAM::Role
+    Condition: IsAssumeRole
+    Properties:
+      RoleName: !Sub ${NamePrefix}-GenericS3-role
+      Description: Role assumed by Abstract Security to read S3 logs and consume SQS notifications.
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref 'AWS::NoValue']
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - PrincipalIsBareAccount
+                - !Sub arn:${AWS::Partition}:iam::${AbstractPrincipalArn}:root
+                - !Ref AbstractPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: abstract-read-s3-sqs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - !If
+                - CreateBucket
+                - Sid: ListBucket
+                  Effect: Allow
+                  Action: ['s3:ListBucket', 's3:GetBucketLocation']
+                  Resource: !GetAtt LogBucket.Arn
+                  Condition: !If
+                    - HasPrefix
+                    - StringLike:
+                        s3:prefix: [!Sub '${LogPrefix}*']
+                    - !Ref AWS::NoValue
+                - !Ref AWS::NoValue
+              - !If
+                - UseExistingBucket
+                - Sid: ListBucket
+                  Effect: Allow
+                  Action: ['s3:ListBucket', 's3:GetBucketLocation']
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${BucketName}
+                  Condition: !If
+                    - HasPrefix
+                    - StringLike:
+                        s3:prefix: [!Sub '${LogPrefix}*']
+                    - !Ref AWS::NoValue
+                - !Ref AWS::NoValue
+              - Sid: ReadObjects
+                Effect: Allow
+                Action: ['s3:GetObject']
+                Resource: !If
+                  - CreateBucket
+                  - !If [HasPrefix, !Sub '${LogBucket.Arn}/${LogPrefix}*', !Sub '${LogBucket.Arn}/*']
+                  - !If
+                    - HasPrefix
+                    - !Sub arn:${AWS::Partition}:s3:::${BucketName}/${LogPrefix}*
+                    - !Sub arn:${AWS::Partition}:s3:::${BucketName}/*
+              - !If
+                - CreateQueue
+                - Sid: ConsumeQueue
+                  Effect: Allow
+                  Action:
+                    - sqs:ReceiveMessage
+                    - sqs:DeleteMessage
+                    - sqs:ChangeMessageVisibility
+                    - sqs:GetQueueAttributes
+                    - sqs:GetQueueUrl
+                  Resource: !GetAtt NotificationQueue.Arn
+                - !Ref AWS::NoValue
+              - !If
+                - UseExistingQueue
+                - Sid: ConsumeQueue
+                  Effect: Allow
+                  Action:
+                    - sqs:ReceiveMessage
+                    - sqs:DeleteMessage
+                    - sqs:ChangeMessageVisibility
+                    - sqs:GetQueueAttributes
+                    - sqs:GetQueueUrl
+                  Resource: !Ref ExistingQueueArn
+                - !Ref AWS::NoValue
+        - !If
+          - CreateKmsKey
+          - PolicyName: abstract-kms-decrypt
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Sid: Decrypt
+                  Effect: Allow
+                  Action: ['kms:Decrypt', 'kms:GenerateDataKey', 'kms:DescribeKey']
+                  Resource: !GetAtt AbstractKmsKey.Arn
+          - !Ref AWS::NoValue
+        - !If
+          - UseExistingKmsKey
+          - PolicyName: abstract-kms-decrypt
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Sid: Decrypt
+                  Effect: Allow
+                  Action: ['kms:Decrypt', 'kms:GenerateDataKey', 'kms:DescribeKey']
+                  Resource: !Ref ExistingKmsKeyArn
+          - !Ref AWS::NoValue
+      Tags:
+        - Key: Purpose
+          Value: AbstractSecurity
+        - Key: Source
+          Value: GenericS3
+  AbstractUser:
+    Type: AWS::IAM::User
+    Condition: IsAccessKey
+    Properties:
+      UserName: !Sub ${NamePrefix}-GenericS3-user
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref 'AWS::NoValue']
+      Policies:
+        - PolicyName: abstract-read-s3-sqs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - !If
+                - CreateBucket
+                - Sid: ListBucket
+                  Effect: Allow
+                  Action: ['s3:ListBucket', 's3:GetBucketLocation']
+                  Resource: !GetAtt LogBucket.Arn
+                - !Ref AWS::NoValue
+              - !If
+                - UseExistingBucket
+                - Sid: ListBucket
+                  Effect: Allow
+                  Action: ['s3:ListBucket', 's3:GetBucketLocation']
+                  Resource: !Sub arn:${AWS::Partition}:s3:::${BucketName}
+                - !Ref AWS::NoValue
+              - Sid: ReadObjects
+                Effect: Allow
+                Action: ['s3:GetObject']
+                Resource: !If
+                  - CreateBucket
+                  - !If [HasPrefix, !Sub '${LogBucket.Arn}/${LogPrefix}*', !Sub '${LogBucket.Arn}/*']
+                  - !If
+                    - HasPrefix
+                    - !Sub arn:${AWS::Partition}:s3:::${BucketName}/${LogPrefix}*
+                    - !Sub arn:${AWS::Partition}:s3:::${BucketName}/*
+              - !If
+                - CreateQueue
+                - Sid: ConsumeQueue
+                  Effect: Allow
+                  Action:
+                    - sqs:ReceiveMessage
+                    - sqs:DeleteMessage
+                    - sqs:ChangeMessageVisibility
+                    - sqs:GetQueueAttributes
+                    - sqs:GetQueueUrl
+                  Resource: !GetAtt NotificationQueue.Arn
+                - !Ref AWS::NoValue
+              - !If
+                - UseExistingQueue
+                - Sid: ConsumeQueue
+                  Effect: Allow
+                  Action:
+                    - sqs:ReceiveMessage
+                    - sqs:DeleteMessage
+                    - sqs:ChangeMessageVisibility
+                    - sqs:GetQueueAttributes
+                    - sqs:GetQueueUrl
+                  Resource: !Ref ExistingQueueArn
+                - !Ref AWS::NoValue
+              - !If
+                - CreateKmsKey
+                - Sid: Decrypt
+                  Effect: Allow
+                  Action: ['kms:Decrypt', 'kms:GenerateDataKey', 'kms:DescribeKey']
+                  Resource: !GetAtt AbstractKmsKey.Arn
+                - !Ref AWS::NoValue
+              - !If
+                - UseExistingKmsKey
+                - Sid: Decrypt
+                  Effect: Allow
+                  Action: ['kms:Decrypt', 'kms:GenerateDataKey', 'kms:DescribeKey']
+                  Resource: !Ref ExistingKmsKeyArn
+                - !Ref AWS::NoValue
+      Tags:
+        - Key: Purpose
+          Value: AbstractSecurity
+  AbstractAccessKey:
+    Type: AWS::IAM::AccessKey
+    Condition: IsAccessKey
+    Properties:
+      UserName: !Ref AbstractUser
+      Status: Active
+  AbstractCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: StoreInSecrets
+    Properties:
+      Name: !Sub ${NamePrefix}/GenericS3/abstract-credentials
+      Description: Abstract Security ingestion credentials (access key) for this source.
+      KmsKeyId: !If
+        - CreateKmsKey
+        - !GetAtt AbstractKmsKey.Arn
+        - !If [BucketKmsFromExisting, !Ref ExistingKmsKeyArn, !Ref 'AWS::NoValue']
+      SecretString: !Sub
+        - '{"accessKeyId":"${AKID}","secretAccessKey":"${SK}","region":"${AWS::Region}","queueUrl":"${QURL}"}'
+        - AKID: !Ref AbstractAccessKey
+          SK: !GetAtt AbstractAccessKey.SecretAccessKey
+          QURL: !If [CreateQueue, !Ref NotificationQueue, !Ref ExistingQueueUrl]
+      Tags:
+        - Key: Purpose
+          Value: AbstractSecurity
+  SsmBucketName:
+    Type: AWS::SSM::Parameter
+    Condition: DoSsmExport
+    Properties:
+      Name: !Sub /${NamePrefix}/GenericS3/bucket-name
+      Type: String
+      Value: !If [CreateBucket, !Ref LogBucket, !Ref BucketName]
+      Description: Abstract source S3 bucket name.
+      Tags:
+        Purpose: AbstractSecurity
+  SsmQueueUrl:
+    Type: AWS::SSM::Parameter
+    Condition: DoSsmExport
+    Properties:
+      Name: !Sub /${NamePrefix}/GenericS3/queue-url
+      Type: String
+      Value: !If [CreateQueue, !Ref NotificationQueue, !Ref ExistingQueueUrl]
+      Description: Abstract source SQS queue URL.
+      Tags:
+        Purpose: AbstractSecurity
+  SsmRoleArn:
+    Type: AWS::SSM::Parameter
+    Condition: DoSsmExportRole
+    Properties:
+      Name: !Sub /${NamePrefix}/GenericS3/role-arn
+      Type: String
+      Value: !GetAtt AbstractIngestRole.Arn
+      Description: Abstract cross-account role ARN.
+      Tags:
+        Purpose: AbstractSecurity
+Outputs:
+  SourceTypeOut:
+    Description: The configured source type.
+    Value: GenericS3
+  AuthModeOut:
+    Description: The configured authentication method.
+    Value: !Ref AuthMode
+  AwsRegion:
+    Description: Region to enter in the Abstract wizard.
+    Value: !Ref AWS::Region
+  BucketNameOut:
+    Description: S3 log bucket name.
+    Value: !If [CreateBucket, !Ref LogBucket, !Ref BucketName]
+  SqsQueueUrl:
+    Description: SQS queue URL for the Abstract wizard.
+    Value: !If [CreateQueue, !Ref NotificationQueue, !Ref ExistingQueueUrl]
+  SqsQueueArn:
+    Description: SQS queue ARN.
+    Value: !If [CreateQueue, !GetAtt NotificationQueue.Arn, !Ref ExistingQueueArn]
+  DeadLetterQueueUrl:
+    Condition: CreateQueue
+    Description: Dead-letter queue (troubleshooting).
+    Value: !Ref DeadLetterQueue
+  SnsTopicArn:
+    Condition: UseSns
+    Description: SNS topic ARN.
+    Value: !Ref NotificationTopic
+  KmsKeyArnOut:
+    Condition: CreateKmsKey
+    Description: Created KMS key ARN.
+    Value: !GetAtt AbstractKmsKey.Arn
+  RoleArn:
+    Condition: IsAssumeRole
+    Description: Paste this Role ARN into the Abstract integration ("Assume Role ARN").
+    Value: !GetAtt AbstractIngestRole.Arn
+  AccessKeyId:
+    Condition: ShowKeyOutputs
+    Description: Access Key ID for the Abstract integration.
+    Value: !Ref AbstractAccessKey
+  SecretAccessKey:
+    Condition: ShowKeyOutputs
+    Description: SENSITIVE secret access key - store securely, rotate after onboarding.
+    Value: !GetAtt AbstractAccessKey.SecretAccessKey
+  CredentialsSecretArn:
+    Condition: StoreInSecrets
+    Description: Secrets Manager secret holding the Abstract credentials (retrieve with get-secret-value).
+    Value: !Ref AbstractCredentialsSecret

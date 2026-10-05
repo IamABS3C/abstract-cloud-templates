@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "LogGroupName",
+    "ParameterValue": "/aws/lambda/my-function"
+  },
+  {
+    "ParameterKey": "ScopeToSingleGroup",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "true"
+  }
+]

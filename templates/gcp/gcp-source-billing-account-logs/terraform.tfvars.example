@@ -1,0 +1,47 @@
+# GCP billing account ID formatted e.g. 012345-567890-ABCDEF. Find it with: gcloud billing accounts
+# list
+billing_account_id = "<billing_account_id>"
+
+# DEDICATED logging or security project holding the topic and subscription. Not a workload project —
+# Pub/Sub publish quota is consumed here, and a workload owner should not be able to read or break
+# the security pipeline. Find it with: gcloud projects list. If no dedicated logging project exists
+# yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project =
+# true) — do not point this at a workload project.
+log_project = "acme-security-logging"
+
+# Renaming this FORCE-REPLACES the topic and cascades to the subscription, discarding every un-acked
+# message. prevent_destroy blocks it; that is intentional.
+# topic_name = "abstract-billing-audit-logs"
+
+# Pub/Sub subscription name Abstract pulls from.
+# subscription_name = "abstract-billing-audit-logs-sub"
+
+# Name of the Cloud Logging billing account sink.
+# sink_name = "abstract-billing-audit-sink"
+
+# Service account ID created for Abstract Security pull access.
+# service_account_id = "abstract-billing-reader"
+
+# Pub/Sub message retention, 1-31. THIS IS YOUR ENTIRE RECOVERY WINDOW: when the oldest unacked
+# message reaches it, the data is deleted permanently with no error and no backfill. 7 gives you a
+# long weekend.
+# retention_days = 7
+
+# Pub/Sub subscriber acknowledgement deadline in seconds.
+# ack_deadline_seconds = 60
+
+# Resource labels applied to the Pub/Sub topic and subscription.
+# labels = {"owner": "security", "managed_by": "terraform"}
+
+# Named sources to route. Cloud Billing writes Admin Activity audit logs (IAM policy changes,
+# project billing links and unlinks, account create, close, reopen, rename and move) and Data Access
+# audit logs, and no System Event logs (https://docs.cloud.google.com/billing/docs/audit-logging).
+# Defaults to admin_activity. See _modules/log-export/log_catalog.tf for the catalog.
+# log_categories = ["admin_activity"]
+
+# Sink exclusion filters for known noise. Exclusions cost nothing to evaluate while ingestion and
+# Pub/Sub throughput are billed. Max 50 per sink.
+# exclusions = []
+
+# Replace the assembled filter entirely. Bypasses every guard in the catalog -- you own the volume.
+# custom_filter = ""

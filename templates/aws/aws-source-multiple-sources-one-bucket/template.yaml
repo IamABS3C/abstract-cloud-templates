@@ -1,0 +1,408 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - Master (nested) stack. Orchestrates any combination of
+  the Abstract AWS log sources in one deploy by nesting the per-source child
+  templates. Toggle each source on/off and the master provisions only those.
+  The child templates must be hosted at TemplateBaseUrl (an S3 https URL); this
+  folder's deploy.sh uploads them, then deploys this stack. Shared identity
+  (Abstract principal + External ID), encryption, and auth defaults flow down
+  to every enabled child so you configure them once.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Template hosting" }
+        Parameters: [TemplateBaseUrl]
+      - Label: { default: "Shared Abstract identity / auth" }
+        Parameters: [AuthMode, AbstractPrincipalArn, ExternalId, StoreCredentialsInSecretsManager, ExportToSsm]
+      - Label: { default: "Shared encryption" }
+        Parameters: [BucketEncryption, QueueEncryption, KmsMode, ExistingKmsKeyArn]
+      - Label: { default: "Shared observability" }
+        Parameters: [EnableDlqAlarm, EnableDashboard, AlarmEmail]
+      - Label: { default: "Enable sources" }
+        Parameters: [EnableCloudTrail, EnableCloudFront, EnableLoadBalancer, EnableRoute53, EnableS3AccessLogs, EnableVPCFlowLogs, EnableWAF, EnableCloudWatchLogs, EnableKinesis, EnableSecurityLake]
+      - Label: { default: "VPC Flow Logs (if enabled)" }
+        Parameters: [VpcFlowResourceId]
+      - Label: { default: "WAF (if enabled)" }
+        Parameters: [WafWebAclArn]
+      - Label: { default: "Kinesis (if enabled)" }
+        Parameters: [KinesisStreamName]
+      - Label: { default: "Security Lake (if enabled)" }
+        Parameters: [SecurityLakeDataLakeArn, SecurityLakeSourceName]
+    ParameterLabels:
+      TemplateBaseUrl: { default: "Child template base URL (S3 https)" }
+      AuthMode: { default: "Authentication method" }
+      AbstractPrincipalArn: { default: "Abstract principal ARN or account ID" }
+      ExternalId: { default: "External ID (from Abstract)" }
+
+Parameters:
+  TemplateBaseUrl:
+    Type: String
+    Description: >-
+      Base https URL where the child templates are hosted, no trailing slash
+      (e.g. https://my-bucket.s3.amazonaws.com/abstract). The master appends
+      /<template-id>.yaml, e.g. /aws-source-cloudtrail-s3-sqs.yaml.
+    AllowedPattern: "^https://.+[^/]$"
+
+  AuthMode:
+    Type: String
+    Default: AssumeRole
+    AllowedValues: [AssumeRole, AccessKey]
+
+  AbstractPrincipalArn:
+    Type: String
+    Default: ""
+
+  ExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+
+  StoreCredentialsInSecretsManager:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+  ExportToSsm:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Publish each enabled source's non-secret outputs to SSM Parameter Store.
+
+  BucketEncryption:
+    Type: String
+    Default: SSE-S3
+    AllowedValues: [SSE-S3, SSE-KMS]
+
+  QueueEncryption:
+    Type: String
+    Default: SSE-SQS
+    AllowedValues: [SSE-SQS, SSE-KMS]
+
+  KmsMode:
+    Type: String
+    Default: None
+    AllowedValues: [None, CreateNew, UseExisting]
+
+  ExistingKmsKeyArn:
+    Type: String
+    Default: ""
+    Description: "Optional. Supply if the bucket, queue or stream uses a customer-managed key. Find it with: aws kms list-aliases"
+
+  EnableDlqAlarm:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Create a DLQ CloudWatch alarm for each enabled S3+SQS source.
+  EnableDashboard:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Create a CloudWatch dashboard for each enabled S3+SQS source.
+  AlarmEmail:
+    Type: String
+    Default: ""
+    Description: Optional email subscribed to the alarm topic(s).
+
+  EnableCloudTrail:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+  EnableCloudFront:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+  EnableLoadBalancer:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+  EnableRoute53:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+  EnableS3AccessLogs:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+  EnableVPCFlowLogs:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+  EnableWAF:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+  EnableCloudWatchLogs:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+  EnableKinesis:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+  EnableSecurityLake:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+  VpcFlowResourceId:
+    Type: String
+    Default: ""
+    Description: "vpc-/subnet-/eni- ID for VPC Flow Logs (if enabled). Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId"
+  WafWebAclArn:
+    Type: String
+    Default: ""
+    Description: "WAF WebACL ARN (if WAF enabled). Find it with: aws wafv2 list-web-acls --scope REGIONAL"
+  KinesisStreamName:
+    Type: String
+    Default: ""
+    Description: "Existing Kinesis stream name (if Kinesis enabled). Find it with: aws kinesis list-streams"
+  SecurityLakeDataLakeArn:
+    Type: String
+    Default: ""
+    Description: >-
+      Security Lake data lake ARN (if Security Lake enabled). Note: when Security
+      Lake is enabled, AbstractPrincipalArn must be a bare 12-digit account ID
+      (the Security Lake subscriber principal), not a full IAM ARN.
+      Find it with: aws securitylake list-data-lakes
+  SecurityLakeSourceName:
+    Type: String
+    Default: WAFV2
+    Description: Security Lake AWS log source (if Security Lake enabled).
+
+Conditions:
+  DoCloudTrail: !Equals [!Ref EnableCloudTrail, "true"]
+  DoCloudFront: !Equals [!Ref EnableCloudFront, "true"]
+  DoLoadBalancer: !Equals [!Ref EnableLoadBalancer, "true"]
+  DoRoute53: !Equals [!Ref EnableRoute53, "true"]
+  DoS3AccessLogs: !Equals [!Ref EnableS3AccessLogs, "true"]
+  DoVPCFlowLogs: !Equals [!Ref EnableVPCFlowLogs, "true"]
+  DoWAF: !Equals [!Ref EnableWAF, "true"]
+  DoCloudWatchLogs: !Equals [!Ref EnableCloudWatchLogs, "true"]
+  DoKinesis: !Equals [!Ref EnableKinesis, "true"]
+  DoSecurityLake: !Equals [!Ref EnableSecurityLake, "true"]
+
+Resources:
+  CloudTrailStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoCloudTrail
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-cloudtrail-s3-sqs.yaml"
+      Parameters:
+        NamePrefix: abstract-cloudtrail
+        AuthMode: !Ref AuthMode
+        AbstractPrincipalArn: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        StoreCredentialsInSecretsManager: !Ref StoreCredentialsInSecretsManager
+        ExportToSsm: !Ref ExportToSsm
+        BucketEncryption: !Ref BucketEncryption
+        QueueEncryption: !Ref QueueEncryption
+        KmsMode: !Ref KmsMode
+        ExistingKmsKeyArn: !Ref ExistingKmsKeyArn
+        EnableDlqAlarm: !Ref EnableDlqAlarm
+        EnableDashboard: !Ref EnableDashboard
+        AlarmEmail: !Ref AlarmEmail
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  CloudFrontStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoCloudFront
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-cloudfront-logs-s3-sqs.yaml"
+      Parameters:
+        NamePrefix: abstract-cloudfront
+        AuthMode: !Ref AuthMode
+        AbstractPrincipalArn: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        StoreCredentialsInSecretsManager: !Ref StoreCredentialsInSecretsManager
+        ExportToSsm: !Ref ExportToSsm
+        BucketEncryption: !Ref BucketEncryption
+        QueueEncryption: !Ref QueueEncryption
+        KmsMode: !Ref KmsMode
+        ExistingKmsKeyArn: !Ref ExistingKmsKeyArn
+        EnableDlqAlarm: !Ref EnableDlqAlarm
+        EnableDashboard: !Ref EnableDashboard
+        AlarmEmail: !Ref AlarmEmail
+        NotificationPath: S3ToSQS
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  LoadBalancerStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoLoadBalancer
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-load-balancer-logs-s3-sqs.yaml"
+      Parameters:
+        NamePrefix: abstract-alb
+        AuthMode: !Ref AuthMode
+        AbstractPrincipalArn: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        StoreCredentialsInSecretsManager: !Ref StoreCredentialsInSecretsManager
+        ExportToSsm: !Ref ExportToSsm
+        BucketEncryption: !Ref BucketEncryption
+        QueueEncryption: !Ref QueueEncryption
+        KmsMode: !Ref KmsMode
+        ExistingKmsKeyArn: !Ref ExistingKmsKeyArn
+        EnableDlqAlarm: !Ref EnableDlqAlarm
+        EnableDashboard: !Ref EnableDashboard
+        AlarmEmail: !Ref AlarmEmail
+        NotificationPath: S3ToSQS
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  Route53Stack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoRoute53
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-route53-resolver-logs-s3-sqs.yaml"
+      Parameters:
+        NamePrefix: abstract-route53
+        AuthMode: !Ref AuthMode
+        AbstractPrincipalArn: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        StoreCredentialsInSecretsManager: !Ref StoreCredentialsInSecretsManager
+        ExportToSsm: !Ref ExportToSsm
+        BucketEncryption: !Ref BucketEncryption
+        QueueEncryption: !Ref QueueEncryption
+        KmsMode: !Ref KmsMode
+        ExistingKmsKeyArn: !Ref ExistingKmsKeyArn
+        EnableDlqAlarm: !Ref EnableDlqAlarm
+        EnableDashboard: !Ref EnableDashboard
+        AlarmEmail: !Ref AlarmEmail
+        NotificationPath: S3ToSQS
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  S3AccessLogsStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoS3AccessLogs
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-s3-access-logs-s3-sqs.yaml"
+      Parameters:
+        NamePrefix: abstract-s3access
+        AuthMode: !Ref AuthMode
+        AbstractPrincipalArn: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        StoreCredentialsInSecretsManager: !Ref StoreCredentialsInSecretsManager
+        ExportToSsm: !Ref ExportToSsm
+        BucketEncryption: !Ref BucketEncryption
+        QueueEncryption: !Ref QueueEncryption
+        KmsMode: !Ref KmsMode
+        ExistingKmsKeyArn: !Ref ExistingKmsKeyArn
+        EnableDlqAlarm: !Ref EnableDlqAlarm
+        EnableDashboard: !Ref EnableDashboard
+        AlarmEmail: !Ref AlarmEmail
+        NotificationPath: S3ToSQS
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  VPCFlowLogsStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoVPCFlowLogs
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-vpc-flow-logs-s3-sqs.yaml"
+      Parameters:
+        NamePrefix: abstract-vpcflow
+        AuthMode: !Ref AuthMode
+        AbstractPrincipalArn: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        StoreCredentialsInSecretsManager: !Ref StoreCredentialsInSecretsManager
+        ExportToSsm: !Ref ExportToSsm
+        BucketEncryption: !Ref BucketEncryption
+        QueueEncryption: !Ref QueueEncryption
+        KmsMode: !Ref KmsMode
+        ExistingKmsKeyArn: !Ref ExistingKmsKeyArn
+        EnableDlqAlarm: !Ref EnableDlqAlarm
+        EnableDashboard: !Ref EnableDashboard
+        AlarmEmail: !Ref AlarmEmail
+        NotificationPath: S3ToSQS
+        VpcFlowResourceId: !Ref VpcFlowResourceId
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  WAFStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoWAF
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-waf-logs-s3-sqs.yaml"
+      Parameters:
+        NamePrefix: abstract-waf
+        AuthMode: !Ref AuthMode
+        AbstractPrincipalArn: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        StoreCredentialsInSecretsManager: !Ref StoreCredentialsInSecretsManager
+        ExportToSsm: !Ref ExportToSsm
+        BucketEncryption: !Ref BucketEncryption
+        QueueEncryption: !Ref QueueEncryption
+        KmsMode: !Ref KmsMode
+        ExistingKmsKeyArn: !Ref ExistingKmsKeyArn
+        EnableDlqAlarm: !Ref EnableDlqAlarm
+        EnableDashboard: !Ref EnableDashboard
+        AlarmEmail: !Ref AlarmEmail
+        NotificationPath: S3ToSQS
+        WafWebAclArn: !Ref WafWebAclArn
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  CloudWatchLogsStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoCloudWatchLogs
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-cloudwatch-logs-api.yaml"
+      Parameters:
+        NamePrefix: abstract-cwl
+        AuthMode: !Ref AuthMode
+        AbstractPrincipalArn: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        StoreCredentialsInSecretsManager: !Ref StoreCredentialsInSecretsManager
+        ExportToSsm: !Ref ExportToSsm
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  KinesisStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoKinesis
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-kinesis-stream.yaml"
+      Parameters:
+        NamePrefix: abstract-kinesis
+        AuthMode: !Ref AuthMode
+        AbstractPrincipalArn: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        StoreCredentialsInSecretsManager: !Ref StoreCredentialsInSecretsManager
+        ExportToSsm: !Ref ExportToSsm
+        StreamMode: UseExisting
+        StreamName: !Ref KinesisStreamName
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  SecurityLakeStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DoSecurityLake
+    Properties:
+      TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-security-lake.yaml"
+      Parameters:
+        AbstractAccountId: !Ref AbstractPrincipalArn
+        ExternalId: !Ref ExternalId
+        DataLakeArn: !Ref SecurityLakeDataLakeArn
+        SourceName: !Ref SecurityLakeSourceName
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+Outputs:
+  EnabledSources:
+    Description: Summary of which sources were deployed.
+    Value: !Sub
+      - "CloudTrail=${ct} CloudFront=${cf} LoadBalancer=${alb} Route53=${r53} S3AccessLogs=${s3a} VPCFlowLogs=${vpc} WAF=${waf} CloudWatchLogs=${cwl} Kinesis=${kin} SecurityLake=${sl}"
+      - ct: !Ref EnableCloudTrail
+        cf: !Ref EnableCloudFront
+        alb: !Ref EnableLoadBalancer
+        r53: !Ref EnableRoute53
+        s3a: !Ref EnableS3AccessLogs
+        vpc: !Ref EnableVPCFlowLogs
+        waf: !Ref EnableWAF
+        cwl: !Ref EnableCloudWatchLogs
+        kin: !Ref EnableKinesis
+        sl: !Ref EnableSecurityLake

@@ -1,0 +1,38 @@
+[
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "CtIsMultiRegion",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "CtIncludeGlobalServiceEvents",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "CtIncludeManagementEvents",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "CtIncludeS3DataEvents",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnableDlqAlarm",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "true"
+  }
+]

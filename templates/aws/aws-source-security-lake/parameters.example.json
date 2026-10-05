@@ -1,0 +1,30 @@
+[
+  {
+    "ParameterKey": "SubscriberName",
+    "ParameterValue": "abstract-security"
+  },
+  {
+    "ParameterKey": "AbstractAccountId",
+    "ParameterValue": "<AbstractAccountId>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "DataLakeArn",
+    "ParameterValue": "<DataLakeArn>"
+  },
+  {
+    "ParameterKey": "SourceName",
+    "ParameterValue": "WAFV2"
+  },
+  {
+    "ParameterKey": "SourceVersion",
+    "ParameterValue": "2.0"
+  },
+  {
+    "ParameterKey": "AccessType",
+    "ParameterValue": "S3"
+  }
+]

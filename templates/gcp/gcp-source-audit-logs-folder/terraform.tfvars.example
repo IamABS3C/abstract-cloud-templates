@@ -1,0 +1,70 @@
+# Organization ID. Still required — the module resolves org context even for a folder sink.
+# org_id = ""
+
+# Folder ID the sink binds to. Find it with: gcloud resource-manager folders list
+# --organization=ORG_ID
+folder_id = "<folder_id>"
+
+# DEDICATED logging or security project holding the topic and subscription. Not a workload project —
+# Pub/Sub publish quota is consumed here, and a workload owner should not be able to read or break
+# the security pipeline. Find it with: gcloud projects list. If no dedicated logging project exists
+# yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project =
+# true) — do not point this at a workload project.
+log_project = "acme-security-logging"
+
+# Named sources to route. See _modules/log-export/log_catalog.tf for the catalog.
+# log_categories = ["admin_activity", "system_event", "policy_denied", "gke_control_plane", "firewall", "dns_queries"]
+
+# When data_access_all is in log_categories, restrict Data Access logs to these services rather than
+# the whole estate. Empty means allServices, the expensive option.
+# data_access_services = ["bigquery.googleapis.com", "storage.googleapis.com", "cloudkms.googleapis.com"]
+
+# Sink exclusion filters for known noise (health checks, chatty service accounts). Exclusions cost
+# nothing to evaluate while ingestion and Pub/Sub throughput are billed, so this is the cheapest
+# cost lever. Max 50 per sink.
+# exclusions = [{"name": "exclude-health-checks", "description": "GCP health-check prober traffic. High volume, zero security signal.", "filter": "protoPayload.requestMetadata.callerSuppliedUserAgent=~\"GoogleHC\""}]
+
+# Required to select any extreme-tier category (vpc_flows, gke_container_logs, data_access_all).
+# These can dominate the bill; measure a 7-day baseline first.
+# acknowledge_high_volume = false
+
+# Labels applied to every resource this template creates.
+# labels = {}
+
+# Pub/Sub message retention, 1-31. THIS IS YOUR ENTIRE RECOVERY WINDOW: when the oldest unacked
+# message reaches it, the data is deleted permanently with no error and no backfill. 7 gives you a
+# long weekend.
+# retention_days = 7
+
+# Pub/Sub ack deadline for Abstract's subscription, in seconds.
+# ack_deadline_seconds = 60
+
+# Send repeatedly-failing messages to a dead-letter topic instead of retrying forever. Pair it with
+# gcp-monitoring-pipeline-health-alerts — a dead-letter topic nobody watches converts a loud failure
+# into a silent one.
+# enable_dead_letter = false
+
+# Deliveries attempted before a message is dead-lettered (Pub/Sub allows 5-100). Used only with
+# enable_dead_letter.
+# dead_letter_max_delivery_attempts = 5
+
+# Renaming this FORCE-REPLACES the topic and cascades to the subscription, discarding every un-acked
+# message. prevent_destroy blocks it; that is intentional.
+# topic_name = "abstract-audit-logs"
+
+# Pull subscription Abstract reads. Renaming it replaces the subscription.
+# subscription_name = "abstract-audit-logs-sub"
+
+# Name of the Cloud Logging sink.
+# sink_name = "abstract-org-audit-sink"
+
+# Account ID of the service account Abstract authenticates as (roles/pubsub.subscriber on the
+# subscription only).
+# service_account_id = "abstract-pubsub-reader"
+
+# Replace the assembled filter entirely. Bypasses every guard in the catalog -- you own the volume.
+# custom_filter = ""
+
+# Extra raw logName clauses the catalog does not cover, e.g.
+# cloudaudit.googleapis.com%2Faccess_transparency
+# platform_log_filters = []

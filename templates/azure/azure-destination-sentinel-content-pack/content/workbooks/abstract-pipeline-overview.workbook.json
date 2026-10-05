@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Abstract Security - Pipeline Overview workbook",
+    "description": "Sentinel workbook over AbstractEventLogs_CL: ingestion volume, coverage by product/severity, and a pipeline-reduction (cost) estimate.",
+    "author": "Abstract Security - Solutions Engineering"
+  },
+  "parameters": {
+    "workspaceName": {
+      "type": "string"
+    },
+    "workbookDisplayName": {
+      "type": "string",
+      "defaultValue": "Abstract Security - Pipeline Overview"
+    }
+  },
+  "variables": {
+    "workbookId": "[guid(parameters('workspaceName'), 'abstract-overview-workbook')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/workbooks",
+      "apiVersion": "2022-04-01",
+      "name": "[variables('workbookId')]",
+      "location": "[resourceGroup().location]",
+      "kind": "shared",
+      "properties": {
+        "displayName": "[parameters('workbookDisplayName')]",
+        "serializedData": "{\"version\": \"Notebook/1.0\", \"items\": [{\"type\": 1, \"content\": {\"json\": \"## Abstract Security \\u2014 Pipeline Overview\\n**Normalized, enriched, and cost-reduced security telemetry delivered into Microsoft Sentinel by the Abstract data pipeline.**\\n\\nAbstract aggregates and deduplicates high-volume event streams, normalizes every source to a common schema, and enriches each record with identity, asset, geo, and threat-intelligence context **before it reaches Sentinel** \\u2014 so the SOC ingests fewer, richer, detection-ready events instead of raw noise.\\n\\nThe panels below show ingested volume and trend, coverage by product and severity, and a pipeline-reduction estimate you can pair with your pre-Abstract source volume to quantify the ingestion cost avoided.\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"AbstractEventLogs_CL\\n| summarize Events=count() by bin(TimeGenerated, 1h)\\n| render timechart\", \"size\": 0, \"title\": \"Events ingested over time\", \"timeContext\": {\"durationMs\": 604800000}, \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"timechart\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"AbstractEventLogs_CL\\n| summarize Events=count()\", \"size\": 4, \"title\": \"Total Abstract events (7d)\", \"timeContext\": {\"durationMs\": 604800000}, \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"tiles\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"AbstractEventLogs_CL\\n| extend AbstractEvent = iff(isnotnull(column_ifexists('AbstractEvent', dynamic(null))), column_ifexists('AbstractEvent', dynamic(null)), pack_all()), Message = tostring(column_ifexists('Message', ''))\\n| extend product=tostring(AbstractEvent.product)\\n| summarize Events=count() by product\\n| top 15 by Events desc\", \"size\": 0, \"title\": \"Events by product\", \"timeContext\": {\"durationMs\": 604800000}, \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"barchart\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"AbstractEventLogs_CL\\n| extend AbstractEvent = iff(isnotnull(column_ifexists('AbstractEvent', dynamic(null))), column_ifexists('AbstractEvent', dynamic(null)), pack_all()), Message = tostring(column_ifexists('Message', ''))\\n| extend severity=tostring(AbstractEvent.severity)\\n| summarize Events=count() by severity\", \"size\": 0, \"title\": \"Events by severity\", \"timeContext\": {\"durationMs\": 604800000}, \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"piechart\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"// Pipeline reduction estimate: GB that landed in Sentinel.\\nAbstractEventLogs_CL\\n| extend AbstractEvent = iff(isnotnull(column_ifexists('AbstractEvent', dynamic(null))), column_ifexists('AbstractEvent', dynamic(null)), pack_all()), Message = tostring(column_ifexists('Message', ''))\\n| extend acs_bytes = estimate_data_size(AbstractEvent)\\n| summarize Events=count(), SentinelGB=round(sum(acs_bytes)/1024.0/1024/1024,3)\", \"size\": 0, \"title\": \"Ingested volume (GB) \\u2014 pair with Abstract source volume for $ saved\", \"timeContext\": {\"durationMs\": 604800000}, \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\"}}], \"styleSettings\": {}, \"$schema\": \"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
+        "version": "1.0",
+        "category": "sentinel",
+        "sourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]"
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+# Organization ID. SCC NotificationConfig is organization-scoped. Find it with: gcloud organizations
+# list
+org_id = "<org_id>"
+
+# Project holding the findings topic and subscription. Find it with: gcloud projects list. If no
+# dedicated logging project exists yet, create one first with
+# templates/gcp/gcp-foundation-logging-project (set create_project = true) — do not point this at a
+# workload project.
+log_project = "acme-security-logging"
+
+# Fallback when remote_state_bucket is empty. Abstract's identity from
+# gcp-source-audit-logs-organization — reusing it means ONE identity reads every feed instead of
+# several to rotate.
+# subscriber_service_account_email = ""
+
+# Security Command Center notification config ID: lowercase letters, numbers and hyphens.
+# scc_config_id = "abstract-findings"
+
+# SCC streaming filter. The default is active, unmuted findings — muted and resolved findings are
+# noise in a SIEM, and they are the bulk of the volume on a mature SCC deployment.
+# scc_filter = "state=\"ACTIVE\" AND NOT mute=\"MUTED\""
+
+# Pub/Sub message retention in days. This is the entire recovery window: unacked messages older than
+# this are deleted.
+# retention_days = 7
+
+# Labels applied to every resource this template creates.
+# labels = {}
+
+# GCS bucket holding gcp-source-audit-logs-organization's state. Set it and the value below is READ
+# rather than retyped. Empty uses the literal.
+# remote_state_bucket = ""
+
+# State key of gcp-source-audit-logs-organization. It keeps that folder's original name,
+# 01-organization, so existing state is found.
+# remote_state_prefix = "01-organization"

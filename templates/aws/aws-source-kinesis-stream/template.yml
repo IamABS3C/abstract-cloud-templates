@@ -1,0 +1,146 @@
+id: aws-source-kinesis-stream
+title: Kinesis data stream
+cloud: aws
+role: source
+scope: account
+summary: 'Kinesis is an API-poll source: Abstract reads records directly from a stream. This template creates the
+  cross-account identity Abstract uses, scoped to one stream or all streams, and can optionally create the stream
+  itself.'
+formats:
+- cloudformation
+- launch-stack
+- script
+permissions:
+- role: Create IAM roles and users, and Kinesis streams when StreamMode=CreateNew
+  where: The target AWS account
+  why: 'Deployer: The template creates the identity and, optionally, the stream.'
+- role: kinesis:ListStreams, kinesis:ListShards
+  where: All streams
+  why: 'Abstract role: Enumerate streams and shards.'
+- role: kinesis:DescribeStream, DescribeStreamSummary, GetRecords, GetShardIterator, SubscribeToShard, DescribeStreamConsumer,
+    ListShards
+  where: The named stream when ScopeToSingleStream=true (the default), otherwise all streams
+  why: 'Abstract role: Read records.'
+- role: kms:Decrypt, kms:DescribeKey
+  where: The KMS key, only when KmsKeyArn is supplied
+  why: 'Abstract role: Read a stream encrypted with a customer-managed key.'
+creates:
+- An IAM role <NamePrefix>-role Abstract assumes with the External ID (AssumeRole), or an IAM user and access key
+  (AccessKey)
+- Optional new provisioned Kinesis stream (StreamMode=CreateNew; UseExisting is the default)
+- Optional Secrets Manager secret for the access key, and optional SSM parameter for the role ARN
+never_touches:
+- 'An existing stream''s configuration or producers: in UseExisting mode the stream is only referenced by name (derived
+  from declared resources)'
+prerequisites:
+- AWS CLI v2, authenticated, and jq for deploy.sh
+- The Abstract principal ARN (or account ID) and External ID for your tenant
+- The stream name (required in both modes)
+- The KMS key ARN, if the stream uses a customer-managed key
+parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for every created resource name.
+  default: abstract-kinesis
+- name: AuthMode
+  type: string
+  required: false
+  description: AssumeRole (recommended) creates a cross-account role Abstract assumes with an External ID; AccessKey
+    creates an IAM user and access key.
+  default: AssumeRole
+  allowed:
+  - AssumeRole
+  - AccessKey
+- name: AbstractPrincipalArn
+  type: string
+  required: false
+  description: 'The principal Abstract provides: a full IAM ARN or a bare 12-digit account ID. Required for AssumeRole.'
+  default: ''
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: ExternalId
+  type: securestring
+  required: false
+  description: The External ID from Abstract, enforced on sts:AssumeRole. Required for AssumeRole.
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: MaxSessionDurationSeconds
+  type: int
+  required: false
+  description: Maximum duration of an assumed-role session, in seconds.
+  default: 3600
+- name: PermissionsBoundaryArn
+  type: string
+  required: false
+  description: 'Only if your account mandates a permissions boundary on every role. Find it with: aws iam list-policies
+    --scope Local --query Policies[].Arn'
+  default: ''
+  find_it: aws iam list-policies --scope Local --query Policies[].Arn
+- name: StoreCredentialsInSecretsManager
+  type: string
+  required: false
+  description: With AuthMode=AccessKey, store the access key in Secrets Manager instead of emitting it as a stack
+    output.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: ExportToSsm
+  type: string
+  required: false
+  description: Publish the role ARN to SSM Parameter Store under /NamePrefix/kinesis/role-arn for later lookup.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+- name: StreamMode
+  type: string
+  required: false
+  description: CreateNew provisions a Kinesis stream; UseExisting references one you already have.
+  default: UseExisting
+  allowed:
+  - CreateNew
+  - UseExisting
+- name: StreamName
+  type: string
+  required: true
+  description: 'Name of the stream (required for UseExisting; the name to create for CreateNew). Find it with: aws
+    kinesis list-streams'
+  find_it: aws kinesis list-streams
+- name: ShardCount
+  type: int
+  required: false
+  description: Shard count for a new PROVISIONED stream.
+  default: 1
+- name: ScopeToSingleStream
+  type: string
+  required: false
+  description: Restrict permissions to the named stream (recommended). If false, grants ListStreams/Describe across
+    all streams.
+  default: 'true'
+  allowed:
+  - 'true'
+  - 'false'
+- name: KmsKeyArn
+  type: string
+  required: false
+  description: 'Supply if the stream is encrypted with a customer-managed KMS key. Find it with: aws kms list-aliases'
+  default: ''
+  find_it: aws kms list-aliases
+outputs:
+- AuthModeOut
+- AwsRegion
+- StreamNameOut
+- StreamArn
+- RoleArn
+- AccessKeyId
+- SecretAccessKey
+- CredentialsSecretArn
+abstract:
+  integration: aws_kinesis
+verify:
+- check: The values for the Abstract Kinesis integration are available
+  command: aws cloudformation describe-stacks --stack-name abstract-kinesis --query 'Stacks[0].Outputs' --output
+    table
+  healthy: RoleArn, StreamNameOut and AwsRegion are present.
+when_to_use: Records already flow into a Kinesis data stream (or should), and Abstract should read the stream directly.
+live_test: canary

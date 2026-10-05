@@ -1,0 +1,138 @@
+---
+description: Pipeline for Google Cloud Asset Inventory feed messages (IAM policy and resource changes)
+
+processors:
+  # A new feed first publishes a plain-text greeting, not an asset change.
+  - drop:
+      when:
+        not:
+          starts_with:
+            raw: "{"
+  - json:
+      field: raw
+  - drop:
+      when:
+        not:
+          has_fields: ["raw.asset.name"]
+
+  - set:
+      field: vendor
+      value: GCP
+  - set:
+      field: product
+      value: "GCP Cloud Asset Inventory"
+  - set:
+      field: cloud.provider
+      value: GCP
+  - set:
+      field: type
+      value: event
+  - set:
+      field: event.dataset
+      value: gcp.asset_inventory
+  - set:
+      field: event.provider
+      value: cloudasset
+  - date:
+      field: raw.window.startTime
+      target_field: "@timestamp"
+      timezone: UTC
+      formats:
+        - ISO8601
+      ignore_failure: true
+  # resource is a list of {name, type}, the same shape the audit-log parser writes.
+  - set:
+      field: _temp.resource.name
+      copy_from: raw.asset.name
+      when:
+        has_fields: ["raw.asset.name"]
+  - set:
+      field: _temp.resource.type
+      copy_from: raw.asset.assetType
+      when:
+        has_fields: ["raw.asset.assetType"]
+  - append:
+      field: resource
+      copy_from: _temp.resource
+      allow_duplicates: false
+      ignore_missing: true
+      when:
+        has_fields: ["_temp.resource.name"]
+  - remove:
+      field: _temp
+      ignore_missing: true
+
+  # The feed carries the policy before and after. Diff them into who gained or lost which role.
+  - script:
+      lang: js
+      description: diff asset.iamPolicy against priorAsset.iamPolicy; set action, category, message, identity fields
+      ignore_failure: true
+      source: >-
+        function process(event) {
+            var name = event.Get("raw.asset.name") || "";
+            var type = event.Get("raw.asset.assetType") || "";
+            var when = event.Get("raw.asset.updateTime") || event.Get("raw.window.startTime") || "";
+            var prior = event.Get("raw.priorAssetState") || "";
+            var deleted = event.Get("raw.deleted") === true;
+            event.Put("event.id", name + "@" + when);
+            event.Put("event.outcome", "success");
+            var slash = type.indexOf("/");
+            if (slash > 0) { event.Put("service.name", type.substring(0, slash)); }
+            var pm = name.match(/\/projects\/([^\/]+)\//);
+            if (pm && !/^[0-9]+$/.test(pm[1])) { event.Put("cloud.project_id", pm[1]); }
+            var anc = event.Get("raw.asset.ancestors");
+            if (anc instanceof Array) {
+                for (var i = 0; i < anc.length; i++) {
+                    if (typeof anc[i] === "string" && anc[i].indexOf("organizations/") === 0) {
+                        event.Put("organization.id", anc[i].substring(14));
+                    }
+                }
+            }
+            function pairs(bindings) {
+                var out = {};
+                if (!(bindings instanceof Array)) { return out; }
+                bindings.forEach(function (b) {
+                    if (b == null || !b.role || !(b.members instanceof Array)) { return; }
+                    b.members.forEach(function (m) { out[b.role + " " + m] = [b.role, m]; });
+                });
+                return out;
+            }
+            var hasPolicy = event.Get("raw.asset.iamPolicy") != null || event.Get("raw.priorAsset.iamPolicy") != null;
+            if (!hasPolicy) {
+                event.Put("event.category", "configuration");
+                var verb = deleted ? "deleted" : (prior === "DOES_NOT_EXIST" ? "created" : "updated");
+                event.Put("action", "resource_" + verb);
+                event.Put("message", "Resource " + verb + ": " + name);
+                return;
+            }
+            event.Put("event.category", "iam");
+            var now = pairs(event.Get("raw.asset.iamPolicy.bindings"));
+            var before = pairs(event.Get("raw.priorAsset.iamPolicy.bindings"));
+            var granted = [], revoked = [], roles = [], users = [];
+            function uniq(a, v) { if (v && a.indexOf(v) === -1) { a.push(v); } }
+            function who(m) {
+                var c = m.indexOf(":");
+                var kind = c > 0 ? m.substring(0, c) : "";
+                if (kind === "user" || kind === "serviceAccount" || kind === "group") { uniq(users, m.substring(c + 1)); }
+            }
+            var k;
+            for (k in now) { if (!(k in before)) { granted.push(k); uniq(roles, now[k][0]); who(now[k][1]); } }
+            for (k in before) { if (!(k in now)) { revoked.push(k); uniq(roles, before[k][0]); who(before[k][1]); } }
+            var action = granted.length && revoked.length ? "iam_policy_change"
+                : granted.length ? "iam_policy_grant"
+                : revoked.length ? "iam_policy_revoke" : "iam_policy_update";
+            event.Put("action", action);
+            if (roles.length) { event.Put("user.target.roles", roles); }
+            if (users.length) { event.Put("related.user", users); }
+            if (granted.length) { event.Put("ext.iam_granted", granted); }
+            if (revoked.length) { event.Put("ext.iam_revoked", revoked); }
+            var parts = [];
+            if (granted.length) { parts.push("granted " + granted.join(", ")); }
+            if (revoked.length) { parts.push("revoked " + revoked.join(", ")); }
+            event.Put("message", "IAM policy on " + name + ": " + (parts.length ? parts.join("; ") : "no binding change"));
+        }
+
+  - rename:
+      field: raw
+      target_field: labels
+      ignore_missing: true

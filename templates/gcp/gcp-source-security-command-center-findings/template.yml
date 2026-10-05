@@ -1,0 +1,105 @@
+id: gcp-source-security-command-center-findings
+title: Security Command Center findings
+cloud: gcp
+role: source
+scope: organization
+summary: Security Command Center does not flow through the Log Router; it publishes to Pub/Sub through
+  its own notification config, so no sink will ever collect it. This deployment creates that config and
+  a dedicated topic and subscription, reusing Abstract's existing service account.
+formats:
+- terraform
+- script
+- cloud-shell
+permissions:
+- role: roles/securitycenter.notificationConfigEditor
+  where: The organization
+  why: 'Deployer: Create the notification config.'
+- role: roles/pubsub.subscriber
+  where: The findings subscription
+  why: 'Abstract service account: Pull the findings.'
+creates:
+- A findings topic and subscription (the log-export names with an -scc suffix)
+- An SCC organization notification config, filtering active unmuted findings by default
+- roles/pubsub.subscriber for Abstract's service account on the findings subscription
+never_touches:
+- SCC settings, mute rules and existing notification configs
+- The audit-log topic, subscription and sink
+prerequisites:
+- Security Command Center Premium or Enterprise
+- Abstract's service account from gcp-source-audit-logs-organization, read from its state (remote_state_bucket)
+  or pasted
+- Abstract's managed GCP Pub/Sub parser keeps only Cloud Audit Log records, so findings are collected
+  but NOT stored until a parser built from a captured finding is attached to this subscription's own Abstract
+  configuration (parser pending)
+parameters:
+- name: org_id
+  type: string
+  required: true
+  description: 'Organization ID. SCC NotificationConfig is organization-scoped. Find it with: gcloud organizations
+    list'
+  find_it: gcloud organizations list --format='value(ID)'
+- name: log_project
+  type: string
+  required: true
+  description: 'Project holding the findings topic and subscription. Find it with: gcloud projects list.
+    If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project
+    (set create_project = true) — do not point this at a workload project.'
+  find_it: gcloud projects list --format='value(projectId)'
+  example: acme-security-logging
+- name: subscriber_service_account_email
+  type: string
+  required: false
+  description: Fallback when remote_state_bucket is empty. Abstract's identity from gcp-source-audit-logs-organization
+    — reusing it means ONE identity reads every feed instead of several to rotate.
+  default: ''
+- name: scc_config_id
+  type: string
+  required: false
+  description: 'Security Command Center notification config ID: lowercase letters, numbers and hyphens.'
+  default: abstract-findings
+- name: scc_filter
+  type: string
+  required: false
+  description: SCC streaming filter. The default is active, unmuted findings — muted and resolved findings
+    are noise in a SIEM, and they are the bulk of the volume on a mature SCC deployment.
+  default: state="ACTIVE" AND NOT mute="MUTED"
+- name: retention_days
+  type: int
+  required: false
+  description: 'Pub/Sub message retention in days. This is the entire recovery window: unacked messages
+    older than this are deleted.'
+  default: 7
+- name: labels
+  type: object
+  required: false
+  description: Labels applied to every resource this template creates.
+  default: {}
+- name: remote_state_bucket
+  type: string
+  required: false
+  description: GCS bucket holding gcp-source-audit-logs-organization's state. Set it and the value below
+    is READ rather than retyped. Empty uses the literal.
+  default: ''
+- name: remote_state_prefix
+  type: string
+  required: false
+  description: State key of gcp-source-audit-logs-organization. It keeps that folder's original name,
+    01-organization, so existing state is found.
+  default: 01-organization
+outputs:
+- scc_subscription
+- scc_topic
+abstract:
+  integration: google_cloud_pub_sub
+  parser: null
+verify:
+- check: The notification config and subscription exist
+  command: 'gcloud scc notifications list --organization=<org-id>
+
+    gcloud pubsub subscriptions describe abstract-audit-logs-sub-scc --project=<log-project-id>'
+  healthy: The config is listed and the subscription exists.
+cost: SCC notifications are free; Pub/Sub throughput is small (findings, not logs).
+when_to_use: Security Command Center Premium or Enterprise is on and its findings should reach Abstract.
+when_not_to_use: As a way to collect audit logs; configure findings as a separate source in Abstract,
+  because their shape differs.
+live_test: static

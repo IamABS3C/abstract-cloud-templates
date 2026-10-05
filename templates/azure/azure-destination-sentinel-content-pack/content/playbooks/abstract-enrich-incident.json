@@ -1,0 +1,231 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Abstract Security - Enrich Incident",
+    "description": "Microsoft Sentinel playbook. On incident creation, queries the Abstract Security pipeline (StreamViewer search) for related events over the last N hours and posts them back as an incident comment. Demonstrates pulling Abstract's fuller, normalized context into a Sentinel investigation.",
+    "prerequisites": "An Abstract API key (Bearer) and vendor account id. Best practice: store the key in Azure Key Vault and reference it; the securestring parameter here is for lab use.",
+    "author": "Abstract Security - Solutions Engineering"
+  },
+  "parameters": {
+    "PlaybookName": {
+      "type": "string",
+      "defaultValue": "Abstract-Enrich-Incident"
+    },
+    "abstractBaseUrl": {
+      "type": "string",
+      "defaultValue": "https://api.abstractsecurity.app"
+    },
+    "abstractVendorAccountId": {
+      "type": "string",
+      "metadata": {
+        "description": "Abstract vendor account id (x-as-vendor-account-id)."
+      }
+    },
+    "lookbackHours": {
+      "type": "int",
+      "defaultValue": 24
+    },
+    "keyVaultSecretUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Key Vault secret URI for the Abstract API key (incl. ?api-version). Fetched at runtime via the playbook's managed identity."
+      }
+    }
+  },
+  "variables": {
+    "AzureSentinelConnectionName": "[concat('azuresentinel-', parameters('PlaybookName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[variables('AzureSentinelConnectionName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "V1",
+      "properties": {
+        "displayName": "[variables('AzureSentinelConnectionName')]",
+        "customParameterValues": {},
+        "parameterValueType": "Alternative",
+        "api": {
+          "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2017-07-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[resourceGroup().location]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connections', variables('AzureSentinelConnectionName'))]"
+      ],
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "type": "Object"
+            },
+            "abstractBaseUrl": {
+              "type": "string"
+            },
+            "abstractVendorAccountId": {
+              "type": "string"
+            },
+            "lookbackHours": {
+              "type": "int"
+            },
+            "keyVaultSecretUri": {
+              "type": "string"
+            }
+          },
+          "triggers": {
+            "Microsoft_Sentinel_incident": {
+              "type": "ApiConnectionWebhook",
+              "inputs": {
+                "body": {
+                  "callback_url": "@{listCallbackUrl()}"
+                },
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
+                "path": "/incident-creation"
+              }
+            }
+          },
+          "actions": {
+            "Compute_window": {
+              "type": "Compose",
+              "inputs": {
+                "start_time": "@{addHours(utcNow(), mul(parameters('lookbackHours'), -1))}",
+                "end_time": "@{utcNow()}"
+              },
+              "runAfter": {
+                "Get_Abstract_key": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Search_Abstract_events": {
+              "runAfter": {
+                "Compute_window": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Http",
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              },
+              "inputs": {
+                "method": "POST",
+                "uri": "@{parameters('abstractBaseUrl')}/v1/streamviewer/search",
+                "headers": {
+                  "Authorization": "Bearer @{body('Get_Abstract_key')?['value']}",
+                  "x-as-vendor-account-id": "@parameters('abstractVendorAccountId')",
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "vendor_account_id": "@parameters('abstractVendorAccountId')",
+                  "page_size": 25,
+                  "selected_fields": [
+                    "id",
+                    "@@timestamp",
+                    "severity",
+                    "product",
+                    "vendor",
+                    "message",
+                    "source_ipv4",
+                    "dest_ipv4",
+                    "user_name"
+                  ],
+                  "start_time": "@{outputs('Compute_window')['start_time']}",
+                  "end_time": "@{outputs('Compute_window')['end_time']}"
+                }
+              }
+            },
+            "Add_comment_to_incident": {
+              "runAfter": {
+                "Search_Abstract_events": [
+                  "Succeeded"
+                ]
+              },
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "path": "/Incidents/Comment",
+                "body": {
+                  "incidentArmId": "@triggerBody()?['object']?['id']",
+                  "message": "<h3>Abstract Security \u2014 related pipeline events (last @{parameters('lookbackHours')}h)</h3><p>Returned <b>@{length(coalesce(body('Search_Abstract_events')?['events'], json('[]')))}</b> events from the Abstract pipeline. Top matches:</p><pre>@{substring(string(coalesce(body('Search_Abstract_events')?['events'], json('[]'))), 0, min(2800, length(string(coalesce(body('Search_Abstract_events')?['events'], json('[]'))))))}</pre>"
+                }
+              }
+            },
+            "Get_Abstract_key": {
+              "type": "Http",
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "outputs"
+                  ]
+                }
+              },
+              "inputs": {
+                "method": "GET",
+                "uri": "@{parameters('keyVaultSecretUri')}",
+                "authentication": {
+                  "type": "ManagedServiceIdentity",
+                  "audience": "https://vault.azure.net"
+                }
+              },
+              "runAfter": {}
+            }
+          }
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', variables('AzureSentinelConnectionName'))]",
+                "connectionName": "[variables('AzureSentinelConnectionName')]",
+                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]",
+                "connectionProperties": {
+                  "authentication": {
+                    "type": "ManagedServiceIdentity"
+                  }
+                }
+              }
+            }
+          },
+          "abstractBaseUrl": {
+            "value": "[parameters('abstractBaseUrl')]"
+          },
+          "abstractVendorAccountId": {
+            "value": "[parameters('abstractVendorAccountId')]"
+          },
+          "lookbackHours": {
+            "value": "[parameters('lookbackHours')]"
+          },
+          "keyVaultSecretUri": {
+            "value": "[parameters('keyVaultSecretUri')]"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+[
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "abstract-kinesis"
+  },
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "MaxSessionDurationSeconds",
+    "ParameterValue": "3600"
+  },
+  {
+    "ParameterKey": "PermissionsBoundaryArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "StoreCredentialsInSecretsManager",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "StreamMode",
+    "ParameterValue": "UseExisting"
+  },
+  {
+    "ParameterKey": "StreamName",
+    "ParameterValue": "<StreamName>"
+  },
+  {
+    "ParameterKey": "ShardCount",
+    "ParameterValue": "1"
+  },
+  {
+    "ParameterKey": "ScopeToSingleStream",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "KmsKeyArn",
+    "ParameterValue": ""
+  }
+]

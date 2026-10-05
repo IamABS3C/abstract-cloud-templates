@@ -1,0 +1,55 @@
+// ASIM schema: FileEvent (schema version 0.2.1)
+// outputStream: Microsoft-ASimFileEventLogs
+//
+// Maps Abstract Common Schema (ACS) events for file activity: creation, modification, deletion, renaming and access. Selected by event.category (file) with a file path or name.
+// Microsoft's built-in _Im_FileEvent parser reads the target table, so Microsoft's ASIM
+// analytics rules, hunting queries and workbooks see these events from any vendor.
+source
+// Abstract findings and alerts are detections, not activity: keep them out of the activity tables.
+| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')
+| extend _category = tolower(tostring(event.category))
+| where _category has 'file' and (isnotempty(tostring(file.path)) or isnotempty(tostring(file.name)))
+| extend _path = case(isnotempty(tostring(file.path)), tostring(file.path), tostring(file.name))
+| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))
+| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')
+| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())
+// Azure restamps anything older than two days with its arrival time. A replay, backfill or
+// long catch-up would then look like live activity to every ASIM rule, so it stays out of
+// the ASIM tables (it still lands in the Abstract table).
+| where _time > ago(2d)
+| project
+    TimeGenerated = _time,
+    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),
+    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),
+    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),
+    EventResult = _result,
+    EventOriginalResultDetails = tostring(event.reason),
+    EventOriginalType = tostring(action),
+    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),
+    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', _result == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),
+    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),
+    EventMessage = message,
+    EventProduct = product,
+    EventVendor = vendor,
+    EventSchemaVersion = '0.2.1',
+    EventSchema = 'FileEvent',
+    DvcHostname = host_name,
+    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),
+    EventType = case(_action contains 'delet' or _action contains 'remov', 'FileDeleted', _action contains 'renam', 'FileRenamed', _action contains 'creat' or _action contains 'upload', 'FileCreated', _action contains 'modif' or _action contains 'writ' or _action contains 'updat' or _action contains 'chang', 'FileModified', _action contains 'copy' or _action contains 'copied', 'FileCopied', _action has 'move' or _action has 'moved', 'FileMoved', 'FileAccessed'),
+    TargetFilePath = _path,
+    TargetFilePathType = case(_path contains '://', 'URL', _path startswith '\\\\', 'Windows Share', _path contains ':\\', 'Windows Local', _path startswith '/', 'Unix', ''),
+    TargetFileName = tostring(file.name),
+    TargetFileDirectory = tostring(file.directory),
+    TargetFileExtension = tostring(file.extension),
+    TargetFileMimeType = tostring(file.mime_type),
+    TargetFileMD5 = tostring(file.hash.md5),
+    TargetFileSHA1 = tostring(file.hash.sha1),
+    TargetFileSHA256 = tostring(file.hash.sha256),
+    TargetFileSHA512 = tostring(file.hash.sha512),
+    TargetFileSize = tolong(file.size),
+    ActorUsername = user_name,
+    ActorUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\', 'Windows', 'Simple'),
+    SrcIpAddr = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, source_address matches regex '^[0-9a-fA-F:.]+$', source_address, ''),
+    ActingProcessName = case(isnotempty(tostring(process.executable)), tostring(process.executable), tostring(process.name)),
+    ActingProcessCommandLine = tostring(process.command_line),
+    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)

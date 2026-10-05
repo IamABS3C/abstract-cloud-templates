@@ -1,0 +1,290 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Abstract Security - Tune at source",
+    "description": "Microsoft Sentinel playbook. When an incident is classified as a False Positive / Benign Positive (attach via an automation rule on incident update), it creates a rule tuning filter in Abstract (POST /v2/rule-tuning-filters/) so the noisy pattern is down-sampled UPSTREAM at the pipeline \u2014 fewer ingested GB and fewer future incidents \u2014 then comments the result back. The differentiated closed loop only a pipeline can offer: disposition in Sentinel, tune at the source.",
+    "prerequisites": "Abstract API key + vendor account id. The originating analytics rule should map SrcIpAddr and AbstractInsightId as incident custom details for precise tuning. Prefer Key Vault for the key in production.",
+    "author": "Abstract Security - Solutions Engineering"
+  },
+  "parameters": {
+    "PlaybookName": {
+      "type": "string",
+      "defaultValue": "Abstract-Tune-At-Source"
+    },
+    "abstractBaseUrl": {
+      "type": "string",
+      "defaultValue": "https://api.abstractsecurity.app"
+    },
+    "abstractVendorAccountId": {
+      "type": "string"
+    },
+    "keyVaultSecretUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Key Vault secret URI for the Abstract API key (incl. ?api-version). Fetched at runtime via the playbook's managed identity."
+      }
+    }
+  },
+  "variables": {
+    "AzureSentinelConnectionName": "[concat('azuresentinel-', parameters('PlaybookName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[variables('AzureSentinelConnectionName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "V1",
+      "properties": {
+        "displayName": "[variables('AzureSentinelConnectionName')]",
+        "customParameterValues": {},
+        "parameterValueType": "Alternative",
+        "api": {
+          "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2017-07-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[resourceGroup().location]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connections', variables('AzureSentinelConnectionName'))]"
+      ],
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "type": "Object"
+            },
+            "abstractBaseUrl": {
+              "type": "string"
+            },
+            "abstractVendorAccountId": {
+              "type": "string"
+            },
+            "keyVaultSecretUri": {
+              "type": "string"
+            }
+          },
+          "triggers": {
+            "Microsoft_Sentinel_incident": {
+              "type": "ApiConnectionWebhook",
+              "inputs": {
+                "body": {
+                  "callback_url": "@{listCallbackUrl()}"
+                },
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
+                "path": "/incident-creation"
+              }
+            }
+          },
+          "actions": {
+            "Read_classification": {
+              "type": "Compose",
+              "inputs": "@coalesce(triggerBody()?['object']?['properties']?['classification'], '')",
+              "runAfter": {
+                "Get_Abstract_key": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Is_false_positive": {
+              "runAfter": {
+                "Read_classification": [
+                  "Succeeded"
+                ]
+              },
+              "type": "If",
+              "expression": {
+                "or": [
+                  {
+                    "equals": [
+                      "@outputs('Read_classification')",
+                      "FalsePositive"
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@outputs('Read_classification')",
+                      "BenignPositive"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Get_source_ip": {
+                  "type": "Compose",
+                  "inputs": "@coalesce(triggerBody()?['object']?['properties']?['additionalData']?['customDetails']?['SrcIpAddr'], '')"
+                },
+                "Has_source_ip": {
+                  "runAfter": {
+                    "Get_source_ip": [
+                      "Succeeded"
+                    ]
+                  },
+                  "type": "If",
+                  "expression": {
+                    "not": {
+                      "equals": [
+                        "@outputs('Get_source_ip')",
+                        ""
+                      ]
+                    }
+                  },
+                  "actions": {
+                    "Compose_tuning_filter": {
+                      "type": "Compose",
+                      "inputs": {
+                        "title": "@{concat('Sentinel FP \u2014 incident #', string(coalesce(triggerBody()?['object']?['properties']?['incidentNumber'], 0)), ' (', coalesce(triggerBody()?['object']?['properties']?['additionalData']?['customDetails']?['EventProduct'], 'abstract'), ')')}",
+                        "tuning_filter_combination": {
+                          "operator": "and",
+                          "source": "sentinel-disposition",
+                          "abstract_insight_id": "@{coalesce(triggerBody()?['object']?['properties']?['additionalData']?['customDetails']?['AbstractInsightId'], '')}",
+                          "conditions": [
+                            {
+                              "field": "source_ipv4",
+                              "field_type": "Ipv4",
+                              "operation": "EQUALS",
+                              "value": "@outputs('Get_source_ip')"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "Create_tuning_filter": {
+                      "runAfter": {
+                        "Compose_tuning_filter": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Http",
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs"
+                          ]
+                        }
+                      },
+                      "inputs": {
+                        "method": "POST",
+                        "uri": "@{parameters('abstractBaseUrl')}/v2/rule-tuning-filters/",
+                        "headers": {
+                          "Authorization": "Bearer @{body('Get_Abstract_key')?['value']}",
+                          "x-as-vendor-account-id": "@parameters('abstractVendorAccountId')",
+                          "Content-Type": "application/json"
+                        },
+                        "body": "@outputs('Compose_tuning_filter')"
+                      }
+                    },
+                    "Comment_result": {
+                      "runAfter": {
+                        "Create_tuning_filter": [
+                          "Succeeded",
+                          "Failed"
+                        ]
+                      },
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                          }
+                        },
+                        "method": "post",
+                        "path": "/Incidents/Comment",
+                        "body": {
+                          "incidentArmId": "@triggerBody()?['object']?['id']",
+                          "message": "<h3>Abstract \u2014 tuned at source</h3><p>Incident classified <b>@{outputs('Read_classification')}</b>. Created an Abstract rule tuning filter so this pattern is down-sampled upstream (fewer ingested GB + fewer future incidents).</p><p><b>Source IP:</b> @{outputs('Get_source_ip')} &nbsp; <b>Tuning filter:</b> @{coalesce(body('Create_tuning_filter')?['nanoid'], body('Create_tuning_filter')?['title'], 'see Abstract')}</p>"
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Comment_no_ip": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connection": {
+                              "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                            }
+                          },
+                          "method": "post",
+                          "path": "/Incidents/Comment",
+                          "body": {
+                            "incidentArmId": "@triggerBody()?['object']?['id']",
+                            "message": "Abstract Tune-at-source ran (incident classified <b>@{outputs('Read_classification')}</b>) but found no <code>SrcIpAddr</code> custom detail to build a precise tuning filter. Map SrcIpAddr on the originating analytics rule, or tune manually in Abstract."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              }
+            },
+            "Get_Abstract_key": {
+              "type": "Http",
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "outputs"
+                  ]
+                }
+              },
+              "inputs": {
+                "method": "GET",
+                "uri": "@{parameters('keyVaultSecretUri')}",
+                "authentication": {
+                  "type": "ManagedServiceIdentity",
+                  "audience": "https://vault.azure.net"
+                }
+              },
+              "runAfter": {}
+            }
+          }
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', variables('AzureSentinelConnectionName'))]",
+                "connectionName": "[variables('AzureSentinelConnectionName')]",
+                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]",
+                "connectionProperties": {
+                  "authentication": {
+                    "type": "ManagedServiceIdentity"
+                  }
+                }
+              }
+            }
+          },
+          "abstractBaseUrl": {
+            "value": "[parameters('abstractBaseUrl')]"
+          },
+          "abstractVendorAccountId": {
+            "value": "[parameters('abstractVendorAccountId')]"
+          },
+          "keyVaultSecretUri": {
+            "value": "[parameters('keyVaultSecretUri')]"
+          }
+        }
+      }
+    }
+  ]
+}

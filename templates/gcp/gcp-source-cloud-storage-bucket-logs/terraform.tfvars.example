@@ -1,0 +1,31 @@
+# Buckets to watch, all in bucket_project.
+# buckets = []
+
+# bucket => owning project, when buckets span several projects. Each project has its OWN GCS service
+# agent and each must be granted publisher — this is what makes that happen.
+# bucket_map = {}
+
+# Project owning every bucket in buckets. Its Cloud Storage service agent is the principal that
+# publishes. Ignored when bucket_map is set.
+# bucket_project = ""
+
+# DEDICATED logging or security project holding this pipeline. Not a workload project. Find it with:
+# gcloud projects list. If no dedicated logging project exists yet, create one first with
+# templates/gcp/gcp-foundation-logging-project (set create_project = true).
+log_project = "acme-security-logging"
+
+# Scope to a prefix so irrelevant objects never generate a message you then pay to fetch.
+# object_name_prefix = ""
+
+# KMS key protecting the bucket, if any. Without the decrypter role every fetch fails with an error
+# that blames Storage rather than KMS.
+# cmek_crypto_key_id = ""
+
+# Reuse Abstract's identity from the log-export deployment. Empty creates a new one.
+# existing_service_account_email = ""
+
+# Required to notify on more buckets than the module's guard allows without acknowledgement.
+# acknowledge_bucket_sprawl = false
+
+# Labels applied to every resource this template creates.
+# labels = {}

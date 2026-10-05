@@ -1,0 +1,30 @@
+[
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "StreamMode",
+    "ParameterValue": "UseExisting"
+  },
+  {
+    "ParameterKey": "StreamName",
+    "ParameterValue": "my-stream"
+  },
+  {
+    "ParameterKey": "ScopeToSingleStream",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "true"
+  }
+]

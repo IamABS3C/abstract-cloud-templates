@@ -1,0 +1,269 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - AWS CloudWatch Logs source. CloudWatch Logs is an
+  API-poll source: there is no S3 bucket or SQS queue. Abstract pulls events
+  directly using read-only logs:* permissions. This template provisions the
+  cross-account access Abstract needs - either a role it assumes (recommended,
+  with an External ID) or an IAM user + access key - scoped to the log group(s)
+  you specify, with optional KMS decrypt and optional Secrets Manager storage.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "1. Naming" }
+        Parameters: [NamePrefix]
+      - Label: { default: "2. Abstract access" }
+        Parameters: [AuthMode, AbstractPrincipalArn, ExternalId, MaxSessionDurationSeconds, PermissionsBoundaryArn, StoreCredentialsInSecretsManager, ExportToSsm]
+      - Label: { default: "3. Scope - which log groups?" }
+        Parameters: [LogGroupName, ScopeToSingleGroup, KmsKeyArn]
+    ParameterLabels:
+      NamePrefix: { default: "Name prefix for created resources" }
+      AuthMode: { default: "Authentication method" }
+      AbstractPrincipalArn: { default: "Abstract principal ARN or 12-digit account ID" }
+      ExternalId: { default: "External ID (shared secret from Abstract)" }
+      MaxSessionDurationSeconds: { default: "Max assumed-session duration (s)" }
+      PermissionsBoundaryArn: { default: "Permissions boundary ARN (optional)" }
+      StoreCredentialsInSecretsManager: { default: "Store credentials in Secrets Manager?" }
+      LogGroupName: { default: "Log group name (optional scope)" }
+      ScopeToSingleGroup: { default: "Restrict to just that one log group?" }
+      KmsKeyArn: { default: "KMS key ARN for encrypted log groups (optional)" }
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract-cwl
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$"
+    ConstraintDescription: Lowercase letters, digits, hyphens (3-32 chars).
+    Description: Prefix for created IAM resource names.
+
+  AuthMode:
+    Type: String
+    Default: AssumeRole
+    AllowedValues: [AssumeRole, AccessKey]
+    Description: AssumeRole (recommended) or AccessKey (long-lived user + key).
+
+  AbstractPrincipalArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[0-9]{12}$|^arn:aws[a-z-]*:iam::[0-9]{12}:(root|(role|user)/.+)$"
+    Description: "Required for AssumeRole. Full IAM ARN or bare 12-digit account ID. Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract console. Note the console regenerates the External ID on each pass, so mint it once and give the SAME value to whoever deploys the role."
+
+  ExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    MaxLength: 1224
+    Description: "Required for AssumeRole. Shared secret enforced on sts:AssumeRole. Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract console. Note the console regenerates the External ID on each pass, so mint it once and give the SAME value to whoever deploys the role."
+
+  MaxSessionDurationSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 43200
+
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$"
+    Description: "Only if your account mandates a permissions boundary on every role. Find it with: aws iam list-policies --scope Local --query Policies[].Arn"
+
+  StoreCredentialsInSecretsManager:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: For AccessKey mode, store the key in Secrets Manager instead of stack outputs.
+
+  ExportToSsm:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Publish the role ARN to SSM Parameter Store under /NamePrefix/cloudwatch-logs/role-arn for later lookup.
+
+  LogGroupName:
+    Type: String
+    Default: ""
+    Description: "Optional log group name to scope access to (e.g. /aws/lambda/my-fn). Blank = all log groups in this account/region. Find it with: aws logs describe-log-groups --query logGroups[].logGroupName"
+
+  ScopeToSingleGroup:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: If true and a LogGroupName is given, restrict permissions to that one group (and its streams). If false, grants read across all groups (Describe needs *).
+
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/.+$"
+    Description: "Supply if the log group(s) are encrypted with a customer-managed KMS key. Find it with: aws kms list-aliases"
+
+Rules:
+  AssumeRoleNeedsIdentity:
+    RuleCondition: !Equals [!Ref AuthMode, "AssumeRole"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AbstractPrincipalArn, ""]]
+        AssertDescription: AbstractPrincipalArn is required for AssumeRole.
+      - Assert: !Not [!Equals [!Ref ExternalId, ""]]
+        AssertDescription: ExternalId is required for AssumeRole.
+  ScopeNeedsGroup:
+    RuleCondition: !Equals [!Ref ScopeToSingleGroup, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref LogGroupName, ""]]
+        AssertDescription: LogGroupName is required when ScopeToSingleGroup=true.
+
+Conditions:
+  IsAssumeRole: !Equals [!Ref AuthMode, "AssumeRole"]
+  IsAccessKey: !Equals [!Ref AuthMode, "AccessKey"]
+  StoreInSecrets: !And
+    - !Equals [!Ref AuthMode, "AccessKey"]
+    - !Equals [!Ref StoreCredentialsInSecretsManager, "true"]
+  ShowKeyOutputs: !And
+    - !Equals [!Ref AuthMode, "AccessKey"]
+    - !Equals [!Ref StoreCredentialsInSecretsManager, "false"]
+  PrincipalIsBareAccount: !Equals
+    - !Select [0, !Split [":", !Ref AbstractPrincipalArn]]
+    - !Ref AbstractPrincipalArn
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  HasKms: !Not [!Equals [!Ref KmsKeyArn, ""]]
+  ScopeGroup: !And
+    - !Equals [!Ref ScopeToSingleGroup, "true"]
+    - !Not [!Equals [!Ref LogGroupName, ""]]
+  DoSsmExportRole: !And
+    - !Equals [!Ref ExportToSsm, "true"]
+    - !Equals [!Ref AuthMode, "AssumeRole"]
+
+Resources:
+  AbstractRole:
+    Type: AWS::IAM::Role
+    Condition: IsAssumeRole
+    Properties:
+      RoleName: !Sub "${NamePrefix}-role"
+      Description: Role assumed by Abstract Security to read CloudWatch Logs.
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - PrincipalIsBareAccount
+                - !Sub "arn:${AWS::Partition}:iam::${AbstractPrincipalArn}:root"
+                - !Ref AbstractPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: { "sts:ExternalId": !Ref ExternalId }
+      Policies:
+        - PolicyName: read-cloudwatch-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DescribeLogGroupsAndStreams
+                Effect: Allow
+                Action: [logs:DescribeLogGroups, logs:DescribeLogStreams]
+                Resource: "*"
+              - Sid: ReadLogEvents
+                Effect: Allow
+                Action: [logs:GetLogEvents, logs:FilterLogEvents, logs:GetLogRecord, logs:GetQueryResults, logs:StartQuery, logs:StopQuery]
+                Resource: !If
+                  - ScopeGroup
+                  - - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*"
+                    - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:log-stream:*"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+        - !If
+          - HasKms
+          - PolicyName: kms-decrypt
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action: [kms:Decrypt, kms:DescribeKey]
+                  Resource: !Ref KmsKeyArn
+          - !Ref "AWS::NoValue"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  AbstractUser:
+    Type: AWS::IAM::User
+    Condition: IsAccessKey
+    Properties:
+      UserName: !Sub "${NamePrefix}-user"
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      Policies:
+        - PolicyName: read-cloudwatch-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DescribeLogGroupsAndStreams
+                Effect: Allow
+                Action: [logs:DescribeLogGroups, logs:DescribeLogStreams]
+                Resource: "*"
+              - Sid: ReadLogEvents
+                Effect: Allow
+                Action: [logs:GetLogEvents, logs:FilterLogEvents, logs:GetLogRecord, logs:GetQueryResults, logs:StartQuery, logs:StopQuery]
+                Resource: !If
+                  - ScopeGroup
+                  - - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*"
+                    - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:log-stream:*"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+              - !If
+                - HasKms
+                - Effect: Allow
+                  Action: [kms:Decrypt, kms:DescribeKey]
+                  Resource: !Ref KmsKeyArn
+                - !Ref "AWS::NoValue"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  AbstractAccessKey:
+    Type: AWS::IAM::AccessKey
+    Condition: IsAccessKey
+    Properties:
+      UserName: !Ref AbstractUser
+      Status: Active
+
+  SsmRoleArn:
+    Type: AWS::SSM::Parameter
+    Condition: DoSsmExportRole
+    Properties:
+      Name: !Sub "/${NamePrefix}/cloudwatch-logs/role-arn"
+      Type: String
+      Value: !GetAtt AbstractRole.Arn
+      Description: Abstract CloudWatch Logs cross-account role ARN.
+      Tags: { Purpose: AbstractSecurity }
+
+  AbstractCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: StoreInSecrets
+    Properties:
+      Name: !Sub "${NamePrefix}/abstract-cloudwatch-credentials"
+      Description: Abstract Security CloudWatch Logs credentials.
+      SecretString: !Sub
+        - '{"accessKeyId":"${AKID}","secretAccessKey":"${SK}","region":"${AWS::Region}"}'
+        - AKID: !Ref AbstractAccessKey
+          SK: !GetAtt AbstractAccessKey.SecretAccessKey
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+Outputs:
+  AuthModeOut:
+    Description: Configured authentication method.
+    Value: !Ref AuthMode
+  AwsRegion:
+    Description: Region to enter in the Abstract wizard.
+    Value: !Ref "AWS::Region"
+  RoleArn:
+    Condition: IsAssumeRole
+    Description: Paste this Role ARN into the Abstract CloudWatch Logs integration.
+    Value: !GetAtt AbstractRole.Arn
+  AccessKeyId:
+    Condition: ShowKeyOutputs
+    Value: !Ref AbstractAccessKey
+  SecretAccessKey:
+    Condition: ShowKeyOutputs
+    Description: SENSITIVE - store securely, rotate after onboarding.
+    Value: !GetAtt AbstractAccessKey.SecretAccessKey
+  CredentialsSecretArn:
+    Condition: StoreInSecrets
+    Description: Secrets Manager secret holding the credentials.
+    Value: !Ref AbstractCredentialsSecret

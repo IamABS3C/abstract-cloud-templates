@@ -1,0 +1,178 @@
+{
+ "title": "Abstract -> Event Hubs destination",
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Event Hub destination",
+   "groups": [
+    {
+     "id": "az",
+     "label": "Customer Azure tenant",
+     "kind": "plain",
+     "x": 40,
+     "y": 40,
+     "w": 920,
+     "h": 520,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 1000,
+     "y": 40,
+     "w": 220,
+     "h": 520,
+     "color": "#FF216B"
+    },
+    {
+     "id": "ns",
+     "label": "Event Hubs namespace",
+     "kind": "plain",
+     "x": 290,
+     "y": 80,
+     "w": 520,
+     "h": 400,
+     "color": "#f5c61e",
+     "parent": "az"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "hub",
+     "label": "Destination hub",
+     "icon": "azure:event_hubs",
+     "parent": "ns",
+     "x": 230,
+     "y": 80,
+     "sublabel": "abstract-destination-hub"
+    },
+    {
+     "id": "sas",
+     "label": "Send-only SAS",
+     "icon": "azure:lock",
+     "parent": "ns",
+     "x": 70,
+     "y": 270,
+     "sublabel": "abstract-send"
+    },
+    {
+     "id": "rbac",
+     "label": "Data Sender role",
+     "icon": "azure:roles",
+     "parent": "ns",
+     "x": 390,
+     "y": 270,
+     "sublabel": "optional, RBAC"
+    },
+    {
+     "id": "pe",
+     "label": "Private endpoint",
+     "icon": "azure:virtual_network",
+     "parent": "az",
+     "x": 70,
+     "y": 160,
+     "sublabel": "optional"
+    },
+    {
+     "id": "diag",
+     "label": "Diagnostic settings",
+     "icon": "azure:diagnostics",
+     "parent": "az",
+     "x": 70,
+     "y": 350,
+     "sublabel": "optional"
+    },
+    {
+     "id": "plat",
+     "label": "Abstract platform",
+     "icon": "azure:monitor",
+     "parent": "abs",
+     "x": 71,
+     "y": 160,
+     "sublabel": "EventHub destination"
+    }
+   ],
+   "edges": [
+    {
+     "from": "plat",
+     "to": "hub",
+     "tone": "brand",
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label": "processed events"
+    },
+    {
+     "from": "sas",
+     "to": "hub",
+     "tone": "muted",
+     "exit": [
+      0.5,
+      0
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label": "Send only"
+    },
+    {
+     "from": "rbac",
+     "to": "hub",
+     "tone": "muted",
+     "exit": [
+      0.5,
+      0
+     ],
+     "entry": [
+      1,
+      0.75
+     ],
+     "label": "or Entra RBAC"
+    },
+    {
+     "from": "pe",
+     "to": "ns",
+     "tone": "muted",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.2975
+     ],
+     "label": "private link"
+    },
+    {
+     "from": "ns",
+     "to": "diag",
+     "tone": "muted",
+     "exit": [
+      0,
+      0.7725
+     ],
+     "entry": [
+      1,
+      0.5
+     ]
+    }
+   ],
+   "badges": [
+    {
+     "text": "Standard, TLS 1.2",
+     "x": 660,
+     "y": 126,
+     "w": 150,
+     "tone": "muted"
+    }
+   ]
+  }
+ ]
+}

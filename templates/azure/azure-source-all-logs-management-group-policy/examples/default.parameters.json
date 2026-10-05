@@ -1,0 +1,89 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "namePrefix": {
+      "value": "abs"
+    },
+    "assignmentLocation": {
+      "value": "eastus"
+    },
+    "effect": {
+      "value": "AuditIfNotExists"
+    },
+    "enforcementMode": {
+      "value": "DoNotEnforce"
+    },
+    "enableActivityLog": {
+      "value": true
+    },
+    "activityLogAuthorizationRuleId": {
+      "value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-abstract/providers/Microsoft.EventHub/namespaces/contoso-abstract/authorizationrules/abstract-diagnostics-send"
+    },
+    "activityLogEventHubName": {
+      "value": "abs-prod-activity"
+    },
+    "activityLogCategories": {
+      "value": [
+        "Administrative",
+        "Security",
+        "ServiceHealth",
+        "Alert",
+        "Recommendation",
+        "Policy",
+        "Autoscale",
+        "ResourceHealth"
+      ]
+    },
+    "enableResourceLogs": {
+      "value": true
+    },
+    "categoryGroup": {
+      "value": "allLogs"
+    },
+    "regions": {
+      "value": [
+        {
+          "location": "eastus",
+          "authorizationRuleId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-abstract/providers/Microsoft.EventHub/namespaces/contoso-abstract-eastus/authorizationrules/abstract-diagnostics-send",
+          "eventHubName": "abs-prod-resource"
+        },
+        {
+          "location": "westeurope",
+          "authorizationRuleId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-abstract/providers/Microsoft.EventHub/namespaces/contoso-abstract-westeurope/authorizationrules/abstract-diagnostics-send",
+          "eventHubName": "abs-prod-resource"
+        }
+      ]
+    },
+    "resourceTypeList": {
+      "value": []
+    },
+    "diagnosticSettingName": {
+      "value": "abstract-logstream"
+    },
+    "enableSqlAuditing": {
+      "value": false
+    },
+    "enableDefenderExport": {
+      "value": false
+    },
+    "defenderEventHubAuthorizationRuleId": {
+      "value": ""
+    },
+    "defenderExportResourceGroup": {
+      "value": "rg-abstract-defender-export"
+    },
+    "defenderExportedDataTypes": {
+      "value": [
+        "Alerts"
+      ]
+    },
+    "defenderAlertSeverities": {
+      "value": [
+        "High",
+        "Medium",
+        "Low"
+      ]
+    }
+  }
+}

@@ -1,0 +1,100 @@
+id: aws-source-security-lake
+title: Security Lake subscriber
+cloud: aws
+role: source
+scope: account
+summary: Registers Abstract as a Security Lake subscriber with S3 data access and an SQS notification, so Abstract
+  is notified of and reads the normalized OCSF objects Security Lake collects. Use it when WAF or other logs are
+  centralised in Security Lake rather than a per-service bucket.
+formats:
+- cloudformation
+- launch-stack
+- script
+permissions:
+- role: 'Security Lake subscriber identity: account ID plus External ID'
+  where: The subscribed log source
+  why: 'Abstract (subscriber principal): AccessType=S3 lets Abstract read the OCSF objects directly; LAKEFORMATION
+    gives query access instead.'
+creates:
+- A Security Lake subscriber for one AWS log source (WAFV2 by default), with S3 or Lake Formation data access
+- An SQS subscriber notification
+- Outputs for the subscriber role ARN Security Lake creates, the RAM resource share ARN and the Security Lake bucket
+  ARN
+never_touches:
+- 'The Security Lake data bucket and notification queue: Security Lake owns them and the template only wires the
+  subscriber'
+prerequisites:
+- AWS CLI v2, authenticated, and jq for deploy.sh
+- An existing Security Lake data lake in the region
+- The Abstract 12-digit AWS account ID and External ID for your tenant
+- SourceName selects the Security Lake source; the Abstract integration named here is the WAF one, so for another
+  SourceName pick the matching integration in Abstract
+parameters:
+- name: SubscriberName
+  type: string
+  required: false
+  description: Name for the Security Lake subscriber.
+  default: abstract-security
+- name: AbstractAccountId
+  type: string
+  required: true
+  description: The AWS account ID Abstract provides (the subscriber principal). Abstract supplies this and it is
+    PER-TENANT — copy it from the integration in the Abstract console. Note the console regenerates the External
+    ID on each pass, so mint it once and give the SAME value to whoever deploys the role.
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: ExternalId
+  type: securestring
+  required: true
+  description: External ID provided by Abstract (confused-deputy protection on the subscription). Abstract supplies
+    this and it is PER-TENANT — copy it from the integration in the Abstract console. Note the console regenerates
+    the External ID on each pass, so mint it once and give the SAME value to whoever deploys the role.
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: DataLakeArn
+  type: string
+  required: true
+  description: 'ARN of the Security Lake data lake in this region (arn:aws:securitylake:REGION:ACCOUNT:data-lake/default).
+    Find it with: aws securitylake list-data-lakes'
+  find_it: aws securitylake list-data-lakes
+- name: SourceName
+  type: string
+  required: false
+  description: Which AWS log source in Security Lake to subscribe Abstract to. WAFV2 = AWS WAF.
+  default: WAFV2
+  allowed:
+  - WAFV2
+  - ROUTE53
+  - VPC_FLOW
+  - CLOUD_TRAIL_MGMT
+  - SH_FINDINGS
+  - LAMBDA_EXECUTION
+  - EKS_AUDIT
+  - S3_DATA
+  - ROUTE53_RESOLVER
+- name: SourceVersion
+  type: string
+  required: false
+  description: Source schema version (commonly 2.0).
+  default: '2.0'
+- name: AccessType
+  type: string
+  required: false
+  description: S3 = direct data access (Abstract reads OCSF objects). LAKEFORMATION = query access.
+  default: S3
+  allowed:
+  - S3
+  - LAKEFORMATION
+outputs:
+- SubscriberArn
+- SubscriberRoleArn
+- ResourceShareArn
+- S3BucketArn
+- AwsRegion
+abstract:
+  integration: aws_security_lake_ocsf_s3_source_waf
+verify:
+- check: The subscriber role ARN is available for Abstract
+  command: aws cloudformation describe-stacks --stack-name abstract-securitylake --query 'Stacks[0].Outputs' --output
+    table
+  healthy: SubscriberArn, SubscriberRoleArn and S3BucketArn are present.
+when_to_use: WAF or other logs are centralised in Security Lake rather than in a per-service S3 bucket.
+live_test: canary

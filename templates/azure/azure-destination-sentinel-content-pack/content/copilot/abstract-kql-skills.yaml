@@ -1,0 +1,108 @@
+# =============================================================================
+# Microsoft Security Copilot — Abstract Security KQL skillset
+# -----------------------------------------------------------------------------
+# EXPERIMENTAL / lab. KQL skills run against the Sentinel/Defender workspace the
+# analyst's Copilot is connected to, so they need the Abstract Sentinel solution
+# installed (AbstractEventLogs_CL + ASim_AbstractEvent parser). No Abstract API
+# key required for these — they read the workspace the SOC already trusts.
+#
+# Pairs with abstract-copilot-skillset.yaml (API skills, which DO call Abstract)
+# and abstract-agent.yaml (the orchestrating agent).
+# =============================================================================
+Descriptor:
+  Name: AbstractSecurityKql
+  DisplayName: Abstract Security (KQL)
+  Description: Ask questions about Abstract-delivered telemetry already in your Sentinel workspace.
+
+SkillGroups:
+  - Format: KQL
+    Settings:
+      # Targets the Log Analytics / Sentinel workspace connected to Copilot.
+      Target: Defender
+    Skills:
+      - Name: AbstractEventsByProduct
+        DisplayName: Abstract events by product
+        Description: Count Abstract pipeline events by product over a window.
+        DescriptionForModel: >-
+          Returns Abstract event volume grouped by product (vendor/app) over the
+          last N hours. Use to understand which sources Abstract is delivering.
+        Inputs:
+          - Name: hours
+            Description: Lookback window in hours (e.g. 24).
+            Required: true
+        Settings:
+          Target: Defender
+          Template: |-
+            AbstractEventLogs_CL
+            | extend AbstractEvent = iff(isnotnull(column_ifexists('AbstractEvent', dynamic(null))), column_ifexists('AbstractEvent', dynamic(null)), pack_all()), Message = tostring(column_ifexists('Message', ''))
+            | where TimeGenerated > ago({{hours}}h)
+            | extend product = tostring(AbstractEvent.product)
+            | summarize Events = count() by product
+            | sort by Events desc
+      - Name: AbstractHighSeverity
+        DisplayName: Abstract high/critical events
+        Description: List recent high/critical Abstract events with identity + source IP.
+        DescriptionForModel: >-
+          Returns recent high/critical severity Abstract events with the actor,
+          source IP, product and the Abstract insight id. Use during triage.
+        Inputs:
+          - Name: hours
+            Description: Lookback window in hours.
+            Required: true
+        Settings:
+          Target: Defender
+          Template: |-
+            ASim_AbstractEvent
+            | where TimeGenerated > ago({{hours}}h)
+            | where EventSeverity in ("high", "critical")
+            | project TimeGenerated, EventSeverity, EventProduct, ActorUsername, SrcIpAddr, AbstractEventId, EventMessage
+            | sort by TimeGenerated desc
+      - Name: AbstractEventsForIp
+        DisplayName: Abstract events for a source IP
+        Description: List recent Abstract events from a given source IP with product, identity and severity.
+        DescriptionForModel: >-
+          Given a source IP address, return recent Abstract pipeline events from
+          that IP (product, actor, severity, message, Abstract insight id). Use to
+          scope an incident's IP entity across the pipeline's fuller dataset.
+        Inputs:
+          - Name: ip
+            Description: The source IP address to scope.
+            Required: true
+          - Name: hours
+            Description: Lookback window in hours.
+            Required: true
+        Settings:
+          Target: Defender
+          Template: |-
+            ASim_AbstractEvent
+            | where TimeGenerated > ago({{hours}}h)
+            | where SrcIpAddr == "{{ip}}"
+            | summarize Events = count(), Products = make_set(EventProduct, 15),
+                        Actors = make_set(ActorUsername, 15), MaxSeverity = max(EventSeverity),
+                        TotalRisk = sum(EventRiskScore), FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated)
+                        by SrcIpAddr
+            | sort by TotalRisk desc
+      - Name: AbstractIdentityActivity
+        DisplayName: Abstract activity for an identity
+        Description: Summarize Abstract activity and cumulative risk for one identity/user.
+        DescriptionForModel: >-
+          Given a username or identity, summarize Abstract events, products
+          touched, source IPs and cumulative risk_score. Use to scope an account.
+        Inputs:
+          - Name: username
+            Description: The username / identity to scope (substring match).
+            Required: true
+          - Name: days
+            Description: Lookback window in days.
+            Required: true
+        Settings:
+          Target: Defender
+          Template: |-
+            ASim_AbstractEvent
+            | where TimeGenerated > ago({{days}}d)
+            | where ActorUsername has "{{username}}" or AbstractIdentity has "{{username}}"
+            | summarize Events = count(), TotalRisk = sum(EventRiskScore),
+                        Products = make_set(EventProduct, 15), SrcIps = make_set(SrcIpAddr, 15),
+                        FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated)
+                        by ActorUsername
+            | sort by TotalRisk desc

@@ -1,0 +1,56 @@
+// ASIM schema: WebSession (schema version 0.2.6)
+// outputStream: Microsoft-ASimWebSessionLogs
+//
+// Maps Abstract Common Schema (ACS) events for HTTP sessions: web proxies, web application firewalls and web servers. Selected by event.category (web), or by a URL together with an HTTP method.
+// Microsoft's built-in _Im_WebSession parser reads the target table, so Microsoft's ASIM
+// analytics rules, hunting queries and workbooks see these events from any vendor.
+source
+// Abstract findings and alerts are detections, not activity: keep them out of the activity tables.
+| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')
+| extend _category = tolower(tostring(event.category))
+| where _category has 'web' or (isnotempty(tostring(url.original)) and isnotempty(tostring(http.request.method)))
+| extend _status = toint(http.response.status_code)
+| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))
+| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')
+| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())
+// Azure restamps anything older than two days with its arrival time. A replay, backfill or
+// long catch-up would then look like live activity to every ASIM rule, so it stays out of
+// the ASIM tables (it still lands in the Abstract table).
+| where _time > ago(2d)
+| project
+    TimeGenerated = _time,
+    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),
+    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),
+    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),
+    EventResult = case(isnotnull(_status) and _status >= 400, 'Failure', isnotnull(_status), 'Success', _result),
+    EventOriginalResultDetails = tostring(event.reason),
+    EventOriginalType = tostring(action),
+    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),
+    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', case(isnotnull(_status) and _status >= 400, 'Failure', isnotnull(_status), 'Success', _result) == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),
+    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),
+    EventMessage = message,
+    EventProduct = product,
+    EventVendor = vendor,
+    EventSchemaVersion = '0.2.6',
+    DvcHostname = host_name,
+    Dvc = case(isnotempty(host_name), host_name, isnotempty(host_ipv4), host_ipv4, isnotempty(product), product, vendor),
+    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),
+    EventType = 'HTTPsession',
+    EventResultDetails = tostring(_status),
+    Url = tostring(url.original),
+    HttpRequestMethod = toupper(tostring(http.request.method)),
+    HttpVersion = tostring(http.version),
+    HttpReferrer = tostring(http.request.referrer),
+    HttpContentType = tostring(http.response.mime_type),
+    HttpUserAgent = user_agent,
+    SrcIpAddr = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, source_address matches regex '^[0-9a-fA-F:.]+$', source_address, ''),
+    DstIpAddr = case(isnotempty(dest_ipv4), dest_ipv4, isnotempty(dest_ipv6), dest_ipv6, dest_address matches regex '^[0-9a-fA-F:.]+$', dest_address, ''),
+    SrcPortNumber = toint(source_port),
+    DstPortNumber = toint(dest_port),
+    DstHostname = tostring(destination.domain),
+    SrcUsername = user_name,
+    SrcUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\', 'Windows', 'Simple'),
+    SrcBytes = tolong(http.request.bytes),
+    DstBytes = tolong(http.response.bytes),
+    DvcAction = case(_action in ('allow', 'allowed', 'accept', 'accepted', 'permit', 'pass') or _outcome in ('allow', 'allowed'), 'Allow', _action in ('deny', 'denied', 'block', 'blocked', 'reject', 'rejected') or _outcome in ('deny', 'denied', 'blocked'), 'Deny', _action in ('drop', 'dropped'), 'Drop', ''),
+    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)

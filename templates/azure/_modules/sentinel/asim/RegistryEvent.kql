@@ -1,0 +1,48 @@
+// ASIM schema: RegistryEvent (schema version 0.1.2)
+// outputStream: Microsoft-ASimRegistryEventLogs
+//
+// Maps Abstract Common Schema (ACS) events for Windows registry changes. Selected by the presence of registry.path or registry.key, for changes only (reads are left out).
+// Microsoft's built-in _Im_RegistryEvent parser reads the target table, so Microsoft's ASIM
+// analytics rules, hunting queries and workbooks see these events from any vendor.
+source
+// Abstract findings and alerts are detections, not activity: keep them out of the activity tables.
+| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')
+| where isnotempty(tostring(registry.path)) or isnotempty(tostring(registry.key))
+// The ASIM registry schema records changes only; a read or an unknown action is left out.
+| extend _verb = tolower(tostring(action))
+| where isnotempty(_verb) and not(_verb contains 'read' or _verb contains 'query' or _verb startswith 'get' or _verb contains 'open' or _verb contains 'enum')
+| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))
+| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')
+| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())
+// Azure restamps anything older than two days with its arrival time. A replay, backfill or
+// long catch-up would then look like live activity to every ASIM rule, so it stays out of
+// the ASIM tables (it still lands in the Abstract table).
+| where _time > ago(2d)
+| project
+    TimeGenerated = _time,
+    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),
+    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),
+    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),
+    EventResult = _result,
+    EventOriginalResultDetails = tostring(event.reason),
+    EventOriginalType = tostring(action),
+    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),
+    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', _result == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),
+    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),
+    EventMessage = message,
+    EventProduct = product,
+    EventVendor = vendor,
+    EventSchemaVersion = '0.1.2',
+    EventSchema = 'RegistryEvent',
+    DvcHostname = host_name,
+    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),
+    EventType = case(_action contains 'delet' and isnotempty(tostring(registry.value)), 'RegistryValueDeleted', _action contains 'delet', 'RegistryKeyDeleted', _action contains 'renam', 'RegistryKeyRenamed', _action contains 'creat' and isempty(tostring(registry.value)), 'RegistryKeyCreated', 'RegistryValueSet'),
+    RegistryKey = case(isnotempty(tostring(registry.path)), tostring(registry.path), strcat(tostring(registry.hive), '\\', tostring(registry.key))),
+    RegistryValue = tostring(registry.value),
+    RegistryValueType = tostring(registry.data.type),
+    RegistryValueData = case(array_length(registry.data.strings) > 0, tostring(registry.data.strings[0]), tostring(registry.data.bytes)),
+    ActorUsername = user_name,
+    ActorUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\', 'Windows', 'Simple'),
+    ActingProcessName = case(isnotempty(tostring(process.executable)), tostring(process.executable), tostring(process.name)),
+    ActingProcessId = tostring(tolong(process.pid)),
+    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)

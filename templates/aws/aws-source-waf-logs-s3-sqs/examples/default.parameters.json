@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "AuthMode",
+    "ParameterValue": "AssumeRole"
+  },
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "aws"
+  },
+  {
+    "ParameterKey": "WafWebAclArn",
+    "ParameterValue": "arn:aws:wafv2:us-east-1:111122223333:regional/webacl/NAME/ID"
+  },
+  {
+    "ParameterKey": "ExportToSsm",
+    "ParameterValue": "true"
+  }
+]

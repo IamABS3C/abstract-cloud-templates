@@ -1,0 +1,99 @@
+id: azure-source-activity-log-subscription
+title: Activity Log, one subscription
+cloud: azure
+role: source
+scope: subscription
+summary: 'The pilot path: streams one subscription''s Activity Log, every ARM create, update and delete
+  and every RBAC change, to the Abstract Event Hub. Use it to prove the pipeline on one subscription,
+  then move to the management-group policy for the estate.'
+formats:
+- bicep
+- arm
+- portal-ui
+- script
+depends_on:
+- azure-foundation-event-hub
+permissions:
+- role: Monitoring Contributor
+  where: The subscription, not a resource group
+  why: 'Deployer: A subscription-scope diagnostic setting is not a resource-group resource.'
+- role: listKeys on the Event Hub authorization rule
+  where: The Event Hubs namespace, often in a different subscription
+  why: 'Deployer: Creating a setting that streams to an Event Hub requires ListKey on the target rule.'
+creates:
+- One subscription-scope diagnostic setting (default name abstract-activity-logs) streaming the Activity
+  Log to the hub
+- Exported categories set by the categories parameter; the default list is all eight
+never_touches:
+- Any subscription other than the one deployed to
+- Existing diagnostic settings on the subscription (the setting is added beside them, within the limit
+  of five)
+- The Event Hub and its authorization rule, which must already exist
+- Workload resources in any resource group
+prerequisites:
+- The Event Hub and a Send-capable authorization rule already exist; deploy azure-foundation-event-hub
+  first
+- At most 5 diagnostic settings per subscription, including existing exports
+- The target hub must not be a compacted event hub
+- 'A redeploy replaces the named diagnostic setting''s category list rather than merging it; read it back
+  first: az monitor diagnostic-settings subscription list --query "value[].{name:name,hub:eventHubName,cats:logs[?enabled].category}"
+  -o json'
+parameters:
+- name: settingName
+  type: string
+  required: false
+  description: Name of the subscription diagnostic setting (max 5 per subscription, unique name).
+  default: abstract-activity-logs
+- name: eventHubAuthorizationRuleId
+  type: string
+  required: true
+  description: 'Full resource ID of an Event Hubs namespace authorization rule with Send rights. Use the
+    abstractDiagnosticsAuthRuleId output of the main template. Find it with: az eventhubs namespace authorization-rule
+    list -g RESOURCE_GROUP --namespace-name NAMESPACE --query [].id -o tsv'
+  find_it: az eventhubs namespace authorization-rule list -g <resource-group> --namespace-name <namespace>
+    --query "[?name=='abstract-diagnostics-send'].id" -o tsv
+- name: eventHubName
+  type: string
+  required: false
+  description: Event Hub that receives the Activity Log stream. main.bicep auto-names hubs <hubPrefix>-<environment>-<source>,
+    so the default source stack creates abs-prod-activity.
+  default: abs-prod-activity
+  find_it: az eventhubs eventhub list -g <resource-group> --namespace-name <namespace> --query [].name
+    -o tsv
+- name: categories
+  type: array
+  required: false
+  description: Activity Log categories to export. Default = all eight (recommended by Abstract Security).
+  default:
+  - Administrative
+  - Security
+  - ServiceHealth
+  - Alert
+  - Recommendation
+  - Policy
+  - Autoscale
+  - ResourceHealth
+outputs:
+- diagnosticSettingName
+- subscriptionId
+- exportedCategories
+abstract:
+  integration: azure_eventhub
+verify:
+- check: The setting exists with the intended categories
+  command: az monitor diagnostic-settings subscription list --query "value[].{name:name,hub:eventHubName,cats:logs[?enabled].category}"
+    -o json
+  healthy: The named setting is present, pointing at the expected hub, with the chosen categories enabled.
+- check: Messages are arriving on the Activity Log hub
+  healthy: Incoming Messages non-zero within 90 minutes.
+- check: A deliberate control-plane action appears end to end
+  command: 'az group update -n <test-resource-group> --tags probe=abstract   # then remove it'
+  healthy: The tag write appears in Abstract within minutes, with the acting identity populated.
+cost: The diagnostic setting is free; the charge is the volume into the hub. Alert, Autoscale, Recommendation
+  and ResourceHealth add volume with little detection value, and the template's default category list
+  still includes all eight.
+when_to_use: A single-subscription estate, a pilot, or a proof before committing to estate-wide governance,
+  including when management-group rights are not yet granted.
+when_not_to_use: 'Any estate you intend to cover fully: this covers exactly one subscription and nothing
+  extends it to new ones. Use the management-group policy instead of deploying it many times.'
+live_test: canary

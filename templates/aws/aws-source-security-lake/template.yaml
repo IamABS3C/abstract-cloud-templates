@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - AWS WAF via Amazon Security Lake. Registers Abstract as a
+  Security Lake subscriber with data access (S3) and an SQS notification, so
+  Abstract is notified of and can read normalized OCSF log objects that Security
+  Lake collects. Use this when WAF (or other) logs are centralized in Security
+  Lake rather than a per-service S3 bucket. Security Lake itself owns the data
+  bucket and the notification queue; this template wires the subscriber + the
+  cross-account access. Requires an existing Security Lake data lake in this
+  region (see README for the one-line enablement command).
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "1. Subscriber identity (provided by Abstract)" }
+        Parameters: [SubscriberName, AbstractAccountId, ExternalId]
+      - Label: { default: "2. Security Lake data lake + sources" }
+        Parameters: [DataLakeArn, SourceName, SourceVersion, AccessType]
+    ParameterLabels:
+      SubscriberName: { default: "Subscriber name" }
+      AbstractAccountId: { default: "Abstract AWS account ID (12 digits)" }
+      ExternalId: { default: "External ID (shared secret from Abstract)" }
+      DataLakeArn: { default: "Security Lake data lake ARN" }
+      SourceName: { default: "AWS log source to subscribe to" }
+      SourceVersion: { default: "Source version" }
+      AccessType: { default: "Data access type" }
+
+Parameters:
+  SubscriberName:
+    Type: String
+    Default: abstract-security
+    AllowedPattern: "^[a-zA-Z0-9-]{1,64}$"
+    Description: Name for the Security Lake subscriber.
+
+  AbstractAccountId:
+    Type: String
+    AllowedPattern: "^$|^[0-9]{12}$"
+    ConstraintDescription: A 12-digit AWS account ID.
+    Description: "The AWS account ID Abstract provides (the subscriber principal). Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract console. Note the console regenerates the External ID on each pass, so mint it once and give the SAME value to whoever deploys the role."
+
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MaxLength: 1224
+    Description: "External ID provided by Abstract (confused-deputy protection on the subscription). Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract console. Note the console regenerates the External ID on each pass, so mint it once and give the SAME value to whoever deploys the role."
+
+  DataLakeArn:
+    Type: String
+    Description: >-
+      ARN of the Security Lake data lake in this region
+      (arn:aws:securitylake:REGION:ACCOUNT:data-lake/default).
+      Find it with: aws securitylake list-data-lakes
+
+  SourceName:
+    Type: String
+    Default: WAFV2
+    AllowedValues: [WAFV2, ROUTE53, VPC_FLOW, CLOUD_TRAIL_MGMT, SH_FINDINGS, LAMBDA_EXECUTION, EKS_AUDIT, S3_DATA, ROUTE53_RESOLVER]
+    Description: Which AWS log source in Security Lake to subscribe Abstract to. WAFV2 = AWS WAF.
+
+  SourceVersion:
+    Type: String
+    Default: "2.0"
+    AllowedPattern: "^[0-9]+\\.[0-9]+$"
+    Description: Source schema version (commonly 2.0).
+
+  AccessType:
+    Type: String
+    Default: S3
+    AllowedValues: [S3, LAKEFORMATION]
+    Description: S3 = direct data access (Abstract reads OCSF objects). LAKEFORMATION = query access.
+
+Rules:
+  RequireIdentity:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AbstractAccountId, ""]]
+        AssertDescription: AbstractAccountId is required.
+      - Assert: !Not [!Equals [!Ref ExternalId, ""]]
+        AssertDescription: ExternalId is required.
+      - Assert: !Not [!Equals [!Ref DataLakeArn, ""]]
+        AssertDescription: DataLakeArn is required.
+
+Resources:
+  Subscriber:
+    Type: AWS::SecurityLake::Subscriber
+    Properties:
+      SubscriberName: !Ref SubscriberName
+      SubscriberDescription: Abstract Security log ingestion subscriber.
+      DataLakeArn: !Ref DataLakeArn
+      AccessTypes: [!Ref AccessType]
+      SubscriberIdentity:
+        ExternalId: !Ref ExternalId
+        Principal: !Ref AbstractAccountId
+      Sources:
+        - AwsLogSource:
+            SourceName: !Ref SourceName
+            SourceVersion: !Ref SourceVersion
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  SubscriberNotification:
+    Type: AWS::SecurityLake::SubscriberNotification
+    Properties:
+      SubscriberArn: !Ref Subscriber
+      NotificationConfiguration:
+        SqsNotificationConfiguration: {}
+
+Outputs:
+  SubscriberArn:
+    Description: The Security Lake subscriber ARN.
+    Value: !Ref Subscriber
+  SubscriberRoleArn:
+    Description: IAM role ARN Security Lake created for this subscriber (provide to Abstract).
+    Value: !GetAtt Subscriber.SubscriberRoleArn
+  ResourceShareArn:
+    Description: RAM resource share ARN for the subscriber.
+    Value: !GetAtt Subscriber.ResourceShareArn
+  S3BucketArn:
+    Description: Security Lake S3 bucket ARN holding the OCSF data.
+    Value: !GetAtt Subscriber.S3BucketArn
+  AwsRegion:
+    Description: Region to enter in the Abstract wizard.
+    Value: !Ref "AWS::Region"

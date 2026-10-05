@@ -1,0 +1,117 @@
+{
+ "title": "aws.kinesis",
+ "theme": "dark",
+ "animate": false,
+ "pages": [
+  {
+   "name": "aws.kinesis",
+   "groups": [
+    {
+     "id": "acct",
+     "label": "Customer AWS account",
+     "kind": "account",
+     "x": 40,
+     "y": 40,
+     "w": 800,
+     "h": 440,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 900,
+     "y": 40,
+     "w": 260,
+     "h": 440,
+     "color": "#FF216B"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "ks",
+     "label": "Kinesis stream",
+     "icon": "aws:kinesis_data_streams",
+     "parent": "acct",
+     "x": 140,
+     "y": 100,
+     "sublabel": "existing or new"
+    },
+    {
+     "id": "role",
+     "label": "IAM read role",
+     "icon": "aws:role",
+     "parent": "acct",
+     "x": 460,
+     "y": 280,
+     "sublabel": "trusts Abstract only"
+    },
+    {
+     "id": "ssm",
+     "label": "SSM parameter",
+     "icon": "aws:parameter_store",
+     "parent": "acct",
+     "x": 140,
+     "y": 290,
+     "sublabel": "optional, role ARN"
+    },
+    {
+     "id": "plat",
+     "label": "Abstract platform",
+     "sublabel": "reads via API",
+     "icon": "img:../../app/web/public/logo-mark.svg",
+     "parent": "abs",
+     "x": 85,
+     "y": 115,
+     "w": 90,
+     "h": 80
+    }
+   ],
+   "edges": [
+    {
+     "from": "ks",
+     "to": "plat",
+     "label": "GetRecords API",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.3
+     ],
+     "label_x": 0.2
+    },
+    {
+     "from": "plat",
+     "to": "role",
+     "label": "AssumeRole + External ID",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.85
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.35
+    },
+    {
+     "from": "role",
+     "to": "ks",
+     "label": "stream read",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0.5,
+      0
+     ],
+     "entry": [
+      1,
+      0.85
+     ],
+     "label_x": -0.4
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,201 @@
+id: gcp-source-network-threat-logs
+title: Network threat logs
+cloud: gcp
+role: source
+scope: organization
+summary: 'Routes firewall rule, Cloud DNS query, load balancer (Cloud Armor) and Cloud IDS threat logs
+  to a Pub/Sub topic for Abstract. Abstract''s managed GCP parser does not yet store these logs: it keeps
+  only Cloud Audit Log records, and these are not.'
+formats:
+- terraform
+- script
+- cloud-shell
+permissions:
+- role: roles/logging.configWriter
+  where: The organization (or the folder or project for those scopes)
+  why: 'Deployer: Create the sink.'
+- role: roles/pubsub.admin
+  where: The logging project
+  why: 'Deployer: Create the topic, subscription and IAM bindings.'
+- role: roles/iam.serviceAccountAdmin
+  where: The logging project
+  why: 'Deployer: Create Abstract''s service account.'
+- role: roles/pubsub.publisher
+  where: The topic
+  why: 'Sink writer identity: granted by this template.'
+- role: roles/pubsub.subscriber
+  where: The subscription only
+  why: 'Abstract service account: Abstract pulls; not publisher, not project-wide.'
+creates:
+- A Pub/Sub topic (default abstract-network-threats) and a never-expiring pull subscription (default abstract-network-threats-sub)
+- A sink (default abstract-network-threats-sink) at organization, folder or project scope routing the
+  chosen categories and the Cloud IDS threat log
+- roles/pubsub.publisher for the sink's writer identity on the topic
+- A service account (default abstract-net-threat-reader) with roles/pubsub.subscriber on the subscription
+  only
+never_touches:
+- 'Firewall rule logging, DNS server policies, load balancer logging and Cloud IDS: it routes their logs
+  and turns none of them on'
+- Existing sinks
+prerequisites:
+- 'Logging turned on at each source: per-rule firewall logging, a DNS server policy with logging, logging
+  on the load balancer backend services, and a Cloud IDS endpoint with Packet Mirroring'
+- A parser for these jsonPayload records on this subscription's own Abstract configuration; until one
+  exists the logs are collected and not stored
+- 'acknowledge_high_volume = true, set only after measuring a 7-day baseline: the default categories are
+  high tier and the plan stops without it'
+parameters:
+- name: sink_scope
+  type: string
+  required: false
+  description: "Where the sink binds:\n  organization    Everything, current and future, by containment\
+    \ (recommended).\n  folder          All projects within a folder and subfolders.\n  project      \
+    \   ONE project (requires acknowledge_pilot_scope = true). sink_scope must be one of: organization,\
+    \ folder, project."
+  default: organization
+- name: org_id
+  type: string
+  required: false
+  description: 'Organization ID. Required when sink_scope = organization. Find it with: gcloud organizations
+    list'
+  default: ''
+  find_it: gcloud organizations list --format='value(ID)'
+- name: folder_id
+  type: string
+  required: false
+  description: Folder ID. Required when sink_scope = folder.
+  default: ''
+  find_it: gcloud resource-manager folders list --organization=<org-id>
+- name: sink_project
+  type: string
+  required: false
+  description: Project to bind the sink to when sink_scope = project. Defaults to log_project.
+  default: ''
+- name: log_project
+  type: string
+  required: true
+  description: 'DEDICATED logging or security project holding the topic and subscription. Find it with:
+    gcloud projects list.'
+  find_it: gcloud projects list --format='value(projectId)'
+  example: acme-security-logging
+- name: acknowledge_pilot_scope
+  type: bool
+  required: false
+  description: Required when sink_scope = project to acknowledge single-project scope.
+  default: false
+- name: log_categories
+  type: array
+  required: false
+  description: Named sources to route from the log catalog. The network threat default is firewall, dns_queries,
+    load_balancer (global external Application Load Balancer, with its Cloud Armor decisions) and load_balancer_regional_internal
+    (regional external and internal Application Load Balancers).
+  default:
+  - firewall
+  - dns_queries
+  - load_balancer
+  - load_balancer_regional_internal
+- name: platform_log_filters
+  type: array
+  required: false
+  description: Extra raw logName clauses to route. Defaults to Cloud IDS threat logs (ids.googleapis.com%2Fthreat).
+  default:
+  - ids.googleapis.com%2Fthreat
+- name: audit_streams
+  type: array
+  required: false
+  description: Cloud Audit Log streams to route. Set to empty by default for network threat focus.
+  default: []
+- name: acknowledge_high_volume
+  type: bool
+  required: false
+  description: Required when any high- or extreme-tier category is selected (the defaults dns_queries,
+    load_balancer and load_balancer_regional_internal are high tier). These can dominate the bill; measure
+    a 7-day baseline first.
+  default: false
+- name: topic_name
+  type: string
+  required: false
+  description: Pub/Sub topic name for network threat logs.
+  default: abstract-network-threats
+- name: subscription_name
+  type: string
+  required: false
+  description: Pub/Sub pull subscription name for Abstract.
+  default: abstract-network-threats-sub
+- name: sink_name
+  type: string
+  required: false
+  description: Log sink name.
+  default: abstract-network-threats-sink
+- name: service_account_id
+  type: string
+  required: false
+  description: Service account ID for Abstract subscriber identity.
+  default: abstract-net-threat-reader
+- name: retention_days
+  type: int
+  required: false
+  description: Pub/Sub message retention in days (1-31). This is your recovery window. retention_days
+    must be between 1 and 31.
+  default: 7
+- name: ack_deadline_seconds
+  type: int
+  required: false
+  description: Pub/Sub subscription acknowledgement deadline in seconds.
+  default: 60
+- name: enable_dead_letter
+  type: bool
+  required: false
+  description: Send repeatedly failing messages to a dead-letter topic.
+  default: false
+- name: dead_letter_max_delivery_attempts
+  type: int
+  required: false
+  description: Deliveries attempted before sending message to dead-letter topic (5-100).
+  default: 5
+- name: custom_filter
+  type: string
+  required: false
+  description: Override the assembled filter completely. Bypasses catalog compilation.
+  default: ''
+- name: exclusions
+  type: array
+  required: false
+  description: Sink exclusion filters for known noise (e.g. internal health check probers).
+  default: []
+  example:
+  - name: exclude-health-checks
+    description: GCP health-check prober traffic. High volume, zero security signal.
+    filter: protoPayload.requestMetadata.callerSuppliedUserAgent=~"GoogleHC"
+- name: labels
+  type: object
+  required: false
+  description: Resource labels applied to Pub/Sub topic and subscription.
+  default: {}
+  example:
+    environment: security
+    managed_by: terraform
+outputs:
+- abstract_onboarding
+- effective_filter
+- selected_log_sources
+- service_account_email
+- sink_writer_identity
+- subscription_id
+- topic_id
+- volume_profile
+abstract:
+  integration: google_cloud_pub_sub
+verify:
+- check: The sink exists with the intended filter
+  command: gcloud logging sinks describe abstract-network-threats-sink --organization=<org-id> --format="value(filter,destination)"
+  healthy: The filter names the chosen categories and ids.googleapis.com%2Fthreat; the destination is
+    the abstract-network-threats topic.
+cost: DNS query and load balancer logs are high volume and are billed as Cloud Logging ingestion and Pub/Sub
+  throughput. Cloud IDS is billed per endpoint-hour and per GB inspected, and needs Packet Mirroring.
+  Measure a 7-day baseline before acknowledging high volume.
+when_to_use: Network detections need firewall, DNS, Cloud Armor or Cloud IDS logs, and a parser for them
+  is being built.
+when_not_to_use: 'Expecting these logs to be searchable in Abstract today: the managed parser does not
+  store them.'
+live_test: static

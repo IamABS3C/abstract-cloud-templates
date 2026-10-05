@@ -1,0 +1,117 @@
+id: aws-access-read-role-existing-bucket-and-queue
+title: Read role, existing bucket
+cloud: aws
+role: access
+scope: account
+summary: Creates only the least-privilege IAM role Abstract assumes, with an External ID, to read log objects from
+  an existing bucket and consume notifications from an existing queue. It is the role-based option the Abstract
+  S3 + SQS integration wizards refer to as Generate IAM Role Permissions.
+formats:
+- cloudformation
+- launch-stack
+- script
+permissions:
+- role: Create IAM roles and users
+  where: The target AWS account
+  why: 'Deployer: The template creates the role Abstract assumes.'
+- role: s3:ListBucket, s3:GetBucketLocation, s3:GetObject
+  where: The named bucket, scoped to LogBucketPrefix when set
+  why: 'Abstract ingest role: Read the log objects.'
+- role: sqs:ReceiveMessage, sqs:DeleteMessage, sqs:ChangeMessageVisibility, sqs:GetQueueAttributes, sqs:GetQueueUrl
+  where: The named queue
+  why: 'Abstract ingest role: Consume the S3 or SNS notifications.'
+- role: kms:Decrypt, kms:GenerateDataKey, kms:DescribeKey
+  where: The KMS key, only when KmsKeyArn is supplied
+  why: 'Abstract ingest role: Read a bucket or queue protected by a customer-managed key.'
+creates:
+- An IAM role <NamePrefix>-role trusted only by the Abstract principal, conditioned on the External ID
+- Inline policies for S3 read, SQS consume and, when KmsKeyArn is set, KMS decrypt
+- Optional IAM user <NamePrefix>-user and access key (CreateAccessKeyUser=true, not recommended)
+never_touches:
+- 'The existing bucket, its notification configuration and the queue: the template only grants read access to them
+  (derived from declared resources)'
+prerequisites:
+- AWS CLI v2, authenticated, and jq for deploy.sh
+- An existing S3 bucket and an existing SQS queue that receives its notifications
+- The Abstract principal ARN (or account ID) and External ID for your tenant
+- The KMS key ARN, if the bucket or queue uses a customer-managed key
+- The existing bucket's name (LogBucketName) and the existing queue's ARN (SqsQueueArn)
+parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for created IAM resource names.
+  default: abstract-s3-sqs
+- name: AbstractPrincipalArn
+  type: string
+  required: false
+  description: The principal Abstract provides. Accepts a full IAM/role/user ARN (arn:aws:iam::<acct>:root|role/...|user/...)
+    or a bare 12-digit account id (which is expanded to arn:aws:iam::<acct>:root).
+  default: ''
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: ExternalId
+  type: securestring
+  required: false
+  description: External ID provided by Abstract, enforced on sts:AssumeRole to prevent the confused-deputy problem.
+    Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract console. Note the
+    console regenerates the External ID on each pass, so mint it once and give the SAME value to whoever deploys
+    the role.
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: LogBucketName
+  type: string
+  required: true
+  description: 'Name of the existing S3 bucket Abstract reads log objects from. Find it with: aws s3 ls'
+  find_it: aws s3 ls
+- name: LogBucketPrefix
+  type: string
+  required: false
+  description: Optional key prefix to restrict reads (e.g. "AWSLogs/" or "cloudfront-logs/"). Leave blank to allow
+    the whole bucket.
+  default: ''
+- name: SqsQueueArn
+  type: string
+  required: true
+  description: 'ARN of the existing SQS queue that receives the S3/SNS notifications. Find it with: aws sqs get-queue-attributes
+    --queue-url QUEUE_URL --attribute-names QueueArn'
+  find_it: aws sqs get-queue-attributes --queue-url QUEUE_URL --attribute-names QueueArn
+- name: KmsKeyArn
+  type: string
+  required: false
+  description: 'Optional KMS key ARN. If the bucket or queue is encrypted with a customer managed key, supply it
+    here so the role is granted kms:Decrypt on that key Find it with: aws kms list-aliases only. Leave blank for
+    SSE-S3 / SSE-SQS (AWS managed) encryption.'
+  default: ''
+  find_it: aws kms list-aliases only. Leave blank for SSE-S3 / SSE-SQS (AWS managed) encryption.
+- name: PermissionsBoundaryArn
+  type: string
+  required: false
+  description: 'Optional IAM permissions-boundary policy ARN to attach to the created role/user. Only if your account
+    mandates a boundary on every role. Find it with: aws iam list-policies --scope Local --query Policies[].Arn'
+  default: ''
+  find_it: aws iam list-policies --scope Local --query Policies[].Arn
+- name: MaxSessionDurationSeconds
+  type: int
+  required: false
+  description: Maximum duration of an assumed session (3600-43200 seconds, the range IAM accepts for a role).
+  default: 3600
+- name: CreateAccessKeyUser
+  type: string
+  required: false
+  description: Create a long-lived IAM user + access key instead of (or in addition to) role-based auth. Prefer
+    role-based auth; only use this when Abstract cannot assume a role (e.g. the Abstract instance is not on AWS).
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+outputs:
+- RoleArn
+- AccessKeyId
+- SecretAccessKey
+abstract:
+  integration: aws_s3_sqs_source
+verify:
+- check: The role ARN is available for the Abstract integration
+  command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
+  healthy: RoleArn is present; paste it into the integration as the Assume Role ARN.
+when_to_use: Logs already land in a bucket that notifies a queue, and Abstract only needs a role to read them.
+live_test: static

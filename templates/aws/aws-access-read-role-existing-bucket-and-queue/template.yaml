@@ -1,0 +1,265 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - Cross-account IAM role for S3 + SQS log ingestion. Creates
+  a least-privilege IAM role that Abstract assumes (via STS AssumeRole with an
+  External ID) to read log objects from an existing S3 bucket and consume the
+  notification messages from an existing SQS queue. This is the role-based
+  authentication option referenced as "Generate IAM Role Permissions" in the
+  Abstract integration wizards (CloudTrail, CloudFront, ALB, Route 53, VPC Flow,
+  WAF, S3 Access Logs, generic S3 + SQS). Optionally provisions an IAM user +
+  access keys for environments where role assumption is not possible.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Naming" }
+        Parameters: [NamePrefix]
+      - Label: { default: "Abstract identity (provided by Abstract)" }
+        Parameters: [AbstractPrincipalArn, ExternalId]
+      - Label: { default: "Resources Abstract may read" }
+        Parameters: [LogBucketName, LogBucketPrefix, SqsQueueArn, KmsKeyArn]
+      - Label: { default: "Hardening (optional)" }
+        Parameters: [PermissionsBoundaryArn, MaxSessionDurationSeconds]
+      - Label: { default: "Access-key fallback (optional, not recommended)" }
+        Parameters: [CreateAccessKeyUser]
+    ParameterLabels:
+      AbstractPrincipalArn: { default: "Abstract principal ARN or 12-digit account ID" }
+      ExternalId: { default: "External ID (shared secret from Abstract)" }
+      LogBucketName: { default: "Source S3 bucket name" }
+      LogBucketPrefix: { default: "Object key prefix to scope reads (optional)" }
+      SqsQueueArn: { default: "SQS queue ARN" }
+      KmsKeyArn: { default: "KMS key ARN protecting the bucket/queue (optional)" }
+      PermissionsBoundaryArn: { default: "Permissions boundary policy ARN (optional)" }
+      MaxSessionDurationSeconds: { default: "Max assumed-session duration (seconds)" }
+      CreateAccessKeyUser: { default: "Also create an IAM user + access keys?" }
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract-s3-sqs
+    Description: Prefix for created IAM resource names.
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$"
+    ConstraintDescription: Lowercase letters, digits and hyphens, 3-42 chars.
+
+  AbstractPrincipalArn:
+    Type: String
+    Default: ""
+    Description: >-
+      The principal Abstract provides. Accepts a full IAM/role/user ARN
+      (arn:aws:iam::<acct>:root|role/...|user/...) or a bare 12-digit account id
+      (which is expanded to arn:aws:iam::<acct>:root).
+    AllowedPattern: "^$|^[0-9]{12}$|^arn:aws[a-z-]*:iam::[0-9]{12}:(root|(role|user)/.+)$"
+    ConstraintDescription: Provide a 12-digit account id or a valid IAM ARN.
+
+  ExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: "External ID provided by Abstract, enforced on sts:AssumeRole to prevent the confused-deputy problem. Abstract supplies this and it is PER-TENANT — copy it from the integration in the Abstract console. Note the console regenerates the External ID on each pass, so mint it once and give the SAME value to whoever deploys the role."
+    MinLength: 0
+    MaxLength: 1224
+
+  LogBucketName:
+    Type: String
+    Description: "Name of the existing S3 bucket Abstract reads log objects from. Find it with: aws s3 ls"
+    AllowedPattern: "^$|^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+
+  LogBucketPrefix:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional key prefix to restrict reads (e.g. "AWSLogs/" or
+      "cloudfront-logs/"). Leave blank to allow the whole bucket.
+
+  SqsQueueArn:
+    Type: String
+    Description: "ARN of the existing SQS queue that receives the S3/SNS notifications. Find it with: aws sqs get-queue-attributes --queue-url QUEUE_URL --attribute-names QueueArn"
+    AllowedPattern: "^$|^arn:aws[a-z-]*:sqs:[a-z0-9-]+:[0-9]{12}:.+$"
+
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional KMS key ARN. If the bucket or queue is encrypted with a customer
+      managed key, supply it here so the role is granted kms:Decrypt on that key
+      Find it with: aws kms list-aliases
+      only. Leave blank for SSE-S3 / SSE-SQS (AWS managed) encryption.
+    AllowedPattern: "^$|^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/.+$"
+
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    Description: "Optional IAM permissions-boundary policy ARN to attach to the created role/user. Only if your account mandates a boundary on every role. Find it with: aws iam list-policies --scope Local --query Policies[].Arn"
+    AllowedPattern: "^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$"
+
+  MaxSessionDurationSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 43200
+    Description: Maximum duration of an assumed session (3600-43200 seconds, the range IAM accepts for a role).
+
+  CreateAccessKeyUser:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Create a long-lived IAM user + access key instead of (or in addition to)
+      role-based auth. Prefer role-based auth; only use this when Abstract cannot
+      assume a role (e.g. the Abstract instance is not on AWS).
+
+Rules:
+  RequireIdentity:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AbstractPrincipalArn, ""]]
+        AssertDescription: AbstractPrincipalArn is required (provided by Abstract).
+      - Assert: !Not [!Equals [!Ref ExternalId, ""]]
+        AssertDescription: ExternalId is required (provided by Abstract).
+  RequireResources:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref LogBucketName, ""]]
+        AssertDescription: LogBucketName is required.
+      - Assert: !Not [!Equals [!Ref SqsQueueArn, ""]]
+        AssertDescription: SqsQueueArn is required.
+
+Conditions:
+  HasPrefix:   !Not [!Equals [!Ref LogBucketPrefix, ""]]
+  HasKms:      !Not [!Equals [!Ref KmsKeyArn, ""]]
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  MakeUser:    !Equals [!Ref CreateAccessKeyUser, "true"]
+  # An ARN contains ":" so Split returns "arn" as element 0; a bare 12-digit
+  # account has no ":" so element 0 equals the whole value.
+  PrincipalIsBareAccount: !Equals
+    - !Select [0, !Split [":", !Ref AbstractPrincipalArn]]
+    - !Ref AbstractPrincipalArn
+
+Resources:
+  AbstractIngestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-role"
+      Description: Role assumed by Abstract Security to read S3 logs and consume SQS notifications.
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - PrincipalIsBareAccount
+                - !Sub "arn:${AWS::Partition}:iam::${AbstractPrincipalArn}:root"
+                - !Ref AbstractPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: read-s3-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListSourceBucket
+                Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketLocation]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${LogBucketName}"
+                Condition: !If
+                  - HasPrefix
+                  - StringLike: { "s3:prefix": [!Sub "${LogBucketPrefix}*"] }
+                  - !Ref "AWS::NoValue"
+              - Sid: ReadSourceObjects
+                Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !If
+                  - HasPrefix
+                  - !Sub "arn:${AWS::Partition}:s3:::${LogBucketName}/${LogBucketPrefix}*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${LogBucketName}/*"
+        - PolicyName: consume-sqs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsumeQueue
+                Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:ChangeMessageVisibility
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                Resource: !Ref SqsQueueArn
+        - !If
+          - HasKms
+          - PolicyName: kms-decrypt
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Sid: DecryptWithCmk
+                  Effect: Allow
+                  Action: [kms:Decrypt, kms:GenerateDataKey, kms:DescribeKey]
+                  Resource: !Ref KmsKeyArn
+          - !Ref "AWS::NoValue"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+  AbstractUser:
+    Type: AWS::IAM::User
+    Condition: MakeUser
+    Properties:
+      UserName: !Sub "${NamePrefix}-user"
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      Policies:
+        - PolicyName: read-s3-and-sqs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListSourceBucket
+                Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketLocation]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${LogBucketName}"
+              - Sid: ReadSourceObjects
+                Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !If
+                  - HasPrefix
+                  - !Sub "arn:${AWS::Partition}:s3:::${LogBucketName}/${LogBucketPrefix}*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${LogBucketName}/*"
+              - Sid: ConsumeQueue
+                Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:ChangeMessageVisibility
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                Resource: !Ref SqsQueueArn
+              - !If
+                - HasKms
+                - Sid: DecryptWithCmk
+                  Effect: Allow
+                  Action: [kms:Decrypt, kms:GenerateDataKey, kms:DescribeKey]
+                  Resource: !Ref KmsKeyArn
+                - !Ref "AWS::NoValue"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  AbstractAccessKey:
+    Type: AWS::IAM::AccessKey
+    Condition: MakeUser
+    Properties:
+      UserName: !Ref AbstractUser
+      Status: Active
+
+Outputs:
+  RoleArn:
+    Description: Paste this Role ARN into the Abstract integration ("Assume Role ARN").
+    Value: !GetAtt AbstractIngestRole.Arn
+  AccessKeyId:
+    Condition: MakeUser
+    Description: Access Key ID (access-key auth only).
+    Value: !Ref AbstractAccessKey
+  SecretAccessKey:
+    Condition: MakeUser
+    Description: SENSITIVE secret access key - store securely and rotate after onboarding.
+    Value: !GetAtt AbstractAccessKey.SecretAccessKey

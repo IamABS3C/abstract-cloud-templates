@@ -1,0 +1,1520 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.47.16.16243",
+      "templateHash": "9622636066221458524"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for the workspace, DCE, DCR, Key Vault and deployment script."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Tags applied to every created resource that supports tags."
+      }
+    },
+    "tagsByResource": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Resource-specific tags, keyed by fully qualified Azure resource type."
+      }
+    },
+    "managedIdentityResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the user-assigned provisioning identity. Tenant bootstrap must grant it Microsoft Graph Application.ReadWrite.All with admin consent; this template does not use AppRoleAssignment.ReadWrite.All."
+      }
+    },
+    "appDisplayName": {
+      "type": "string",
+      "defaultValue": "Abstract-Sentinel-App",
+      "metadata": {
+        "description": "Display name for the Entra app registration created for Abstract."
+      }
+    },
+    "secretValidityYears": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 1,
+      "maxValue": 2,
+      "metadata": {
+        "description": "Client-secret validity in years when a Key Vault mode generates the secret."
+      }
+    },
+    "secretReaderObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional user or group object ID granted Key Vault Secrets User when Key Vault is enabled."
+      }
+    },
+    "azCliVersion": {
+      "type": "string",
+      "defaultValue": "2.60.0",
+      "metadata": {
+        "description": "Azure CLI version for the deployment script container. Verify the selected image version is available before changing this value."
+      }
+    },
+    "secretName": {
+      "type": "string",
+      "defaultValue": "abstract-sentinel-client-secret",
+      "metadata": {
+        "description": "Name of the Key Vault secret holding the client secret."
+      }
+    },
+    "forceSecretRotation": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Force a NEW client secret even when the vault already holds a valid one.\n\nLeave false. The script now rotates only when no secret exists or the existing one\nexpires within 30 days, which makes re-running this template safe - the previous\nbehaviour minted a fresh secret on every deployment, so a re-run silently created a\nnew Key Vault version while Abstract kept using the old value.\n\nSet true only for a deliberate rotation, and update Abstract with the new value.\n"
+      }
+    },
+    "keyVaultMode": {
+      "type": "string",
+      "defaultValue": "Create",
+      "allowedValues": [
+        "Create",
+        "Existing",
+        "None"
+      ],
+      "metadata": {
+        "description": "Create a new Key Vault, use an existing vault by resource ID, or skip Key Vault. In None mode, create the client secret in Entra after deployment."
+      }
+    },
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Key Vault name (3-24 lowercase alphanumerics/hyphens, globally unique). Leave empty to auto-generate abstract-kv-<hash>."
+      }
+    },
+    "existingKeyVaultResourceId": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().id]",
+      "metadata": {
+        "description": "Full resource ID of the existing Key Vault. Used only when keyVaultMode is Existing."
+      }
+    },
+    "createWorkspace": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Create a new Log Analytics workspace. Set false to target an EXISTING workspace in THIS resource group."
+      }
+    },
+    "workspaceName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Workspace name. Creating: empty auto-generates abstract-sentinel-<hash>. Existing: the exact name (in this resource group)."
+      }
+    },
+    "existingWorkspaceLocation": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Region of the EXISTING workspace (Existing mode only). DCE/DCR must match it. Empty = use the deployment location."
+      }
+    },
+    "workspaceSku": {
+      "type": "string",
+      "defaultValue": "PerGB2018",
+      "allowedValues": [
+        "PerGB2018",
+        "CapacityReservation",
+        "Free",
+        "Standalone",
+        "PerNode"
+      ]
+    },
+    "workspaceRetentionDays": {
+      "type": "int",
+      "defaultValue": 90,
+      "minValue": 7,
+      "maxValue": 730,
+      "metadata": {
+        "description": "Workspace data retention in days. Only applied when creating a new workspace; an existing workspace is never modified. The Abstract table's own retention is customTableRetentionDays."
+      }
+    },
+    "enableSentinel": {
+      "type": "bool",
+      "defaultValue": true
+    },
+    "dataCollectionEndpointName": {
+      "type": "string",
+      "defaultValue": "abstract-dce"
+    },
+    "dataCollectionRuleName": {
+      "type": "string",
+      "defaultValue": "abstract-dcr"
+    },
+    "customTableName": {
+      "type": "string",
+      "defaultValue": "AbstractEventLogs_CL",
+      "metadata": {
+        "description": "Custom log table name. MUST end in _CL."
+      }
+    },
+    "tableColumns": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Custom table columns. Leave empty (recommended) to use the generated ACS schema: one column per top-level key of the event Abstract sends, with a DCR transformation that sets TimeGenerated. Supply columns only for a custom payload shape; the DCR stream then uses the same columns and transformKql."
+      }
+    },
+    "transformKql": {
+      "type": "string",
+      "defaultValue": "source",
+      "metadata": {
+        "description": "DCR transformation used only when tableColumns is supplied. The generated schema carries its own transformation."
+      }
+    },
+    "enableDcrErrorLogs": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Send the Data Collection Rule's ingestion errors (rejected requests, malformed payloads, limit and transformation errors) to the DCRLogErrors table in the workspace. Without it, data Azure refuses or drops is invisible to the customer and to Abstract."
+      }
+    },
+    "enableAsim": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Also write each event into Microsoft's ASIM normalized tables (ASimAuthenticationEventLogs and the others listed in asimSchemas), mapped from the Abstract Common Schema by solutions/asim. Off by default. Microsoft's built-in ASIM parsers read those tables, so once this is on every ASIM analytics rule, hunting query and workbook already running in the workspace also sees Abstract data: expect new alerts, duplicates where Microsoft's own connector collects the same vendor, and a second copy of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns left empty). Every event still also lands in the Abstract table."
+      }
+    },
+    "asimSchemas": {
+      "type": "array",
+      "defaultValue": [
+        "*"
+      ],
+      "metadata": {
+        "description": "ASIM schemas to write, by name (for example ['Authentication', 'NetworkSession']). ['*'] (default) writes every schema solutions/asim maps; [] writes none."
+      }
+    },
+    "customTableRetentionDays": {
+      "type": "int",
+      "defaultValue": 0,
+      "minValue": 0,
+      "maxValue": 4383,
+      "metadata": {
+        "description": "Retention of the Abstract table in days. 0 (default) sends no retention, so an existing table keeps its retention and a new table uses the workspace default. A value shortens or lengthens the table's total retention; shortening deletes data older than the new value."
+      }
+    },
+    "grantMonitoringContributor": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Also grant Monitoring Contributor on the DCR. Off by default: sending data through the Logs Ingestion API needs only Monitoring Metrics Publisher, and Monitoring Contributor would let a leaked Abstract credential rewrite or delete the DCR and its error-log setting. Turn on only if your Abstract destination setup specifically asks for it."
+      }
+    },
+    "customTablePlan": {
+      "type": "string",
+      "defaultValue": "Keep",
+      "allowedValues": [
+        "Keep",
+        "Analytics",
+        "Basic",
+        "Auxiliary"
+      ],
+      "metadata": {
+        "description": "Table plan for the Abstract table. Keep (default) keeps the plan an existing table already has, and create a new table as Analytics: a redeploy then never changes a table's plan, or its cost, by accident. Analytics runs analytics rules and our content pack on it. Auxiliary is the Sentinel data lake tier: cheap long retention and KQL jobs, but no analytics rules or alerts. Basic sits between them. Setting a plan on an existing table switches it; Azure applies the new plan to the whole table."
+      }
+    }
+  },
+  "variables": {
+    "copy": [
+      {
+        "name": "customTableArmColumns",
+        "count": "[length(variables('effectiveTableColumns'))]",
+        "input": {
+          "name": "[variables('effectiveTableColumns')[copyIndex('customTableArmColumns')].name]",
+          "type": "[if(equals(toLower(string(variables('effectiveTableColumns')[copyIndex('customTableArmColumns')].type)), 'datetime'), 'dateTime', toLower(string(variables('effectiveTableColumns')[copyIndex('customTableArmColumns')].type)))]"
+        }
+      },
+      {
+        "name": "asimFlows",
+        "count": "[length(variables('enabledAsimRoutes'))]",
+        "input": {
+          "streams": [
+            "[variables('streamName')]"
+          ],
+          "destinations": [
+            "[variables('logAnalyticsDestinationName')]"
+          ],
+          "transformKql": "[variables('enabledAsimRoutes')[copyIndex('asimFlows')].transformKql]",
+          "outputStream": "[variables('enabledAsimRoutes')[copyIndex('asimFlows')].outputStream]"
+        }
+      }
+    ],
+    "$fxv#0": {
+      "description": "Generated by gen-sentinel-schema.py from the ACS field catalog (acs-fields.json). One column per top-level ACS key; nested objects and lists are dynamic. The DCR transformation sets TimeGenerated and renames the reserved id and type keys.",
+      "tableColumns": [
+        {
+          "name": "TimeGenerated",
+          "type": "datetime"
+        },
+        {
+          "name": "action",
+          "type": "string"
+        },
+        {
+          "name": "agent",
+          "type": "dynamic"
+        },
+        {
+          "name": "aggregation_count",
+          "type": "real"
+        },
+        {
+          "name": "aggregation_end",
+          "type": "datetime"
+        },
+        {
+          "name": "aggregation_start",
+          "type": "datetime"
+        },
+        {
+          "name": "cloud",
+          "type": "dynamic"
+        },
+        {
+          "name": "container",
+          "type": "dynamic"
+        },
+        {
+          "name": "correlated_count",
+          "type": "real"
+        },
+        {
+          "name": "customer_id",
+          "type": "string"
+        },
+        {
+          "name": "customer_name",
+          "type": "string"
+        },
+        {
+          "name": "data_stream",
+          "type": "dynamic"
+        },
+        {
+          "name": "dest_address",
+          "type": "string"
+        },
+        {
+          "name": "dest_ipv4",
+          "type": "string"
+        },
+        {
+          "name": "dest_ipv6",
+          "type": "string"
+        },
+        {
+          "name": "dest_port",
+          "type": "real"
+        },
+        {
+          "name": "destination",
+          "type": "dynamic"
+        },
+        {
+          "name": "device",
+          "type": "dynamic"
+        },
+        {
+          "name": "dns",
+          "type": "dynamic"
+        },
+        {
+          "name": "email",
+          "type": "dynamic"
+        },
+        {
+          "name": "error",
+          "type": "dynamic"
+        },
+        {
+          "name": "event",
+          "type": "dynamic"
+        },
+        {
+          "name": "ext",
+          "type": "dynamic"
+        },
+        {
+          "name": "file",
+          "type": "dynamic"
+        },
+        {
+          "name": "group",
+          "type": "dynamic"
+        },
+        {
+          "name": "host",
+          "type": "dynamic"
+        },
+        {
+          "name": "host_address",
+          "type": "string"
+        },
+        {
+          "name": "host_ipv4",
+          "type": "string"
+        },
+        {
+          "name": "host_ipv6",
+          "type": "string"
+        },
+        {
+          "name": "host_name",
+          "type": "string"
+        },
+        {
+          "name": "http",
+          "type": "dynamic"
+        },
+        {
+          "name": "acs_id",
+          "type": "string"
+        },
+        {
+          "name": "identity",
+          "type": "string"
+        },
+        {
+          "name": "ingested_time",
+          "type": "datetime"
+        },
+        {
+          "name": "insertion_time",
+          "type": "datetime"
+        },
+        {
+          "name": "labels",
+          "type": "string"
+        },
+        {
+          "name": "log",
+          "type": "dynamic"
+        },
+        {
+          "name": "matched_rules",
+          "type": "dynamic"
+        },
+        {
+          "name": "message",
+          "type": "string"
+        },
+        {
+          "name": "network",
+          "type": "dynamic"
+        },
+        {
+          "name": "organization",
+          "type": "dynamic"
+        },
+        {
+          "name": "process",
+          "type": "dynamic"
+        },
+        {
+          "name": "product",
+          "type": "string"
+        },
+        {
+          "name": "registry",
+          "type": "dynamic"
+        },
+        {
+          "name": "related",
+          "type": "dynamic"
+        },
+        {
+          "name": "related_events",
+          "type": "dynamic"
+        },
+        {
+          "name": "resource",
+          "type": "dynamic"
+        },
+        {
+          "name": "risk_score",
+          "type": "real"
+        },
+        {
+          "name": "rule",
+          "type": "dynamic"
+        },
+        {
+          "name": "service",
+          "type": "dynamic"
+        },
+        {
+          "name": "severity",
+          "type": "string"
+        },
+        {
+          "name": "source",
+          "type": "dynamic"
+        },
+        {
+          "name": "source_address",
+          "type": "string"
+        },
+        {
+          "name": "source_ipv4",
+          "type": "string"
+        },
+        {
+          "name": "source_ipv6",
+          "type": "string"
+        },
+        {
+          "name": "source_port",
+          "type": "real"
+        },
+        {
+          "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "tags",
+          "type": "dynamic"
+        },
+        {
+          "name": "threat",
+          "type": "dynamic"
+        },
+        {
+          "name": "tls",
+          "type": "dynamic"
+        },
+        {
+          "name": "trace_id",
+          "type": "string"
+        },
+        {
+          "name": "transaction_id",
+          "type": "string"
+        },
+        {
+          "name": "acs_type",
+          "type": "string"
+        },
+        {
+          "name": "url",
+          "type": "dynamic"
+        },
+        {
+          "name": "user",
+          "type": "dynamic"
+        },
+        {
+          "name": "user_agent",
+          "type": "string"
+        },
+        {
+          "name": "user_id",
+          "type": "string"
+        },
+        {
+          "name": "user_name",
+          "type": "string"
+        },
+        {
+          "name": "vendor",
+          "type": "string"
+        },
+        {
+          "name": "vulnerability_id",
+          "type": "string"
+        },
+        {
+          "name": "timestamp",
+          "type": "datetime"
+        },
+        {
+          "name": "acs_resource_id",
+          "type": "string"
+        },
+        {
+          "name": "acs_resource_name",
+          "type": "string"
+        },
+        {
+          "name": "acs_resource_type",
+          "type": "string"
+        },
+        {
+          "name": "resource_additional_data",
+          "type": "string"
+        }
+      ],
+      "streamColumns": [
+        {
+          "name": "action",
+          "type": "string"
+        },
+        {
+          "name": "agent",
+          "type": "dynamic"
+        },
+        {
+          "name": "aggregation_count",
+          "type": "real"
+        },
+        {
+          "name": "aggregation_end",
+          "type": "datetime"
+        },
+        {
+          "name": "aggregation_start",
+          "type": "datetime"
+        },
+        {
+          "name": "cloud",
+          "type": "dynamic"
+        },
+        {
+          "name": "container",
+          "type": "dynamic"
+        },
+        {
+          "name": "correlated_count",
+          "type": "real"
+        },
+        {
+          "name": "customer_id",
+          "type": "string"
+        },
+        {
+          "name": "customer_name",
+          "type": "string"
+        },
+        {
+          "name": "data_stream",
+          "type": "dynamic"
+        },
+        {
+          "name": "dest_address",
+          "type": "string"
+        },
+        {
+          "name": "dest_ipv4",
+          "type": "string"
+        },
+        {
+          "name": "dest_ipv6",
+          "type": "string"
+        },
+        {
+          "name": "dest_port",
+          "type": "real"
+        },
+        {
+          "name": "destination",
+          "type": "dynamic"
+        },
+        {
+          "name": "device",
+          "type": "dynamic"
+        },
+        {
+          "name": "dns",
+          "type": "dynamic"
+        },
+        {
+          "name": "email",
+          "type": "dynamic"
+        },
+        {
+          "name": "error",
+          "type": "dynamic"
+        },
+        {
+          "name": "event",
+          "type": "dynamic"
+        },
+        {
+          "name": "ext",
+          "type": "dynamic"
+        },
+        {
+          "name": "file",
+          "type": "dynamic"
+        },
+        {
+          "name": "group",
+          "type": "dynamic"
+        },
+        {
+          "name": "host",
+          "type": "dynamic"
+        },
+        {
+          "name": "host_address",
+          "type": "string"
+        },
+        {
+          "name": "host_ipv4",
+          "type": "string"
+        },
+        {
+          "name": "host_ipv6",
+          "type": "string"
+        },
+        {
+          "name": "host_name",
+          "type": "string"
+        },
+        {
+          "name": "http",
+          "type": "dynamic"
+        },
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "identity",
+          "type": "string"
+        },
+        {
+          "name": "ingested_time",
+          "type": "datetime"
+        },
+        {
+          "name": "insertion_time",
+          "type": "datetime"
+        },
+        {
+          "name": "labels",
+          "type": "string"
+        },
+        {
+          "name": "log",
+          "type": "dynamic"
+        },
+        {
+          "name": "matched_rules",
+          "type": "dynamic"
+        },
+        {
+          "name": "message",
+          "type": "string"
+        },
+        {
+          "name": "network",
+          "type": "dynamic"
+        },
+        {
+          "name": "organization",
+          "type": "dynamic"
+        },
+        {
+          "name": "process",
+          "type": "dynamic"
+        },
+        {
+          "name": "product",
+          "type": "string"
+        },
+        {
+          "name": "registry",
+          "type": "dynamic"
+        },
+        {
+          "name": "related",
+          "type": "dynamic"
+        },
+        {
+          "name": "related_events",
+          "type": "dynamic"
+        },
+        {
+          "name": "resource",
+          "type": "dynamic"
+        },
+        {
+          "name": "risk_score",
+          "type": "real"
+        },
+        {
+          "name": "rule",
+          "type": "dynamic"
+        },
+        {
+          "name": "service",
+          "type": "dynamic"
+        },
+        {
+          "name": "severity",
+          "type": "string"
+        },
+        {
+          "name": "source",
+          "type": "dynamic"
+        },
+        {
+          "name": "source_address",
+          "type": "string"
+        },
+        {
+          "name": "source_ipv4",
+          "type": "string"
+        },
+        {
+          "name": "source_ipv6",
+          "type": "string"
+        },
+        {
+          "name": "source_port",
+          "type": "real"
+        },
+        {
+          "name": "span_id",
+          "type": "string"
+        },
+        {
+          "name": "tags",
+          "type": "dynamic"
+        },
+        {
+          "name": "threat",
+          "type": "dynamic"
+        },
+        {
+          "name": "tls",
+          "type": "dynamic"
+        },
+        {
+          "name": "trace_id",
+          "type": "string"
+        },
+        {
+          "name": "transaction_id",
+          "type": "string"
+        },
+        {
+          "name": "type",
+          "type": "string"
+        },
+        {
+          "name": "url",
+          "type": "dynamic"
+        },
+        {
+          "name": "user",
+          "type": "dynamic"
+        },
+        {
+          "name": "user_agent",
+          "type": "string"
+        },
+        {
+          "name": "user_id",
+          "type": "string"
+        },
+        {
+          "name": "user_name",
+          "type": "string"
+        },
+        {
+          "name": "vendor",
+          "type": "string"
+        },
+        {
+          "name": "vulnerability_id",
+          "type": "string"
+        },
+        {
+          "name": "timestamp",
+          "type": "datetime"
+        },
+        {
+          "name": "acs_type",
+          "type": "string"
+        },
+        {
+          "name": "acs_resource_id",
+          "type": "string"
+        },
+        {
+          "name": "acs_resource_name",
+          "type": "string"
+        },
+        {
+          "name": "acs_resource_type",
+          "type": "string"
+        },
+        {
+          "name": "resource_additional_data",
+          "type": "string"
+        }
+      ],
+      "transformKql": "source\n| extend TimeGenerated = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())\n| extend acs_id = tostring(['id']), acs_type = iif(isnotempty(acs_type), acs_type, tostring(['type']))\n| project-away ['id'], ['type']\n"
+    },
+    "$fxv#1": {
+      "description": "Generated by gen-sentinel-asim.py from the ACS-to-ASIM mappings in solutions/asim. Do not edit by hand.",
+      "routes": [
+        {
+          "name": "AuditEvent",
+          "outputStream": "Microsoft-ASimAuditEventLogs",
+          "table": "ASimAuditEventLogs",
+          "transformKql": "source\n| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')\n| extend _category = tolower(tostring(event.category))\n| where isnotempty(action) and (_category has 'iam' or _category has 'configuration' or _category has 'audit' or (isempty(_category) and isnotempty(tostring(cloud.provider))))\n| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))\n| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')\n| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())\n| where _time > ago(2d)\n| project\n    TimeGenerated = _time,\n    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),\n    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),\n    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),\n    EventResult = _result,\n    EventOriginalResultDetails = tostring(event.reason),\n    EventOriginalType = tostring(action),\n    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),\n    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', _result == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),\n    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),\n    EventMessage = message,\n    EventProduct = product,\n    EventVendor = vendor,\n    EventSchemaVersion = '0.1.2',\n    DvcHostname = host_name,\n    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),\n    EventType = case(\n        _action startswith 'delete' or _action startswith 'remove' or _action startswith 'drop', 'Delete',\n        _action startswith 'disable' or _action startswith 'stop' or _action startswith 'deactivate' or _action startswith 'suspend', 'Disable',\n        _action startswith 'enable' or _action startswith 'start' or _action startswith 'activate', 'Enable',\n        _action startswith 'create' or _action startswith 'add' or _action startswith 'put' or _action startswith 'insert' or _action startswith 'register', 'Create',\n        _action startswith 'get' or _action startswith 'list' or _action startswith 'describe' or _action startswith 'read' or _action startswith 'search' or _action startswith 'lookup', 'Read',\n        _action startswith 'update' or _action startswith 'modify' or _action startswith 'set' or _action startswith 'change' or _action startswith 'attach' or _action startswith 'detach' or _action startswith 'reset' or _action startswith 'replace', 'Set',\n        _action contains 'delet' or _action contains 'remov', 'Delete',\n        _action contains 'deactivat' or _action contains 'disabl' or _action contains 'suspend', 'Disable',\n        _action contains 'activat' or _action contains 'enabl', 'Enable',\n        _action contains 'creat' or _action has 'add', 'Create',\n        _action has 'read' or _action has 'list' or _action has 'get' or _action has 'view', 'Read',\n        _action contains 'updat' or _action contains 'modif' or _action contains 'chang' or _action has 'reset', 'Set',\n        'Other'),\n    Operation = tostring(action),\n    Object = case(isnotempty(tostring(user.target.name)), tostring(user.target.name), isnotempty(tostring(group.name)), tostring(group.name), gettype(resource) == 'array', tostring(resource[0].name), isnotempty(tostring(resource.name)), tostring(resource.name), isnotempty(tostring(service.target_name)), tostring(service.target_name), isnotempty(tostring(cloud.account_name)), tostring(cloud.account_name), isnotempty(tostring(cloud.account_id)), tostring(cloud.account_id), product),\n    ObjectId = case(isnotempty(tostring(user.target.id)), tostring(user.target.id), isnotempty(tostring(group.id)), tostring(group.id), gettype(resource) == 'array', tostring(resource[0].id), tostring(resource.id)),\n    ObjectType = case(isnotempty(tostring(user.target.name)) or isnotempty(tostring(group.name)), 'Directory Service Object', isnotempty(tostring(cloud.provider)), 'Cloud Resource', 'Other'),\n    OriginalObjectType = case(gettype(resource) == 'array', tostring(resource[0].type), tostring(resource.type)),\n    ActorUsername = case(isnotempty(user_name), user_name, user_id),\n    ActorUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\\\', 'Windows', 'Simple'),\n    ActorUserId = user_id,\n    SrcIpAddr = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, source_address matches regex '^[0-9a-fA-F:.]+$', source_address, ''),\n    HttpUserAgent = user_agent,\n    TargetAppName = case(isnotempty(tostring(service.target_name)), tostring(service.target_name), isnotempty(tostring(service.name)), tostring(service.name), product),\n    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)",
+          "source": "AuditEvent.kql"
+        },
+        {
+          "name": "Authentication",
+          "outputStream": "Microsoft-ASimAuthenticationEventLogs",
+          "table": "ASimAuthenticationEventLogs",
+          "transformKql": "source\n| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')\n| extend _category = tolower(tostring(event.category))\n| where (_category has 'authentication' or _category has 'session') and (isnotempty(user_name) or isnotempty(user_id))\n| extend _outcome = tolower(tostring(event.outcome)), _action = tolower(tostring(action)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))\n| extend _result = case(_outcome in ('success', 'succeeded', 'allowed'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked'), 'Failure', _outcome == 'partial', 'Partial', 'NA')\n| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())\n| where _time > ago(2d)\n| project\n    TimeGenerated = _time,\n    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),\n    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),\n    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),\n    EventType = iif(_action contains 'logout' or _action contains 'logoff' or _action contains 'signout' or _action contains 'sign_out' or _action contains 'session.end' or _action contains 'session_end', 'Logoff', 'Logon'),\n    EventResult = _result,\n    EventResultDetails = iif(_result == 'Failure', 'Other', ''),\n    EventOriginalResultDetails = tostring(event.reason),\n    EventOriginalType = tostring(action),\n    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),\n    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', _result == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),\n    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),\n    EventMessage = message,\n    EventProduct = product,\n    EventVendor = vendor,\n    EventSchemaVersion = '0.1.4',\n    DvcHostname = host_name,\n    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),\n    TargetUsername = case(isnotempty(user_name), user_name, user_id),\n    TargetUsernameType = case(isempty(user_name), 'Simple', user_name has '@', 'UPN', user_name contains '\\\\', 'Windows', 'Simple'),\n    TargetUserId = user_id,\n    TargetUserIdType = iif(isnotempty(user_id), 'Other', ''),\n    TargetAppName = case(isnotempty(tostring(service.target_name)), tostring(service.target_name), isnotempty(tostring(service.name)), tostring(service.name), product),\n    TargetAppId = tostring(service.target_id),\n    TargetAppType = 'Other',\n    SrcIpAddr = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, source_address matches regex '^[0-9a-fA-F:.]+$', source_address, ''),\n    SrcPortNumber = toint(source_port),\n    SrcGeoCountry = tostring(source.geo.country_name),\n    SrcGeoCity = tostring(source.geo.city_name),\n    SrcGeoRegion = tostring(source.geo.region_name),\n    HttpUserAgent = user_agent,\n    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)",
+          "source": "Authentication.kql"
+        },
+        {
+          "name": "Dns",
+          "outputStream": "Microsoft-ASimDnsActivityLogs",
+          "table": "ASimDnsActivityLogs",
+          "transformKql": "source\n| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')\n| where isnotempty(tostring(dns.question.name))\n| extend _rcode = toupper(tostring(dns.response_code))\n| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))\n| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')\n| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())\n| where _time > ago(2d)\n| project\n    TimeGenerated = _time,\n    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),\n    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),\n    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),\n    EventResult = case(isempty(_rcode), _result, _rcode == 'NOERROR', 'Success', 'Failure'),\n    EventOriginalType = tostring(action),\n    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),\n    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', case(isempty(_rcode), _result, _rcode == 'NOERROR', 'Success', 'Failure') == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),\n    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),\n    EventMessage = message,\n    EventProduct = product,\n    EventVendor = vendor,\n    EventSchemaVersion = '0.1.7',\n    DvcHostname = host_name,\n    Dvc = case(isnotempty(host_name), host_name, isnotempty(host_ipv4), host_ipv4, isnotempty(product), product, vendor),\n    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),\n    EventType = 'Query',\n    EventSubType = iif(isnotempty(_rcode) or tolower(tostring(dns.type)) in ('answer', 'response'), 'response', 'request'),\n    DnsQuery = tostring(dns.question.name),\n    DnsQueryTypeName = toupper(tostring(dns.question.type)),\n    DnsQueryClassName = toupper(tostring(dns.question.class)),\n    DnsResponseName = _rcode,\n    EventResultDetails = _rcode,\n    DnsResponseCode = toint(case(_rcode == 'NOERROR', 0, _rcode == 'FORMERR', 1, _rcode == 'SERVFAIL', 2, _rcode == 'NXDOMAIN', 3, _rcode == 'NOTIMP', 4, _rcode == 'REFUSED', 5, tolong(''))),\n    TransactionIdHex = tostring(dns.id),\n    SrcIpAddr = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, source_address matches regex '^[0-9a-fA-F:.]+$', source_address, ''),\n    DstIpAddr = case(isnotempty(dest_ipv4), dest_ipv4, isnotempty(dest_ipv6), dest_ipv6, dest_address matches regex '^[0-9a-fA-F:.]+$', dest_address, ''),\n    SrcPortNumber = toint(source_port),\n    Src = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, isnotempty(tostring(source.domain)), tostring(source.domain), host_name),\n    DstPortNumber = toint(dest_port),\n    NetworkProtocol = toupper(tostring(network.transport)),\n    SrcUsername = user_name,\n    DvcAction = case(_action in ('allow', 'allowed', 'accept', 'accepted', 'permit', 'pass') or _outcome in ('allow', 'allowed'), 'Allow', _action in ('deny', 'denied', 'block', 'blocked', 'reject', 'rejected') or _outcome in ('deny', 'denied', 'blocked'), 'Deny', _action in ('drop', 'dropped'), 'Drop', ''),\n    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)",
+          "source": "Dns.kql"
+        },
+        {
+          "name": "FileEvent",
+          "outputStream": "Microsoft-ASimFileEventLogs",
+          "table": "ASimFileEventLogs",
+          "transformKql": "source\n| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')\n| extend _category = tolower(tostring(event.category))\n| where _category has 'file' and (isnotempty(tostring(file.path)) or isnotempty(tostring(file.name)))\n| extend _path = case(isnotempty(tostring(file.path)), tostring(file.path), tostring(file.name))\n| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))\n| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')\n| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())\n| where _time > ago(2d)\n| project\n    TimeGenerated = _time,\n    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),\n    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),\n    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),\n    EventResult = _result,\n    EventOriginalResultDetails = tostring(event.reason),\n    EventOriginalType = tostring(action),\n    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),\n    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', _result == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),\n    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),\n    EventMessage = message,\n    EventProduct = product,\n    EventVendor = vendor,\n    EventSchemaVersion = '0.2.1',\n    EventSchema = 'FileEvent',\n    DvcHostname = host_name,\n    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),\n    EventType = case(_action contains 'delet' or _action contains 'remov', 'FileDeleted', _action contains 'renam', 'FileRenamed', _action contains 'creat' or _action contains 'upload', 'FileCreated', _action contains 'modif' or _action contains 'writ' or _action contains 'updat' or _action contains 'chang', 'FileModified', _action contains 'copy' or _action contains 'copied', 'FileCopied', _action has 'move' or _action has 'moved', 'FileMoved', 'FileAccessed'),\n    TargetFilePath = _path,\n    TargetFilePathType = case(_path contains '://', 'URL', _path startswith '\\\\\\\\', 'Windows Share', _path contains ':\\\\', 'Windows Local', _path startswith '/', 'Unix', ''),\n    TargetFileName = tostring(file.name),\n    TargetFileDirectory = tostring(file.directory),\n    TargetFileExtension = tostring(file.extension),\n    TargetFileMimeType = tostring(file.mime_type),\n    TargetFileMD5 = tostring(file.hash.md5),\n    TargetFileSHA1 = tostring(file.hash.sha1),\n    TargetFileSHA256 = tostring(file.hash.sha256),\n    TargetFileSHA512 = tostring(file.hash.sha512),\n    TargetFileSize = tolong(file.size),\n    ActorUsername = user_name,\n    ActorUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\\\', 'Windows', 'Simple'),\n    SrcIpAddr = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, source_address matches regex '^[0-9a-fA-F:.]+$', source_address, ''),\n    ActingProcessName = case(isnotempty(tostring(process.executable)), tostring(process.executable), tostring(process.name)),\n    ActingProcessCommandLine = tostring(process.command_line),\n    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)",
+          "source": "FileEvent.kql"
+        },
+        {
+          "name": "NetworkSession",
+          "outputStream": "Microsoft-ASimNetworkSessionLogs",
+          "table": "ASimNetworkSessionLogs",
+          "transformKql": "source\n| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')\n| extend _category = tolower(tostring(event.category))\n| where _category has 'network' and isempty(tostring(dns.question.name)) and (isnotempty(source_ipv4) or isnotempty(source_ipv6) or isnotempty(dest_ipv4) or isnotempty(dest_ipv6) or source_address matches regex '^[0-9a-fA-F:.]+$' or dest_address matches regex '^[0-9a-fA-F:.]+$')\n| extend _dir = tolower(tostring(network.direction))\n| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))\n| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')\n| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())\n| where _time > ago(2d)\n| project\n    TimeGenerated = _time,\n    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),\n    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),\n    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),\n    EventResult = _result,\n    EventOriginalResultDetails = tostring(event.reason),\n    EventOriginalType = tostring(action),\n    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),\n    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', _result == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),\n    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),\n    EventMessage = message,\n    EventProduct = product,\n    EventVendor = vendor,\n    EventSchemaVersion = '0.2.6',\n    DvcHostname = host_name,\n    Dvc = case(isnotempty(host_name), host_name, isnotempty(host_ipv4), host_ipv4, isnotempty(product), product, vendor),\n    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),\n    EventType = 'NetworkSession',\n    DvcAction = case(_action in ('allow', 'allowed', 'accept', 'accepted', 'permit', 'pass') or _outcome in ('allow', 'allowed'), 'Allow', _action in ('deny', 'denied', 'block', 'blocked', 'reject', 'rejected') or _outcome in ('deny', 'denied', 'blocked'), 'Deny', _action in ('drop', 'dropped'), 'Drop', ''),\n    SrcIpAddr = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, source_address matches regex '^[0-9a-fA-F:.]+$', source_address, ''),\n    DstIpAddr = case(isnotempty(dest_ipv4), dest_ipv4, isnotempty(dest_ipv6), dest_ipv6, dest_address matches regex '^[0-9a-fA-F:.]+$', dest_address, ''),\n    SrcPortNumber = toint(source_port),\n    DstPortNumber = toint(dest_port),\n    SrcHostname = tostring(source.domain),\n    DstHostname = tostring(destination.domain),\n    SrcMacAddr = tostring(source.mac),\n    DstMacAddr = tostring(destination.mac),\n    SrcGeoCountry = tostring(source.geo.country_name),\n    DstGeoCountry = tostring(destination.geo.country_name),\n    SrcNatIpAddr = tostring(source.nat.ipv4),\n    DstNatIpAddr = tostring(destination.nat.ipv4),\n    SrcUsername = user_name,\n    SrcUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\\\', 'Windows', 'Simple'),\n    NetworkProtocol = toupper(tostring(network.transport)),\n    NetworkApplicationProtocol = tostring(network.protocol),\n    NetworkDirection = case(_dir in ('inbound', 'ingress', 'in'), 'Inbound', _dir in ('outbound', 'egress', 'out'), 'Outbound', _dir in ('internal', 'local'), 'Local', _dir == 'external', 'External', ''),\n    NetworkBytes = tolong(network.bytes),\n    NetworkPackets = tolong(network.packets),\n    NetworkRuleName = tostring(rule.name),\n    NetworkSessionId = tostring(network.community_id),\n    DstAppName = tostring(network.application),\n    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)",
+          "source": "NetworkSession.kql"
+        },
+        {
+          "name": "ProcessEvent",
+          "outputStream": "Microsoft-ASimProcessEventLogs",
+          "table": "ASimProcessEventLogs",
+          "transformKql": "source\n| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')\n| extend _category = tolower(tostring(event.category))\n| where _category has 'process' and (isnotempty(tostring(process.name)) or isnotempty(tostring(process.executable)) or isnotempty(tostring(process.command_line)))\n| extend _hasTarget = isnotempty(tostring(process.target.name)) or isnotempty(tostring(process.target.executable)) or isnotempty(tostring(process.target.pid))\n| extend _proc = case(isnotempty(tostring(process.executable)), tostring(process.executable), tostring(process.name)), _parent = case(isnotempty(tostring(process.parent.executable)), tostring(process.parent.executable), tostring(process.parent.name))\n| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))\n| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')\n| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())\n| where _time > ago(2d)\n| project\n    TimeGenerated = _time,\n    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),\n    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),\n    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),\n    EventResult = _result,\n    EventOriginalResultDetails = tostring(event.reason),\n    EventOriginalType = tostring(action),\n    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),\n    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', _result == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),\n    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),\n    EventMessage = message,\n    EventProduct = product,\n    EventVendor = vendor,\n    EventSchemaVersion = '0.1.4',\n    DvcHostname = host_name,\n    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),\n    EventType = iif(_action contains 'terminat' or _action contains 'exited' or _action contains 'killed' or _action contains 'stopped' or _action has 'exit' or _action has 'stop' or _action has 'end' or _action has 'kill', 'ProcessTerminated', 'ProcessCreated'),\n    TargetProcessName = iif(_hasTarget, case(isnotempty(tostring(process.target.executable)), tostring(process.target.executable), tostring(process.target.name)), _proc),\n    TargetProcessCommandLine = iif(_hasTarget, tostring(process.target.command_line), tostring(process.command_line)),\n    TargetProcessId = iif(_hasTarget, tostring(tolong(process.target.pid)), tostring(tolong(process.pid))),\n    TargetProcessCurrentDirectory = iif(_hasTarget, '', tostring(process.working_directory)),\n    ActingProcessName = iif(_hasTarget, _proc, _parent),\n    ActingProcessCommandLine = iif(_hasTarget, tostring(process.command_line), tostring(process.parent.command_line)),\n    ActingProcessId = iif(_hasTarget, tostring(tolong(process.pid)), tostring(tolong(process.parent.pid))),\n    ParentProcessName = iif(_hasTarget, _parent, ''),\n    ParentProcessId = iif(_hasTarget, tostring(tolong(process.parent.pid)), ''),\n    ActorUsername = case(isnotempty(tostring(process.username)), tostring(process.username), user_name),\n    ActorUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\\\', 'Windows', 'Simple'),\n    TargetUsername = case(_hasTarget and isnotempty(tostring(process.target.username)), tostring(process.target.username), isnotempty(tostring(process.username)), tostring(process.username), user_name),\n    TargetUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\\\', 'Windows', 'Simple'),\n    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)",
+          "source": "ProcessEvent.kql"
+        },
+        {
+          "name": "RegistryEvent",
+          "outputStream": "Microsoft-ASimRegistryEventLogs",
+          "table": "ASimRegistryEventLogs",
+          "transformKql": "source\n| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')\n| where isnotempty(tostring(registry.path)) or isnotempty(tostring(registry.key))\n| extend _verb = tolower(tostring(action))\n| where isnotempty(_verb) and not(_verb contains 'read' or _verb contains 'query' or _verb startswith 'get' or _verb contains 'open' or _verb contains 'enum')\n| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))\n| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')\n| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())\n| where _time > ago(2d)\n| project\n    TimeGenerated = _time,\n    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),\n    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),\n    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),\n    EventResult = _result,\n    EventOriginalResultDetails = tostring(event.reason),\n    EventOriginalType = tostring(action),\n    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),\n    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', _result == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),\n    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),\n    EventMessage = message,\n    EventProduct = product,\n    EventVendor = vendor,\n    EventSchemaVersion = '0.1.2',\n    EventSchema = 'RegistryEvent',\n    DvcHostname = host_name,\n    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),\n    EventType = case(_action contains 'delet' and isnotempty(tostring(registry.value)), 'RegistryValueDeleted', _action contains 'delet', 'RegistryKeyDeleted', _action contains 'renam', 'RegistryKeyRenamed', _action contains 'creat' and isempty(tostring(registry.value)), 'RegistryKeyCreated', 'RegistryValueSet'),\n    RegistryKey = case(isnotempty(tostring(registry.path)), tostring(registry.path), strcat(tostring(registry.hive), '\\\\', tostring(registry.key))),\n    RegistryValue = tostring(registry.value),\n    RegistryValueType = tostring(registry.data.type),\n    RegistryValueData = case(array_length(registry.data.strings) > 0, tostring(registry.data.strings[0]), tostring(registry.data.bytes)),\n    ActorUsername = user_name,\n    ActorUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\\\', 'Windows', 'Simple'),\n    ActingProcessName = case(isnotempty(tostring(process.executable)), tostring(process.executable), tostring(process.name)),\n    ActingProcessId = tostring(tolong(process.pid)),\n    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)",
+          "source": "RegistryEvent.kql"
+        },
+        {
+          "name": "WebSession",
+          "outputStream": "Microsoft-ASimWebSessionLogs",
+          "table": "ASimWebSessionLogs",
+          "transformKql": "source\n| where tolower(case(isnotempty(acs_type), acs_type, tostring(['type']))) !in ('finding', 'alert')\n| extend _category = tolower(tostring(event.category))\n| where _category has 'web' or (isnotempty(tostring(url.original)) and isnotempty(tostring(http.request.method)))\n| extend _status = toint(http.response.status_code)\n| extend _action = tolower(tostring(action)), _outcome = tolower(tostring(event.outcome)), _sev = tolower(case(isnotempty(severity), severity, tostring(event.severity)))\n| extend _result = case(_outcome in ('success', 'succeeded', 'allowed', 'allow'), 'Success', _outcome in ('failure', 'failed', 'fail', 'denied', 'blocked', 'deny'), 'Failure', _outcome == 'partial', 'Partial', 'NA')\n| extend _time = case(isnotnull(['timestamp']), ['timestamp'], isnotnull(ingested_time), ingested_time, now())\n| where _time > ago(2d)\n| project\n    TimeGenerated = _time,\n    EventCount = iif(isnull(aggregation_count) or aggregation_count < 1, toint(1), toint(aggregation_count)),\n    EventStartTime = case(isnotnull(todatetime(event.start)), todatetime(event.start), isnotnull(aggregation_start), aggregation_start, _time),\n    EventEndTime = case(isnotnull(todatetime(event.end)), todatetime(event.end), isnotnull(aggregation_end), aggregation_end, _time),\n    EventResult = case(isnotnull(_status) and _status >= 400, 'Failure', isnotnull(_status), 'Success', _result),\n    EventOriginalResultDetails = tostring(event.reason),\n    EventOriginalType = tostring(action),\n    EventOriginalUid = case(isnotempty(tostring(event.id)), tostring(event.id), tostring(['id'])),\n    EventSeverity = case(_sev in ('critical', 'high'), 'High', _sev in ('medium', 'warn', 'warning'), 'Medium', case(isnotnull(_status) and _status >= 400, 'Failure', isnotnull(_status), 'Success', _result) == 'Failure' or _sev in ('low', 'error'), 'Low', 'Informational'),\n    EventOriginalSeverity = case(isnotempty(severity), severity, tostring(event.severity)),\n    EventMessage = message,\n    EventProduct = product,\n    EventVendor = vendor,\n    EventSchemaVersion = '0.2.6',\n    DvcHostname = host_name,\n    Dvc = case(isnotempty(host_name), host_name, isnotempty(host_ipv4), host_ipv4, isnotempty(product), product, vendor),\n    DvcIpAddr = case(isnotempty(host_ipv4), host_ipv4, host_ipv6),\n    EventType = 'HTTPsession',\n    EventResultDetails = tostring(_status),\n    Url = tostring(url.original),\n    HttpRequestMethod = toupper(tostring(http.request.method)),\n    HttpVersion = tostring(http.version),\n    HttpReferrer = tostring(http.request.referrer),\n    HttpContentType = tostring(http.response.mime_type),\n    HttpUserAgent = user_agent,\n    SrcIpAddr = case(isnotempty(source_ipv4), source_ipv4, isnotempty(source_ipv6), source_ipv6, source_address matches regex '^[0-9a-fA-F:.]+$', source_address, ''),\n    DstIpAddr = case(isnotempty(dest_ipv4), dest_ipv4, isnotempty(dest_ipv6), dest_ipv6, dest_address matches regex '^[0-9a-fA-F:.]+$', dest_address, ''),\n    SrcPortNumber = toint(source_port),\n    DstPortNumber = toint(dest_port),\n    DstHostname = tostring(destination.domain),\n    SrcUsername = user_name,\n    SrcUsernameType = case(isempty(user_name), '', user_name has '@', 'UPN', user_name contains '\\\\', 'Windows', 'Simple'),\n    SrcBytes = tolong(http.request.bytes),\n    DstBytes = tolong(http.response.bytes),\n    DvcAction = case(_action in ('allow', 'allowed', 'accept', 'accepted', 'permit', 'pass') or _outcome in ('allow', 'allowed'), 'Allow', _action in ('deny', 'denied', 'block', 'blocked', 'reject', 'rejected') or _outcome in ('deny', 'denied', 'blocked'), 'Deny', _action in ('drop', 'dropped'), 'Drop', ''),\n    AdditionalFields = pack('AbstractEventId', tostring(['id']), 'AbstractCategory', tostring(event.category), 'AbstractDataset', tostring(data_stream.dataset), 'AbstractMatchedRules', matched_rules)",
+          "source": "WebSession.kql"
+        }
+      ]
+    },
+    "$fxv#2": "#!/usr/bin/env bash\n# =============================================================================\n#  Abstract Security - Sentinel destination identity, hardened deploymentScript\n#\n#  Runs inside Microsoft.Resources/deploymentScripts (AzureCLI) as the\n#  user-assigned provisioning identity. Tenant bootstrap grants the required\n#  Microsoft Graph application permissions with admin consent.\n#\n#  Replaces the original 16-line inline script in\n#  templates/destinations/sentinel-destination-with-app.bicep. Same job, but it\n#  survives the three failure modes the inline version did not:\n#\n#    1. SECRET CHURN. The original called `az ad app credential reset --append`\n#       on EVERY deployment. Re-run the template and you got a brand-new secret\n#       and a new Key Vault version while the value already configured in\n#       Abstract kept working - until someone assumed the newest version was\n#       correct. Now: only mint a secret when the vault holds none with more than\n#       30 days left.\n#    2. SILENT PARTIAL SUCCESS. Every step was unguarded, so an app created\n#       without a service principal still reported success and the DCR role\n#       assignment failed later with an opaque PrincipalNotFound.\n#    3. NO OUTPUT VERIFICATION. Nothing read back what it had created.\n#\n#  The app being created is Abstract's runtime identity. It receives DCR RBAC\n#  (Monitoring Metrics Publisher, plus Monitoring Contributor only if the template\n#  is told to) from the template;\n#  it is distinct from the provisioning identity running this script.\n#\n#  Environment (set by the template):\n#    APP_NAME       app display name - ALSO the idempotency key\n#    KEY_VAULT_MODE Create, Existing, or None\n#    KV_NAME        Key Vault that receives the secret (Create/Existing only)\n#    VAULT_URI      vault URI, for the returned secret reference (optional)\n#    SECRET_NAME    secret name in the vault\n#    SECRET_YEARS   secret lifetime in years\n#    FORCE_ROTATE   'true' to mint a new secret regardless of the existing one\n# =============================================================================\nset -euo pipefail\n\nlog()  { printf '==> %s\\n' \"$*\"; }\nok()   { printf '    + %s\\n' \"$*\"; }\nwarn() { printf '    ! %s\\n' \"$*\"; }\ndie()  { printf '    X %s\\n' \"$*\" >&2; exit 1; }\n\n: \"${APP_NAME:?APP_NAME not set}\"\n: \"${KEY_VAULT_MODE:=Create}\"\n: \"${KV_NAME:=}\"\n: \"${VAULT_URI:=}\"\n: \"${SECRET_NAME:=abstract-sentinel-client-secret}\"\n: \"${SECRET_YEARS:=1}\"\n: \"${FORCE_ROTATE:=false}\"\n\ncase \"$KEY_VAULT_MODE\" in\n  Create|Existing|None) ;;\n  *) die \"KEY_VAULT_MODE must be Create, Existing, or None\" ;;\nesac\n\nif [ \"$KEY_VAULT_MODE\" != \"None\" ] && { [ -z \"$KV_NAME\" ] || [ -z \"$VAULT_URI\" ]; }; then\n  die \"Key Vault name and URI are required when KEY_VAULT_MODE is $KEY_VAULT_MODE\"\nfi\n\nTENANT_ID=$(az account show --query tenantId -o tsv) || die \"cannot read tenant - is the script identity attached?\"\nok \"tenant $TENANT_ID\"\n\n# --- App registration -------------------------------------------------------\n# The display name is the idempotency key, but a name proves nothing: any app in\n# the tenant can carry it, and this identity can add credentials to any app. So\n# an existing app is reused only when exactly one has the name and it carries the\n# marker tag this template writes.\nMARKER=\"abstract:sentinel-destination\"\nlog \"Ensuring app registration '$APP_NAME'\"\n# A Graph permission granted to the identity in the same deployment can take a few\n# minutes to reach its tokens, so a refused list is retried before it is fatal.\nMATCHES=\"\"\nfor attempt in 1 2 3 4 5 6 7 8 9 10; do\n  if MATCHES=$(az ad app list --filter \"displayName eq '${APP_NAME}'\" --query \"[].{appId:appId, tags:tags}\" -o json 2>/tmp/app-list.err); then\n    break\n  fi\n  MATCHES=\"\"\n  [ \"$attempt\" -lt 10 ] && { warn \"cannot list app registrations yet (attempt $attempt/10), retrying in 30s\"; sleep 30; }\ndone\n[ -n \"$MATCHES\" ] || die \"cannot list app registrations - does the script identity hold Application.ReadWrite.All (or, for an app it owns, Application.ReadWrite.OwnedBy) with admin consent? $(head -c 300 /tmp/app-list.err)\"\nread -r MATCH_COUNT APP_ID MARKED <<<\"$(printf '%s' \"$MATCHES\" | python3 -c \"\nimport json, sys\napps = json.load(sys.stdin) or []\nfirst = apps[0] if apps else {}\nprint(len(apps), first.get('appId') or '-', 'yes' if '$MARKER' in (first.get('tags') or []) else 'no')\")\"\nif [ \"$MATCH_COUNT\" -gt 1 ]; then\n  die \"$MATCH_COUNT app registrations are named '$APP_NAME' - choose a unique appDisplayName\"\nelif [ \"$MATCH_COUNT\" -eq 1 ]; then\n  if [ \"$MARKED\" != yes ]; then\n    die \"an app named '$APP_NAME' ($APP_ID) exists but was not created by this template, so it will not be reused or given a credential. Choose another appDisplayName, or, if an earlier version of this template created it, mark it: az rest --method PATCH --url \\\"https://graph.microsoft.com/v1.0/applications(appId='$APP_ID')\\\" --body '{\\\"tags\\\":[\\\"$MARKER\\\"]}'\"\n  fi\n  ok \"reusing existing app $APP_ID\"\nelse\n  APP_ID=$(az ad app create --display-name \"$APP_NAME\" --sign-in-audience AzureADMyOrg --query appId -o tsv) \\\n    || die \"app creation failed - does the script identity hold Application.ReadWrite.All with admin consent?\"\n  ok \"created app $APP_ID\"\n  sleep 15   # directory replication before the tag and the SP create\n  az rest --method PATCH --url \"https://graph.microsoft.com/v1.0/applications(appId='${APP_ID}')\" \\\n    --headers \"Content-Type=application/json\" --body \"{\\\"tags\\\":[\\\"${MARKER}\\\"]}\" -o none \\\n    || die \"could not mark app $APP_ID as created by this template\"\nfi\n[ -z \"$APP_ID\" ] && die \"app id resolved empty\"\nAPP_OBJ_ID=$(az ad app show --id \"$APP_ID\" --query id -o tsv) || die \"cannot read app object id for $APP_ID\"\n\n# --- Service principal ----------------------------------------------------\n# The DCR role assignments target the SP object id, so if this is skipped the\n# template's own roleAssignments fail with PrincipalNotFound.\nlog \"Ensuring service principal\"\nSP_ID=$(az ad sp show --id \"$APP_ID\" --query id -o tsv 2>/dev/null || true)\nif [ -z \"$SP_ID\" ] || [ \"$SP_ID\" = \"None\" ]; then\n  SP_ID=$(az ad sp create --id \"$APP_ID\" --query id -o tsv) || die \"service principal creation failed\"\n  ok \"created SP $SP_ID\"\n  # Longer wait here on purpose: the template assigns DCR RBAC to this object id\n  # immediately afterwards, and RBAC on a freshly created SP is the classic\n  # PrincipalNotFound race.\n  sleep 30\nelse\n  ok \"reusing SP $SP_ID\"\nfi\n[ -z \"$SP_ID\" ] && die \"service principal id resolved empty\"\n\n# --- Secret: rotate only when necessary, or defer to the customer ----------\nNEED_SECRET=false\nSECRET_URI=\"\"\nif [ \"$KEY_VAULT_MODE\" = \"None\" ]; then\n  warn \"Key Vault skipped. No client secret will be generated or emitted.\"\n  warn \"After deployment, create a client secret for app $APP_ID in Entra and copy its value once into Abstract.\"\nelse\n  log \"Checking for a usable secret in $KV_NAME\"\n  NEED_SECRET=true\n  # The existing secret is always read, even for a forced rotation, so a same-named\n  # secret that belongs to another app is never overwritten.\n  if true; then\n    # Only a SecretNotFound answer means \"absent\". Any other failure (most often a\n    # 403 while the Key Vault role assignment made moments ago propagates) is\n    # retried, then fatal - treating it as absent would mint a secret that the\n    # vault then refuses, leaving a live credential nobody captured.\n    SHOW=\"{}\" ; SHOW_ERR=\"\" ; FOUND=false\n    for attempt in 1 2 3 4 5 6; do\n      if SHOW=$(az keyvault secret show --vault-name \"$KV_NAME\" --name \"$SECRET_NAME\" \\\n                 --query '{expires:attributes.expires, appId:tags.appId}' -o json 2>/tmp/kv-show.err); then\n        FOUND=true; break\n      fi\n      SHOW_ERR=$(cat /tmp/kv-show.err)\n      if printf '%s' \"$SHOW_ERR\" | grep -q 'SecretNotFound'; then break; fi\n      warn \"Key Vault read failed (attempt $attempt/6), retrying in 20s\"\n      sleep 20\n    done\n    if [ \"$FOUND\" != true ] && ! printf '%s' \"$SHOW_ERR\" | grep -q 'SecretNotFound'; then\n      die \"cannot read $KV_NAME: ${SHOW_ERR:-unknown error} - is Key Vault Secrets Officer granted to the script identity, and does the vault use RBAC authorization?\"\n    fi\n    if [ \"$FOUND\" = true ]; then\n      # A vault secret is only a stored copy of a client secret. Reuse it only when\n      # it was stored for this app and the app still holds a matching credential;\n      # after an app is recreated, or in an existing vault another app also uses,\n      # its expiry alone proves nothing.\n      CREDS=$(az ad app credential list --id \"$APP_ID\" \\\n                --query \"[?displayName=='${SECRET_NAME}'].endDateTime\" -o json 2>/dev/null || echo '[]')\n      VERDICT=$(python3 - \"$SHOW\" \"$CREDS\" \"$APP_ID\" <<'PY'\nimport datetime, json, re, sys\nsecret, creds, app_id = json.loads(sys.argv[1] or \"{}\"), json.loads(sys.argv[2] or \"[]\"), sys.argv[3]\nnow = datetime.datetime.now(datetime.timezone.utc)\ndef days_left(ts):\n    if not ts or ts == \"None\":\n        return -1\n    ts = re.sub(r\"(\\.\\d{6})\\d+\", r\"\\1\", str(ts)).replace(\"Z\", \"+00:00\")\n    return (datetime.datetime.fromisoformat(ts) - now).days\nif secret.get(\"appId\") and secret[\"appId\"] != app_id:\n    print(\"other-app\")\nelif not secret.get(\"appId\"):\n    print(\"untagged\")\nelif days_left(secret.get(\"expires\")) <= 30:\n    print(\"expiring\")\nelif not any(days_left(c) > 30 for c in creds):\n    print(\"no-credential\")\nelse:\n    print(\"reuse\")\nPY\n)\n      if [ \"$FORCE_ROTATE\" = \"true\" ] && [ \"$VERDICT\" != \"other-app\" ]; then\n        [ \"$VERDICT\" = \"untagged\" ] && warn \"the vault secret $SECRET_NAME has no appId tag - replacing it because forceSecretRotation is set\"\n        VERDICT=forced\n      fi\n      case \"$VERDICT\" in\n        forced)        warn \"forceSecretRotation - minting a new secret. Update Abstract with the new value.\" ;;\n        untagged)      die \"the vault secret $SECRET_NAME has no appId tag, so it may belong to something else - refusing to overwrite it. Choose a different secretName, or set forceSecretRotation if it is this app's secret.\" ;;\n        reuse)         NEED_SECRET=false\n                       ok \"existing secret belongs to app $APP_ID and is valid for >30 days - NOT rotating (re-running this template is safe)\" ;;\n        other-app)     die \"the vault secret $SECRET_NAME belongs to another app - refusing to overwrite it. Choose a different secretName or vault.\" ;;\n        expiring)      warn \"existing secret expires within 30 days - rotating\" ;;\n        no-credential) warn \"app $APP_ID holds no matching credential for the vault secret (was the app recreated?) - minting a new one\" ;;\n        *)             die \"could not evaluate the existing secret\" ;;\n      esac\n    else\n      ok \"no existing secret in the vault\"\n    fi\n  fi\n\n  if [ \"$NEED_SECRET\" = true ]; then\n    log \"Generating a client secret (${SECRET_YEARS} year(s))\"\n    BEFORE=$(az ad app credential list --id \"$APP_ID\" --query \"[].keyId\" -o tsv 2>/dev/null | sort || true)\n    SECRET=$(az ad app credential reset --id \"$APP_ID\" --append \\\n      --display-name \"$SECRET_NAME\" --years \"$SECRET_YEARS\" --query password -o tsv) \\\n      || die \"secret generation failed\"\n    [ -z \"$SECRET\" ] && die \"secret generation returned empty\"\n    END=$(python3 -c \"\nimport datetime\nprint((datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=365*int('$SECRET_YEARS'))).strftime('%Y-%m-%dT%H:%M:%SZ'))\")\n    STORED=false\n    for attempt in 1 2 3; do\n      # The value goes through a 0600 file, never the command line, so it cannot be read\n      # from the process list.\n      SECRET_FILE=$(mktemp); chmod 600 \"$SECRET_FILE\"; printf '%s' \"$SECRET\" > \"$SECRET_FILE\"\n      if az keyvault secret set --vault-name \"$KV_NAME\" --name \"$SECRET_NAME\" \\\n           --file \"$SECRET_FILE\" --encoding utf-8 --expires \"$END\" --tags appId=\"$APP_ID\" -o none; then\n        rm -f \"$SECRET_FILE\"\n        STORED=true; break\n      fi\n      rm -f \"$SECRET_FILE\"\n      warn \"Key Vault write failed (attempt $attempt/3), retrying in 20s\"\n      sleep 20\n    done\n    unset SECRET\n    if [ \"$STORED\" != true ]; then\n      # Never leave a live credential that exists nowhere but in Entra - but delete\n      # only a key that is provably the new one. The credential list can lag, and\n      # deleting an older key would revoke the secret Abstract is already using.\n      NEW_KEYS=\"\"\n      for attempt in 1 2 3; do\n        AFTER=$(az ad app credential list --id \"$APP_ID\" --query \"[].keyId\" -o tsv 2>/dev/null | sort || true)\n        NEW_KEYS=$(comm -13 <(printf '%s\\n' \"$BEFORE\") <(printf '%s\\n' \"$AFTER\") | sed '/^$/d')\n        [ -n \"$NEW_KEYS\" ] && break\n        sleep 10\n      done\n      if [ \"$(printf '%s\\n' \"$NEW_KEYS\" | sed '/^$/d' | wc -l | tr -d ' ')\" = \"1\" ]; then\n        az ad app credential delete --id \"$APP_ID\" --key-id \"$NEW_KEYS\" \\\n          && warn \"removed the unstored credential $NEW_KEYS\" \\\n          || warn \"could not remove credential $NEW_KEYS - delete it in Entra (app $APP_ID)\"\n      else\n        warn \"could not identify the new credential unambiguously - delete the newest '$SECRET_NAME' credential on app $APP_ID in Entra\"\n      fi\n      die \"could not write the secret to $KV_NAME - is Key Vault Secrets Officer granted to the script identity?\"\n    fi\n    ok \"secret stored at ${KV_NAME}/${SECRET_NAME}, expires ${END}\"\n    ok \"never emitted to deployment outputs or logs\"\n  fi\n  SECRET_URI=\"${VAULT_URI%/}/secrets/${SECRET_NAME}\"\nfi\n\n# --- Verify what we actually created -------------------------------------\nlog \"Verifying\"\naz ad app show --id \"$APP_ID\" --query displayName -o tsv >/dev/null || die \"app not readable after creation\"\naz ad sp show --id \"$APP_ID\" --query id -o tsv >/dev/null || die \"service principal not readable after creation\"\nif [ \"$KEY_VAULT_MODE\" != \"None\" ]; then\n  az keyvault secret show --vault-name \"$KV_NAME\" --name \"$SECRET_NAME\" --query id -o tsv >/dev/null \\\n    || die \"secret not present in $KV_NAME after creation\"\n  ok \"app, service principal and Key Vault secret all verified\"\nelse\n  ok \"app and service principal verified; no secret was generated\"\nfi\n\ncat > \"$AZ_SCRIPTS_OUTPUT_PATH\" <<JSON\n{\n  \"appId\": \"${APP_ID}\",\n  \"appObjectId\": \"${APP_OBJ_ID}\",\n  \"spObjectId\": \"${SP_ID}\",\n  \"tenantId\": \"${TENANT_ID}\",\n  \"keyVaultSecretUri\": \"${SECRET_URI}\",\n  \"secretRotated\": ${NEED_SECRET},\n  \"keyVaultMode\": \"${KEY_VAULT_MODE}\",\n  \"verified\": true\n}\nJSON\nok \"done\"\n",
+    "autoWorkspaceName": "[format('abstract-sentinel-{0}', uniqueString(resourceGroup().id))]",
+    "effectiveWorkspaceName": "[if(parameters('createWorkspace'), if(empty(parameters('workspaceName')), variables('autoWorkspaceName'), parameters('workspaceName')), parameters('workspaceName'))]",
+    "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('effectiveWorkspaceName'))]",
+    "effectiveLocation": "[if(parameters('createWorkspace'), parameters('location'), if(empty(parameters('existingWorkspaceLocation')), parameters('location'), parameters('existingWorkspaceLocation')))]",
+    "keyVaultResourceName": "[if(empty(parameters('keyVaultName')), format('abstract-kv-{0}', uniqueString(resourceGroup().id)), parameters('keyVaultName'))]",
+    "effectiveKeyVaultName": "[if(equals(parameters('keyVaultMode'), 'Existing'), last(split(parameters('existingKeyVaultResourceId'), '/')), if(equals(parameters('keyVaultMode'), 'Create'), variables('keyVaultResourceName'), ''))]",
+    "existingKeyVaultSubscriptionId": "[split(parameters('existingKeyVaultResourceId'), '/')[2]]",
+    "existingKeyVaultResourceGroupName": "[split(parameters('existingKeyVaultResourceId'), '/')[4]]",
+    "generatedSchema": "[variables('$fxv#0')]",
+    "useGeneratedSchema": "[empty(parameters('tableColumns'))]",
+    "effectiveTableColumns": "[if(variables('useGeneratedSchema'), variables('generatedSchema').tableColumns, parameters('tableColumns'))]",
+    "customTablePlanProperty": "[if(equals(parameters('customTablePlan'), 'Keep'), createObject(), createObject('plan', parameters('customTablePlan')))]",
+    "customTableRetentionProperty": "[if(greater(parameters('customTableRetentionDays'), 0), createObject('totalRetentionInDays', parameters('customTableRetentionDays')), createObject())]",
+    "effectiveStreamColumns": "[if(variables('useGeneratedSchema'), variables('generatedSchema').streamColumns, parameters('tableColumns'))]",
+    "effectiveTransformKql": "[if(variables('useGeneratedSchema'), variables('generatedSchema').transformKql, parameters('transformKql'))]",
+    "asimRouteCatalog": "[variables('$fxv#1').routes]",
+    "enabledAsimRoutes": "[if(and(and(parameters('enableAsim'), or(parameters('enableSentinel'), not(parameters('createWorkspace')))), variables('useGeneratedSchema')), filter(variables('asimRouteCatalog'), lambda('route', or(contains(parameters('asimSchemas'), '*'), contains(parameters('asimSchemas'), lambdaVariables('route').name)))), createArray())]",
+    "streamName": "[format('Custom-{0}', parameters('customTableName'))]",
+    "logAnalyticsDestinationName": "abstractSentinelWorkspace",
+    "monitoringMetricsPublisherRoleId": "3913510d-42f4-4e42-8a64-420c390055eb",
+    "monitoringContributorRoleId": "749f88d5-cbae-40b8-bcfc-e573ddc772fa",
+    "keyVaultSecretsOfficerRoleId": "b86a8fe4-44ce-4948-aee5-eccb2c155cd7",
+    "keyVaultSecretsUserRoleId": "4633458b-17de-408a-b874-0445c86b69e6"
+  },
+  "resources": [
+    {
+      "condition": "[equals(parameters('keyVaultMode'), 'Create')]",
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2026-02-01",
+      "name": "[variables('keyVaultResourceName')]",
+      "location": "[parameters('location')]",
+      "tags": "[union(parameters('tags'), if(contains(parameters('tagsByResource'), 'Microsoft.KeyVault/vaults'), parameters('tagsByResource')['Microsoft.KeyVault/vaults'], createObject()))]",
+      "properties": {
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "tenantId": "[subscription().tenantId]",
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 7,
+        "enablePurgeProtection": true,
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deploymentScripts",
+      "apiVersion": "2023-08-01",
+      "name": "abstract-create-app",
+      "location": "[parameters('location')]",
+      "tags": "[union(parameters('tags'), if(contains(parameters('tagsByResource'), 'Microsoft.Resources/deploymentScripts'), parameters('tagsByResource')['Microsoft.Resources/deploymentScripts'], createObject()))]",
+      "kind": "AzureCLI",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', parameters('managedIdentityResourceId'))]": {}
+        }
+      },
+      "properties": {
+        "azCliVersion": "[parameters('azCliVersion')]",
+        "retentionInterval": "PT1H",
+        "cleanupPreference": "Always",
+        "timeout": "PT30M",
+        "environmentVariables": [
+          {
+            "name": "APP_NAME",
+            "value": "[parameters('appDisplayName')]"
+          },
+          {
+            "name": "KV_NAME",
+            "value": "[variables('effectiveKeyVaultName')]"
+          },
+          {
+            "name": "KEY_VAULT_MODE",
+            "value": "[parameters('keyVaultMode')]"
+          },
+          {
+            "name": "VAULT_URI",
+            "value": "[if(equals(parameters('keyVaultMode'), 'Create'), tryGet(if(equals(parameters('keyVaultMode'), 'Create'), reference(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultResourceName')), '2026-02-01', 'full'), null()), 'properties', 'vaultUri'), if(equals(parameters('keyVaultMode'), 'Existing'), tryGet(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('existingKeyVaultSubscriptionId'), variables('existingKeyVaultResourceGroupName')), 'Microsoft.KeyVault/vaults', if(equals(parameters('keyVaultMode'), 'Existing'), variables('effectiveKeyVaultName'), 'unused-key-vault')), '2026-02-01', 'full'), 'properties', 'vaultUri'), ''))]"
+          },
+          {
+            "name": "SECRET_NAME",
+            "value": "[parameters('secretName')]"
+          },
+          {
+            "name": "SECRET_YEARS",
+            "value": "[string(parameters('secretValidityYears'))]"
+          },
+          {
+            "name": "FORCE_ROTATE",
+            "value": "[string(parameters('forceSecretRotation'))]"
+          }
+        ],
+        "scriptContent": "[variables('$fxv#2')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultResourceName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('existingKeyVaultSubscriptionId'), variables('existingKeyVaultResourceGroupName')), 'Microsoft.Resources/deployments', format('kv-officer-existing-{0}', uniqueString(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('existingKeyVaultSubscriptionId'), variables('existingKeyVaultResourceGroupName')), 'Microsoft.KeyVault/vaults', if(equals(parameters('keyVaultMode'), 'Existing'), variables('effectiveKeyVaultName'), 'unused-key-vault')), parameters('managedIdentityResourceId'))))]",
+        "[resourceId('Microsoft.Resources/deployments', format('kv-officer-new-{0}', uniqueString(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultResourceName')), parameters('managedIdentityResourceId'))))]"
+      ]
+    },
+    {
+      "condition": "[parameters('createWorkspace')]",
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2026-03-01",
+      "name": "[variables('effectiveWorkspaceName')]",
+      "location": "[parameters('location')]",
+      "tags": "[union(parameters('tags'), if(contains(parameters('tagsByResource'), 'Microsoft.OperationalInsights/workspaces'), parameters('tagsByResource')['Microsoft.OperationalInsights/workspaces'], createObject()))]",
+      "properties": {
+        "sku": {
+          "name": "[parameters('workspaceSku')]"
+        },
+        "retentionInDays": "[parameters('workspaceRetentionDays')]",
+        "features": {
+          "enableLogAccessUsingOnlyResourcePermissions": true
+        }
+      }
+    },
+    {
+      "condition": "[and(parameters('createWorkspace'), parameters('enableSentinel'))]",
+      "type": "Microsoft.SecurityInsights/onboardingStates",
+      "apiVersion": "2024-03-01",
+      "scope": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('effectiveWorkspaceName'))]",
+      "name": "default",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('effectiveWorkspaceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/tables",
+      "apiVersion": "2026-03-01",
+      "name": "[format('{0}/{1}', variables('effectiveWorkspaceName'), parameters('customTableName'))]",
+      "properties": "[union(createObject('schema', createObject('name', parameters('customTableName'), 'columns', variables('customTableArmColumns'))), variables('customTablePlanProperty'), variables('customTableRetentionProperty'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('effectiveWorkspaceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionEndpoints",
+      "apiVersion": "2024-03-11",
+      "name": "[parameters('dataCollectionEndpointName')]",
+      "location": "[variables('effectiveLocation')]",
+      "tags": "[union(parameters('tags'), if(contains(parameters('tagsByResource'), 'Microsoft.Insights/dataCollectionEndpoints'), parameters('tagsByResource')['Microsoft.Insights/dataCollectionEndpoints'], createObject()))]",
+      "properties": {
+        "networkAcls": {
+          "publicNetworkAccess": "Enabled"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2024-03-11",
+      "name": "[parameters('dataCollectionRuleName')]",
+      "location": "[variables('effectiveLocation')]",
+      "tags": "[union(parameters('tags'), if(contains(parameters('tagsByResource'), 'Microsoft.Insights/dataCollectionRules'), parameters('tagsByResource')['Microsoft.Insights/dataCollectionRules'], createObject()))]",
+      "properties": {
+        "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName'))]",
+        "streamDeclarations": {
+          "[format('{0}', variables('streamName'))]": {
+            "copy": [
+              {
+                "name": "columns",
+                "count": "[length(variables('effectiveStreamColumns'))]",
+                "input": {
+                  "name": "[variables('effectiveStreamColumns')[copyIndex('columns')].name]",
+                  "type": "[toLower(string(variables('effectiveStreamColumns')[copyIndex('columns')].type))]"
+                }
+              }
+            ]
+          }
+        },
+        "destinations": {
+          "logAnalytics": [
+            {
+              "workspaceResourceId": "[variables('workspaceResourceId')]",
+              "name": "[variables('logAnalyticsDestinationName')]"
+            }
+          ]
+        },
+        "dataFlows": "[concat(createArray(createObject('streams', createArray(variables('streamName')), 'destinations', createArray(variables('logAnalyticsDestinationName')), 'transformKql', variables('effectiveTransformKql'), 'outputStream', variables('streamName'))), variables('asimFlows'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces/tables', split(format('{0}/{1}', variables('effectiveWorkspaceName'), parameters('customTableName')), '/')[0], split(format('{0}/{1}', variables('effectiveWorkspaceName'), parameters('customTableName')), '/')[1])]",
+        "[resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName'))]",
+        "[extensionResourceId(resourceId('Microsoft.OperationalInsights/workspaces', variables('effectiveWorkspaceName')), 'Microsoft.SecurityInsights/onboardingStates', 'default')]"
+      ]
+    },
+    {
+      "condition": "[parameters('enableDcrErrorLogs')]",
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]",
+      "name": "abstract-dcr-errors",
+      "properties": {
+        "workspaceId": "[variables('workspaceResourceId')]",
+        "logs": [
+          {
+            "category": "LogErrors",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]",
+      "name": "[guid(resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName')), 'abstract-app-metrics-publisher', variables('monitoringMetricsPublisherRoleId'))]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'abstract-create-app'), '2023-08-01').outputs.spObjectId]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('monitoringMetricsPublisherRoleId'))]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deploymentScripts', 'abstract-create-app')]",
+        "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]"
+      ]
+    },
+    {
+      "condition": "[parameters('grantMonitoringContributor')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]",
+      "name": "[guid(resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName')), 'abstract-app-monitoring-contributor', variables('monitoringContributorRoleId'))]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'abstract-create-app'), '2023-08-01').outputs.spObjectId]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('monitoringContributorRoleId'))]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deploymentScripts', 'abstract-create-app')]",
+        "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]"
+      ]
+    },
+    {
+      "condition": "[equals(parameters('keyVaultMode'), 'Create')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('kv-officer-new-{0}', uniqueString(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultResourceName')), parameters('managedIdentityResourceId')))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[variables('effectiveKeyVaultName')]"
+          },
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', split(parameters('managedIdentityResourceId'), '/')[2], split(parameters('managedIdentityResourceId'), '/')[4]), 'Microsoft.ManagedIdentity/userAssignedIdentities', last(split(parameters('managedIdentityResourceId'), '/'))), '2023-01-31').principalId]"
+          },
+          "principalType": {
+            "value": "ServicePrincipal"
+          },
+          "roleDefinitionId": {
+            "value": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsOfficerRoleId'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "16431700135770636192"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string"
+            },
+            "principalId": {
+              "type": "string"
+            },
+            "roleDefinitionId": {
+              "type": "string"
+            },
+            "principalType": {
+              "type": "string",
+              "defaultValue": "",
+              "allowedValues": [
+                "",
+                "ServicePrincipal",
+                "User",
+                "Group"
+              ],
+              "metadata": {
+                "description": "Principal type of principalId. Set it for a freshly created identity to avoid PrincipalNotFound while the directory replicates; leave empty when the type is not known (for example a user or group supplied by the deployer)."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('principalId'), parameters('roleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('principalId')]",
+                "roleDefinitionId": "[parameters('roleDefinitionId')]",
+                "principalType": "[if(empty(parameters('principalType')), null(), parameters('principalType'))]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultResourceName'))]"
+      ]
+    },
+    {
+      "condition": "[equals(parameters('keyVaultMode'), 'Existing')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('kv-officer-existing-{0}', uniqueString(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('existingKeyVaultSubscriptionId'), variables('existingKeyVaultResourceGroupName')), 'Microsoft.KeyVault/vaults', if(equals(parameters('keyVaultMode'), 'Existing'), variables('effectiveKeyVaultName'), 'unused-key-vault')), parameters('managedIdentityResourceId')))]",
+      "subscriptionId": "[variables('existingKeyVaultSubscriptionId')]",
+      "resourceGroup": "[variables('existingKeyVaultResourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[variables('effectiveKeyVaultName')]"
+          },
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', split(parameters('managedIdentityResourceId'), '/')[2], split(parameters('managedIdentityResourceId'), '/')[4]), 'Microsoft.ManagedIdentity/userAssignedIdentities', last(split(parameters('managedIdentityResourceId'), '/'))), '2023-01-31').principalId]"
+          },
+          "principalType": {
+            "value": "ServicePrincipal"
+          },
+          "roleDefinitionId": {
+            "value": "[subscriptionResourceId(variables('existingKeyVaultSubscriptionId'), 'Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsOfficerRoleId'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "16431700135770636192"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string"
+            },
+            "principalId": {
+              "type": "string"
+            },
+            "roleDefinitionId": {
+              "type": "string"
+            },
+            "principalType": {
+              "type": "string",
+              "defaultValue": "",
+              "allowedValues": [
+                "",
+                "ServicePrincipal",
+                "User",
+                "Group"
+              ],
+              "metadata": {
+                "description": "Principal type of principalId. Set it for a freshly created identity to avoid PrincipalNotFound while the directory replicates; leave empty when the type is not known (for example a user or group supplied by the deployer)."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('principalId'), parameters('roleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('principalId')]",
+                "roleDefinitionId": "[parameters('roleDefinitionId')]",
+                "principalType": "[if(empty(parameters('principalType')), null(), parameters('principalType'))]"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "condition": "[and(equals(parameters('keyVaultMode'), 'Create'), not(empty(parameters('secretReaderObjectId'))))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('kv-reader-new-{0}', uniqueString(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultResourceName')), parameters('secretReaderObjectId')))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[variables('effectiveKeyVaultName')]"
+          },
+          "principalId": {
+            "value": "[parameters('secretReaderObjectId')]"
+          },
+          "roleDefinitionId": {
+            "value": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsUserRoleId'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "16431700135770636192"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string"
+            },
+            "principalId": {
+              "type": "string"
+            },
+            "roleDefinitionId": {
+              "type": "string"
+            },
+            "principalType": {
+              "type": "string",
+              "defaultValue": "",
+              "allowedValues": [
+                "",
+                "ServicePrincipal",
+                "User",
+                "Group"
+              ],
+              "metadata": {
+                "description": "Principal type of principalId. Set it for a freshly created identity to avoid PrincipalNotFound while the directory replicates; leave empty when the type is not known (for example a user or group supplied by the deployer)."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('principalId'), parameters('roleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('principalId')]",
+                "roleDefinitionId": "[parameters('roleDefinitionId')]",
+                "principalType": "[if(empty(parameters('principalType')), null(), parameters('principalType'))]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultResourceName'))]"
+      ]
+    },
+    {
+      "condition": "[and(equals(parameters('keyVaultMode'), 'Existing'), not(empty(parameters('secretReaderObjectId'))))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('kv-reader-existing-{0}', uniqueString(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('existingKeyVaultSubscriptionId'), variables('existingKeyVaultResourceGroupName')), 'Microsoft.KeyVault/vaults', if(equals(parameters('keyVaultMode'), 'Existing'), variables('effectiveKeyVaultName'), 'unused-key-vault')), parameters('secretReaderObjectId')))]",
+      "subscriptionId": "[variables('existingKeyVaultSubscriptionId')]",
+      "resourceGroup": "[variables('existingKeyVaultResourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[variables('effectiveKeyVaultName')]"
+          },
+          "principalId": {
+            "value": "[parameters('secretReaderObjectId')]"
+          },
+          "roleDefinitionId": {
+            "value": "[subscriptionResourceId(variables('existingKeyVaultSubscriptionId'), 'Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsUserRoleId'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "16431700135770636192"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string"
+            },
+            "principalId": {
+              "type": "string"
+            },
+            "roleDefinitionId": {
+              "type": "string"
+            },
+            "principalType": {
+              "type": "string",
+              "defaultValue": "",
+              "allowedValues": [
+                "",
+                "ServicePrincipal",
+                "User",
+                "Group"
+              ],
+              "metadata": {
+                "description": "Principal type of principalId. Set it for a freshly created identity to avoid PrincipalNotFound while the directory replicates; leave empty when the type is not known (for example a user or group supplied by the deployer)."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('principalId'), parameters('roleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('principalId')]",
+                "roleDefinitionId": "[parameters('roleDefinitionId')]",
+                "principalType": "[if(empty(parameters('principalType')), null(), parameters('principalType'))]"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "clientId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'abstract-create-app'), '2023-08-01').outputs.appId]"
+    },
+    "applicationTenantId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'abstract-create-app'), '2023-08-01').outputs.tenantId]"
+    },
+    "servicePrincipalObjectId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'abstract-create-app'), '2023-08-01').outputs.spObjectId]"
+    },
+    "clientSecretKeyVaultUri": {
+      "type": "string",
+      "value": "[if(equals(parameters('keyVaultMode'), 'None'), '', reference(resourceId('Microsoft.Resources/deploymentScripts', 'abstract-create-app'), '2023-08-01').outputs.keyVaultSecretUri)]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "value": "[variables('effectiveKeyVaultName')]"
+    },
+    "workspaceName": {
+      "type": "string",
+      "value": "[variables('effectiveWorkspaceName')]"
+    },
+    "customTableName": {
+      "type": "string",
+      "value": "[parameters('customTableName')]"
+    },
+    "dataCollectionRuleImmutableId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName')), '2024-03-11').immutableId]"
+    },
+    "dataCollectionEndpointUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName')), '2024-03-11').logsIngestion.endpoint]"
+    },
+    "logStreamName": {
+      "type": "string",
+      "value": "[variables('streamName')]"
+    },
+    "secretCreationInstructions": {
+      "type": "string",
+      "value": "[if(equals(parameters('keyVaultMode'), 'None'), 'Create a client secret for this app in Entra after deployment and copy its value once into Abstract. Entra will not show the value again.', 'Read the client secret from the configured Key Vault and enter it in Abstract.')]"
+    },
+    "abstractModalHint": {
+      "type": "string",
+      "value": "[if(equals(parameters('keyVaultMode'), 'None'), 'Create a client secret for the app in Entra, then enter that value into Abstract; all other fields are in the outputs above.', format('Read the client secret from Key Vault \"{0}\"; all other fields are in the outputs above.', variables('effectiveKeyVaultName')))]"
+    }
+  }
+}

@@ -1,0 +1,225 @@
+{
+ "title": "aws.s3-sqs.terraform",
+ "theme": "dark",
+ "animate": false,
+ "pages": [
+  {
+   "name": "aws.s3-sqs.terraform",
+   "groups": [
+    {
+     "id": "acct",
+     "label": "Customer AWS account",
+     "kind": "account",
+     "x": 40,
+     "y": 40,
+     "w": 800,
+     "h": 580,
+     "color": "#2e9bf0"
+    },
+    {
+     "id": "abs",
+     "label": "Abstract",
+     "kind": "plain",
+     "x": 900,
+     "y": 40,
+     "w": 260,
+     "h": 580,
+     "color": "#FF216B"
+    },
+    {
+     "id": "route",
+     "label": "routing_mode, pick one",
+     "kind": "plain",
+     "parent": "acct",
+     "x": 240,
+     "y": 100,
+     "w": 200,
+     "h": 470,
+     "color": "#f5c61e"
+    }
+   ],
+   "nodes": [
+    {
+     "id": "s3",
+     "label": "Security bucket",
+     "icon": "aws:s3",
+     "parent": "acct",
+     "x": 40,
+     "y": 290,
+     "sublabel": "existing, prefixed"
+    },
+    {
+     "id": "r1",
+     "label": "Bucket notification",
+     "icon": "aws:message",
+     "parent": "route",
+     "x": 61,
+     "y": 40,
+     "sublabel": "direct"
+    },
+    {
+     "id": "r2",
+     "label": "SNS topic",
+     "icon": "aws:sns",
+     "parent": "route",
+     "x": 61,
+     "y": 190,
+     "sublabel": "sns"
+    },
+    {
+     "id": "r3",
+     "label": "EventBridge rules",
+     "icon": "aws:eventbridge",
+     "parent": "route",
+     "x": 61,
+     "y": 340,
+     "sublabel": "eventbridge"
+    },
+    {
+     "id": "q1",
+     "label": "CloudTrail queue",
+     "icon": "aws:sqs",
+     "parent": "acct",
+     "x": 540,
+     "y": 140,
+     "sublabel": "+ DLQ"
+    },
+    {
+     "id": "q2",
+     "label": "GuardDuty queue",
+     "icon": "aws:sqs",
+     "parent": "acct",
+     "x": 540,
+     "y": 290,
+     "sublabel": "+ DLQ"
+    },
+    {
+     "id": "q3",
+     "label": "Security Hub queue",
+     "icon": "aws:sqs",
+     "parent": "acct",
+     "x": 540,
+     "y": 440,
+     "sublabel": "+ DLQ"
+    },
+    {
+     "id": "role",
+     "label": "IAM role",
+     "icon": "aws:role",
+     "parent": "acct",
+     "x": 640,
+     "y": 20,
+     "sublabel": "shared, External ID"
+    },
+    {
+     "id": "alarm",
+     "label": "DLQ alarms",
+     "icon": "aws:alarm",
+     "parent": "acct",
+     "x": 40,
+     "y": 440,
+     "sublabel": "one per source"
+    },
+    {
+     "id": "plat",
+     "label": "Abstract platform",
+     "sublabel": "one config per queue",
+     "icon": "img:../../app/web/public/logo-mark.svg",
+     "parent": "abs",
+     "x": 75,
+     "y": 280,
+     "w": 110,
+     "h": 98
+    }
+   ],
+   "edges": [
+    {
+     "from": "s3",
+     "to": "route",
+     "label": "ObjectCreated",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.487
+     ]
+    },
+    {
+     "from": "route",
+     "to": "q1",
+     "label": "cloudtrail/",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.168
+     ]
+    },
+    {
+     "from": "route",
+     "to": "q2",
+     "label": "guardduty/",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.487
+     ]
+    },
+    {
+     "from": "route",
+     "to": "q3",
+     "label": "securityhub/",
+     "tone": "brand",
+     "exit": [
+      1,
+      0.806
+     ]
+    },
+    {
+     "from": "q1",
+     "to": "plat",
+     "label": "",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.15
+     ]
+    },
+    {
+     "from": "q2",
+     "to": "plat",
+     "label": "poll",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "q3",
+     "to": "plat",
+     "label": "",
+     "tone": "brand",
+     "entry": [
+      0,
+      0.85
+     ]
+    },
+    {
+     "from": "plat",
+     "to": "role",
+     "label": "AssumeRole + External ID",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0.5,
+      0
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.45
+    }
+   ]
+  }
+ ]
+}

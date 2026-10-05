@@ -1,0 +1,98 @@
+id: gcp-monitoring-pipeline-health-alerts
+title: Pipeline health alerts
+cloud: gcp
+role: monitoring
+scope: project
+summary: 'A stalled consumer, a missing IAM grant and a deleted sink all look the same from outside: everything
+  is green and there is no data. These Cloud Monitoring alert policies catch sink export failures, an
+  unconsumed subscription, a feed that went dark and a receiving dead-letter topic.'
+formats:
+- terraform
+- script
+- cloud-shell
+permissions:
+- role: roles/monitoring.editor
+  where: The logging project
+  why: 'Deployer: Create the alert policies.'
+creates:
+- An alert policy for the sink failing to export (critical)
+- An alert policy for Abstract not consuming, firing at one hour against the retention window (critical)
+- An alert policy for the feed going dark, using a metric-absence condition (error)
+- An alert policy for the dead-letter topic receiving messages (warning)
+never_touches:
+- The topic, subscription and sink it watches
+- Existing alert policies and notification channels
+prerequisites:
+- A notification channel; the module refuses to deploy without one unless explicitly acknowledged
+- The log-export pipeline deployed, ideally in the same session as connecting Abstract
+parameters:
+- name: log_project
+  type: string
+  required: true
+  description: 'DEDICATED logging or security project holding this pipeline. Not a workload project. Find
+    it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project
+    (set create_project = true).'
+  find_it: gcloud projects list --format='value(projectId)'
+  example: acme-security-logging
+- name: topic_id
+  type: string
+  required: false
+  description: Topic NAME (not the full path), from gcp-source-audit-logs-organization.
+  default: abstract-audit-logs
+- name: subscription_id
+  type: string
+  required: false
+  description: Subscription NAME (not the full path), from gcp-source-audit-logs-organization.
+  default: abstract-audit-logs-sub
+- name: dead_letter_topic_id
+  type: string
+  required: false
+  description: Dead-letter topic to watch. Empty disables that policy.
+  default: ''
+- name: notification_channels
+  type: array
+  required: false
+  description: 'Channel IDs. List them with: gcloud beta monitoring channels list --format=''value(name)'''
+  default: []
+- name: acknowledge_no_channel
+  type: bool
+  required: false
+  description: Deploy the policies with no notification channel. They then fire into nothing; set it only
+    while a channel is being arranged.
+  default: false
+- name: retention_days
+  type: int
+  required: false
+  description: 'Pub/Sub message retention in days. This is the entire recovery window: unacked messages
+    older than this are deleted.'
+  default: 7
+- name: unacked_age_threshold_seconds
+  type: int
+  required: false
+  description: Fire when the oldest unacked message is older than this. Default one hour, a small fraction
+    of a 7-day window.
+  default: 3600
+- name: absence_threshold_seconds
+  type: int
+  required: false
+  description: Fire when nothing has been published for this long. Default one hour.
+  default: 3600
+- name: prefix
+  type: string
+  required: false
+  description: Alert display-name prefix, so the policies are findable among existing ones.
+  default: Abstract log pipeline
+outputs:
+- alert_policies
+verify:
+- check: Every policy is enabled and wired to a channel
+  command: "TOKEN=$(gcloud auth print-access-token)\ncurl -s \"https://monitoring.googleapis.com/v3/projects/<log-project-id>/alertPolicies\"\
+    \ \\\n  -H \"Authorization: Bearer $TOKEN\""
+  healthy: Each policy shows enabled true and at least one notification channel.
+- check: The stall alert before Abstract is connected
+  healthy: It fires, correctly, because nothing consumes the subscription yet.
+cost: Alert policies are free; Cloud Monitoring bills only for metrics beyond the free allotment, which
+  these do not add.
+when_to_use: Alongside gcp-source-audit-logs-organization, not later.
+when_not_to_use: As a replacement for checking the feed in Abstract; these watch the Google side only.
+live_test: static
