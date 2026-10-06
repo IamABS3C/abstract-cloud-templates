@@ -9,6 +9,7 @@ summary: A master stack nests the per-source child templates, so one deploy prov
   to every enabled child.
 formats:
 - cloudformation
+- launch-stack
 - script
 depends_on:
 - aws-source-cloudtrail-s3-sqs
@@ -57,7 +58,7 @@ prerequisites:
 - AWS CLI v2, authenticated
 - The Abstract principal ARN (or account ID) and External ID for your tenant; the console regenerates the External
   ID on each pass, so mint it once and use the same value on both sides
-- An S3 bucket to host the child templates; TemplateBaseUrl must be an https S3 URL with no trailing slash
+- 'Only for deploy.sh: an S3 bucket to host your own copy of the child templates (Launch Stack uses Abstract''s public copy)'
 - 'Per enabled source: a VPC, subnet or ENI ID (VPC Flow Logs), a WebACL ARN (WAF), an existing stream name (Kinesis),
   or a data lake ARN (Security Lake)'
 - With Security Lake enabled, AbstractPrincipalArn must be a bare 12-digit account ID
@@ -66,9 +67,11 @@ prerequisites:
 parameters:
 - name: TemplateBaseUrl
   type: string
-  required: true
-  description: Base https URL where the child templates are hosted, no trailing slash (e.g. https://my-bucket.s3.amazonaws.com/abstract).
-    The master appends /<template-id>.yaml, e.g. /aws-source-cloudtrail-s3-sqs.yaml.
+  required: false
+  default: https://abstract-cloud-templates-launch.s3.us-east-1.amazonaws.com/templates/aws/nested
+  description: Base https URL where the child templates are hosted, no trailing slash. The default is Abstract's public copy
+    of the published templates, which Launch Stack uses; deploy.sh uploads your own copy instead. The master appends
+    /<template-id>.yaml, e.g. /aws-source-cloudtrail-s3-sqs.yaml.
 - name: AuthMode
   type: string
   required: false

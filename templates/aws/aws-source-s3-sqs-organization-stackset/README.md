@@ -10,6 +10,14 @@ A wrapper around CloudFormation StackSets, service-managed for AWS Organizations
 
 Editable source: [diagram.drawio](diagram.drawio)
 
+## When to use
+
+The same S3 and SQS source should exist in every account of an organizational unit, including accounts added later, such as VPC Flow Logs or load balancer logs collected per account. Run it once from the management account or a delegated StackSets administrator.
+
+**Not for:** For organization-wide CloudTrail, where a single organization trail (CtIsOrganizationTrail=true with CtOrganizationId) in the management account is preferred over per-account trails.
+
+Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+
 ## Deploy
 
 From a shell, in this folder:

@@ -16,6 +16,8 @@ One security bucket holds several sources under different prefixes, and each sou
 
 **Not for:** When the plan is to point two Abstract configurations at one queue: SQS is a competing-consumer service, so they split the stream at random with no error.
 
+Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+
 ## Deploy
 
 From a shell, in this folder:

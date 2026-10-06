@@ -39,9 +39,11 @@ Metadata:
 Parameters:
   TemplateBaseUrl:
     Type: String
+    Default: https://abstract-cloud-templates-launch.s3.us-east-1.amazonaws.com/templates/aws/nested
     Description: >-
-      Base https URL where the child templates are hosted, no trailing slash
-      (e.g. https://my-bucket.s3.amazonaws.com/abstract). The master appends
+      Base https URL where the child templates are hosted, no trailing slash. The
+      default is Abstract's public copy of the published templates, which is what
+      Launch Stack uses; deploy.sh uploads your own copy instead. The master appends
       /<template-id>.yaml, e.g. /aws-source-cloudtrail-s3-sqs.yaml.
     AllowedPattern: "^https://.+[^/]$"
 

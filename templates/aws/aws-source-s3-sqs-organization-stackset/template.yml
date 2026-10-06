@@ -44,6 +44,9 @@ verify:
 - check: The script prints every call before it runs
   healthy: 'Run with --dry-run: create-stack-set and create-stack-instances are printed with the expected OU and
     regions.'
+when_to_use: The same S3 and SQS source should exist in every account of an organizational unit, including accounts
+  added later, such as VPC Flow Logs or load balancer logs collected per account. Run it once from the management
+  account or a delegated StackSets administrator.
 when_not_to_use: For organization-wide CloudTrail, where a single organization trail (CtIsOrganizationTrail=true
   with CtOrganizationId) in the management account is preferred over per-account trails.
 live_test: canary

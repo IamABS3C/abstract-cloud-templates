@@ -16,9 +16,15 @@ Several AWS sources in the same account and region, where the shared identity an
 
 **Not for:** When the child templates cannot be hosted at an https S3 URL; the master only references its children through TemplateBaseUrl.
 
+Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+
 ## Deploy
 
-From a shell, in this folder:
+[![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https%3A%2F%2Fabstract-cloud-templates-launch.s3.us-east-1.amazonaws.com%2Ftemplates%2Faws%2Faws-source-multiple-sources-one-bucket%2Ftemplate.yaml&stackName=abstract-source-multiple-sources-one-bucket)
+
+Opens the CloudFormation console in us-east-1. For another Region, change `us-east-1` in both places in the link, or use the Region picker in the onboarding app.
+
+Or from a shell, in this folder:
 
 ```bash
 ./deploy.sh
@@ -29,7 +35,7 @@ From a shell, in this folder:
 - AWS CLI v2, authenticated, and jq for deploy.sh
 - AWS CLI v2, authenticated
 - The Abstract principal ARN (or account ID) and External ID for your tenant; the console regenerates the External ID on each pass, so mint it once and use the same value on both sides
-- An S3 bucket to host the child templates; TemplateBaseUrl must be an https S3 URL with no trailing slash
+- Only for deploy.sh: an S3 bucket to host your own copy of the child templates (Launch Stack uses Abstract's public copy)
 - Per enabled source: a VPC, subnet or ENI ID (VPC Flow Logs), a WebACL ARN (WAF), an existing stream name (Kinesis), or a data lake ARN (Security Lake)
 - With Security Lake enabled, AbstractPrincipalArn must be a bare 12-digit account ID
 - deploy.sh uploads the child templates from the sibling folders to s3://&lt;template-bucket&gt;/&lt;prefix&gt;/&lt;template-id&gt;.yaml before it deploys; CloudFormation refuses any TemplateURL that is not on S3
@@ -42,7 +48,7 @@ Object count drives the S3 request, SQS and KMS charges more than byte volume. K
 
 | Name | Type | Required | Description | Find it |
 |---|---|---|---|---|
-| `TemplateBaseUrl` | string | yes | Base https URL where the child templates are hosted, no trailing slash (e.g. https://my-bucket.s3.amazonaws.com/abstract). The master appends /&lt;template-id&gt;.yaml, e.g. /aws-source-cloudtrail-s3-sqs.yaml. |  |
+| `TemplateBaseUrl` | string | no | Base https URL where the child templates are hosted, no trailing slash. The default is Abstract's public copy of the published templates, which Launch Stack uses; deploy.sh uploads your own copy instead. The master appends /&lt;template-id&gt;.yaml, e.g. /aws-source-cloudtrail-s3-sqs.yaml. |  |
 | `AuthMode` | string | no | AssumeRole (recommended) creates a cross-account role Abstract assumes with an External ID; AccessKey creates an IAM user and access key. |  |
 | `AbstractPrincipalArn` | string | no | The principal Abstract provides: a full IAM ARN or a bare 12-digit account ID. Required for AssumeRole. | `Abstract console: the AWS integration's role step shows the principal and the External ID` |
 | `ExternalId` | securestring | no | The External ID from Abstract, enforced on sts:AssumeRole. Required for AssumeRole. | `Abstract console: the AWS integration's role step shows the principal and the External ID` |

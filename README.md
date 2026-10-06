@@ -22,6 +22,8 @@ Deployment templates for sending AWS, Azure and Google Cloud logs to Abstract Se
 
 ## AWS
 
+Not sure which one? Start with [the chooser](docs/aws/CHOOSE.md).
+
 | Template | Role | Summary |
 |---|---|---|
 | [Read role, existing bucket](templates/aws/aws-access-read-role-existing-bucket-and-queue/README.md) | access | Creates only the least-privilege IAM role Abstract assumes, with an External ID, to read log objects from an existing bucket and consume notifications from an existing queue. It is the role-based option the Abstract S3 + SQS integration wizards refer to as Generate IAM Role Permissions. |

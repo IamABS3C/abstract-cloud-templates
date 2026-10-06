@@ -14,6 +14,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 
 A deploy needs a value CloudFormation cannot look up by name (a KMS alias, a queue name, a web ACL name), or needs S3 access logging or load balancer access logs switched on.
 
+Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+
 ## Deploy
 
 From a shell, in this folder:

@@ -16,9 +16,15 @@ You want WAF request logs for a web ACL in Abstract.
 
 **Not for:** WAF logs are already centralised in Security Lake: use the Security Lake subscriber instead.
 
+Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+
 ## Deploy
 
-From a shell, in this folder:
+[![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https%3A%2F%2Fabstract-cloud-templates-launch.s3.us-east-1.amazonaws.com%2Ftemplates%2Faws%2Faws-source-waf-logs-s3-sqs%2Ftemplate.yaml&stackName=abstract-source-waf-logs-s3-sqs)
+
+Opens the CloudFormation console in us-east-1. For another Region, change `us-east-1` in both places in the link, or use the Region picker in the onboarding app.
+
+Or from a shell, in this folder:
 
 ```bash
 ./deploy.sh
