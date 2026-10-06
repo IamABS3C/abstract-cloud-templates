@@ -1,84 +1,75 @@
 {
- "title": "aws.iam-role-s3-sqs",
+ "frame": {
+  "title": "A read-only role for a bucket and queue you already have",
+  "subtitle": "The template builds only the IAM role Abstract assumes; your bucket, queue and their notifications stay as they are",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 200,
+  "integration_y": 547,
+  "abstract_sublabel": "polls your queue, reads your bucket\nparses to ACS"
+ },
  "theme": "dark",
- "animate": false,
  "pages": [
   {
-   "name": "aws.iam-role-s3-sqs",
-   "groups": [
-    {
-     "id": "acct",
-     "label": "Customer AWS account",
-     "kind": "account",
-     "x": 40,
-     "y": 40,
-     "w": 800,
-     "h": 500,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 900,
-     "y": 40,
-     "w": 260,
-     "h": 500,
-     "color": "#FF216B"
-    }
-   ],
+   "name": "Read role",
    "nodes": [
     {
-     "id": "s3",
+     "id": "bucket",
      "label": "Log bucket",
+     "sublabel": "your existing bucket",
      "icon": "aws:s3",
-     "parent": "acct",
-     "x": 90,
-     "y": 60,
-     "sublabel": "existing"
+     "x": 330,
+     "y": 110,
+     "existing": true
     },
     {
-     "id": "sqs",
+     "id": "queue",
      "label": "SQS queue",
+     "sublabel": "your existing queue",
      "icon": "aws:sqs",
-     "parent": "acct",
-     "x": 90,
-     "y": 220,
-     "sublabel": "existing"
+     "x": 330,
+     "y": 330,
+     "existing": true
     },
     {
      "id": "kms",
      "label": "KMS key",
+     "sublabel": "only if you use one;\nthe role gets decrypt",
      "icon": "aws:key_management_service",
-     "parent": "acct",
-     "x": 90,
-     "y": 380,
-     "sublabel": "existing, optional"
+     "x": 60,
+     "y": 540,
+     "existing": true
     },
     {
      "id": "role",
-     "label": "Abstract IAM role",
+     "label": "IAM role",
+     "sublabel": "s3:GetObject, sqs:ReceiveMessage,\nkms:Decrypt when a key is used",
      "icon": "aws:role",
-     "parent": "acct",
-     "x": 450,
-     "y": 220,
-     "sublabel": "the only resource"
-    },
-    {
-     "id": "plat",
-     "label": "Abstract platform",
-     "sublabel": "polls SQS, reads S3",
-     "icon": "img:../../app/web/public/logo-mark.svg",
-     "parent": "abs",
-     "x": 85,
-     "y": 219,
-     "w": 90,
-     "h": 80
+     "x": 600,
+     "y": 540,
+     "builds": [
+      "AWS::IAM::Role"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "plat",
+     "from": "bucket",
+     "to": "queue",
+     "label": "your notifications",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.85
+     ],
+     "entry": [
+      0,
+      0.3
+     ]
+    },
+    {
+     "from": "abs-integration",
      "to": "role",
      "label": "AssumeRole + External ID",
      "tone": "amber",
@@ -93,49 +84,24 @@
      ]
     },
     {
-     "from": "role",
-     "to": "s3",
-     "label": "S3 read",
-     "tone": "muted",
-     "exit": [
-      0,
-      0.15
-     ],
+     "from": "bucket",
+     "to": "abstract",
+     "label": "GetObject",
      "entry": [
-      1,
-      0.5
+      0,
+      0.3
      ],
-     "label_x": 0.4
+     "label_x": -0.5
     },
     {
-     "from": "role",
-     "to": "sqs",
-     "label": "SQS consume",
-     "tone": "muted",
-     "exit": [
-      0,
-      0.5
-     ],
+     "from": "queue",
+     "to": "abstract",
+     "label": "poll",
      "entry": [
-      1,
-      0.5
-     ]
-    },
-    {
-     "from": "role",
-     "to": "kms",
-     "label": "KMS decrypt",
-     "tone": "muted",
-     "dashed": true,
-     "exit": [
       0,
-      0.85
+      0.7
      ],
-     "entry": [
-      1,
-      0.5
-     ],
-     "label_x": 0.4
+     "label_x": -0.4
     }
    ]
   }

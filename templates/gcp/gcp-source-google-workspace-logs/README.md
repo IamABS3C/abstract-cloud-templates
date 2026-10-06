@@ -6,6 +6,10 @@ A separate pipeline: Abstract's Google Workspace integration reads Workspace aud
 
 **Cloud:** gcp · **Role:** source · **Scope:** project
 
+![How Google Workspace logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Who signed in to Google Workspace: the identity group covers login, SAML, token, user accounts and context-aware access.

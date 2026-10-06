@@ -6,6 +6,10 @@ Routes firewall rule, Cloud DNS query, load balancer (Cloud Armor) and Cloud IDS
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
 
+![How Network threat logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Network detections need firewall, DNS, Cloud Armor or Cloud IDS logs, and a parser for them is being built.

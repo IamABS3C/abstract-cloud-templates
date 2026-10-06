@@ -6,6 +6,10 @@ Creates the hardened S3 bucket an Application, Network or Classic Load Balancer 
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How Load balancer access logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 You want ALB, NLB or Classic Load Balancer access logs in Abstract.

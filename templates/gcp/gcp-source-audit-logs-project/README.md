@@ -6,6 +6,10 @@ A project-scope sink that proves the whole pipeline end to end before organizati
 
 **Cloud:** gcp · **Role:** source · **Scope:** project
 
+![How Audit logs, one project fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Proving the pipeline before asking for organization-scope IAM.

@@ -6,6 +6,10 @@ For logs that are already objects in a bucket, such as a vendor export or an arc
 
 **Cloud:** gcp · **Role:** source · **Scope:** project
 
+![How Logs in a Cloud Storage bucket fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 A vendor or internal system writes log files to a bucket and cannot stream, or an archive needs backfilling.

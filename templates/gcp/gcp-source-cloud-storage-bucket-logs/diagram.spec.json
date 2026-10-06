@@ -1,0 +1,151 @@
+{
+ "frame": {
+  "title": "Logs from a Cloud Storage bucket reach Abstract",
+  "subtitle": "A bucket notification points Abstract at each new object, which it then fetches",
+  "height": 560,
+  "abstract_y": 150,
+  "abstract_sublabel": "pulls the subscription\nparses to ACS",
+  "integration_y": 394,
+  "cloud_label": "Your Google Cloud organization"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Cloud Storage bucket logs",
+   "groups": [
+    {
+     "id": "logproj",
+     "label": "Logging project",
+     "kind": "plain",
+     "color": "#4285F4",
+     "parent": "cloud",
+     "x": 470,
+     "y": 70,
+     "w": 600,
+     "h": 470
+    }
+   ],
+   "nodes": [
+    {
+     "id": "bucket",
+     "label": "Log bucket",
+     "icon": "gcp:cloud_storage",
+     "x": 50,
+     "y": 387,
+     "sublabel": "already holds the log objects",
+     "existing": true
+    },
+    {
+     "id": "sink",
+     "label": "Bucket notification",
+     "icon": "gcp:cloud_storage",
+     "x": 270,
+     "y": 140,
+     "sublabel": "OBJECT_FINALIZE, one per bucket;\na pointer, not the data",
+     "builds": [
+      "google_storage_notification\" \"abstract"
+     ]
+    },
+    {
+     "id": "topic",
+     "label": "Pub/Sub topic",
+     "icon": "gcp:pubsub",
+     "x": 50,
+     "y": 70,
+     "sublabel": "one topic, all buckets",
+     "builds": [
+      "google_pubsub_topic\" \"notifications"
+     ],
+     "parent": "logproj"
+    },
+    {
+     "id": "sub",
+     "label": "Pull subscription",
+     "icon": "gcp:pubsub",
+     "x": 300,
+     "y": 70,
+     "sublabel": "Abstract reads here",
+     "builds": [
+      "google_pubsub_subscription\" \"notifications"
+     ],
+     "parent": "logproj"
+    },
+    {
+     "id": "sa",
+     "label": "Service account",
+     "icon": "gcp:identity_and_access_management",
+     "x": 50,
+     "y": 317,
+     "sublabel": "created unless you pass one;\nsubscriber + objectViewer",
+     "builds": [
+      "google_service_account\" \"abstract",
+      "google_storage_bucket_iam_member\" \"abstract_object_reader"
+     ],
+     "parent": "logproj"
+    }
+   ],
+   "edges": [
+    {
+     "from": "bucket",
+     "to": "sink",
+     "label": "new object",
+     "exit": [
+      0.5,
+      0
+     ],
+     "entry": [
+      0,
+      0.8
+     ]
+    },
+    {
+     "from": "sink",
+     "to": "topic",
+     "label": "object notification"
+    },
+    {
+     "from": "topic",
+     "to": "sub",
+     "label": ""
+    },
+    {
+     "from": "sub",
+     "to": "abstract",
+     "label": "pull",
+     "label_x": -0.4
+    },
+    {
+     "from": "abs-integration",
+     "to": "sa",
+     "label": "authenticates as",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.2
+    },
+    {
+     "from": "sa",
+     "to": "bucket",
+     "label": "reads objects",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,215 @@
+{
+ "frame": {
+  "title": "Firewall, DNS, load balancer and IDS logs reach Abstract",
+  "subtitle": "One filtered sink, one Pub/Sub topic, one pull subscription Abstract reads",
+  "height": 730,
+  "abstract_y": 190,
+  "abstract_sublabel": "pulls the subscription\nparses to ACS",
+  "integration_y": 474,
+  "cloud_label": "Your Google Cloud organization"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Network threat logs",
+   "groups": [
+    {
+     "id": "logproj",
+     "label": "Logging project",
+     "kind": "plain",
+     "color": "#4285F4",
+     "parent": "cloud",
+     "x": 470,
+     "y": 70,
+     "w": 600,
+     "h": 630
+    }
+   ],
+   "nodes": [
+    {
+     "id": "fw",
+     "label": "Firewall rule logs",
+     "icon": "gcp:cloud_firewall_rules",
+     "x": 50,
+     "y": 30,
+     "sublabel": "per-rule logging",
+     "existing": true
+    },
+    {
+     "id": "dns",
+     "label": "Cloud DNS queries",
+     "icon": "gcp:cloud_dns",
+     "x": 50,
+     "y": 200,
+     "sublabel": "server policy logging",
+     "existing": true
+    },
+    {
+     "id": "lb",
+     "label": "Load balancer logs",
+     "icon": "gcp:cloud_load_balancing",
+     "x": 50,
+     "y": 370,
+     "sublabel": "incl. Cloud Armor decisions",
+     "existing": true
+    },
+    {
+     "id": "ids",
+     "label": "Cloud IDS threats",
+     "icon": "gcp:cloud_ids",
+     "x": 50,
+     "y": 540,
+     "sublabel": "threat log",
+     "existing": true
+    },
+    {
+     "id": "sink",
+     "label": "Log sink",
+     "icon": "gcp:cloud_logging",
+     "x": 270,
+     "y": 285,
+     "sublabel": "organization, folder or\nproject scope",
+     "builds": [
+      "google_logging_organization_sink",
+      "google_logging_folder_sink",
+      "google_logging_project_sink"
+     ]
+    },
+    {
+     "id": "topic",
+     "label": "Pub/Sub topic",
+     "icon": "gcp:pubsub",
+     "x": 50,
+     "y": 150,
+     "sublabel": "abstract-network-threats",
+     "builds": [
+      "google_pubsub_topic\" \"abstract"
+     ],
+     "parent": "logproj"
+    },
+    {
+     "id": "sub",
+     "label": "Pull subscription",
+     "icon": "gcp:pubsub",
+     "x": 300,
+     "y": 150,
+     "sublabel": "Abstract reads here",
+     "builds": [
+      "google_pubsub_subscription\" \"abstract"
+     ],
+     "parent": "logproj"
+    },
+    {
+     "id": "dlq",
+     "label": "Dead-letter topic",
+     "icon": "gcp:pubsub",
+     "x": 470,
+     "y": 280,
+     "sublabel": "optional",
+     "builds": [
+      "google_pubsub_topic\" \"dead_letter"
+     ],
+     "parent": "logproj"
+    },
+    {
+     "id": "sa",
+     "label": "Service account",
+     "icon": "gcp:identity_and_access_management",
+     "x": 50,
+     "y": 397,
+     "sublabel": "subscriber on this\nsubscription only",
+     "builds": [
+      "google_service_account\" \"abstract",
+      "google_pubsub_subscription_iam_member\" \"abstract"
+     ],
+     "parent": "logproj"
+    }
+   ],
+   "edges": [
+    {
+     "from": "fw",
+     "to": "sink",
+     "label": "",
+     "entry": [
+      0,
+      0.2
+     ]
+    },
+    {
+     "from": "dns",
+     "to": "sink",
+     "label": "",
+     "entry": [
+      0,
+      0.45
+     ]
+    },
+    {
+     "from": "lb",
+     "to": "sink",
+     "label": "",
+     "entry": [
+      0,
+      0.7
+     ]
+    },
+    {
+     "from": "ids",
+     "to": "sink",
+     "label": "log entries",
+     "entry": [
+      0,
+      0.9
+     ]
+    },
+    {
+     "from": "sink",
+     "to": "topic",
+     "label": "matching entries"
+    },
+    {
+     "from": "topic",
+     "to": "sub",
+     "label": ""
+    },
+    {
+     "from": "sub",
+     "to": "abstract",
+     "label": "pull",
+     "label_x": -0.4
+    },
+    {
+     "from": "sub",
+     "to": "dlq",
+     "label": "undeliverable",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      1,
+      0.85
+     ],
+     "entry": [
+      0.5,
+      0
+     ]
+    },
+    {
+     "from": "abs-integration",
+     "to": "sa",
+     "label": "authenticates as",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.2
+    }
+   ]
+  }
+ ]
+}

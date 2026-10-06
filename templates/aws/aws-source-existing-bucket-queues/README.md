@@ -6,6 +6,10 @@ A Terraform or OpenTofu module for a security bucket that holds several log sour
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How Queues for an existing bucket fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 One security bucket holds several sources under different prefixes, and each source needs its own parser.

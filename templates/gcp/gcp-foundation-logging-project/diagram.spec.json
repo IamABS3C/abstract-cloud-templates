@@ -1,0 +1,79 @@
+{
+ "frame": {
+  "title": "A logging project ready for the pipeline",
+  "subtitle": "Optional: creates a dedicated project, or enables the needed APIs on one you already have",
+  "cloud_label": "Your Google Cloud organization",
+  "height": 420,
+  "no_data_path": true
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "gcp-foundation-logging-project",
+   "groups": [],
+   "nodes": [
+    {
+     "id": "billing",
+     "label": "Billing account",
+     "sublabel": "pays for the new project\nonly when one is created",
+     "icon": "gcp:billing",
+     "x": 60,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "project",
+     "label": "Logging project",
+     "sublabel": "optional: new project,\nor your existing one",
+     "icon": "gcp:project",
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "google_project\" \"logging"
+     ]
+    },
+    {
+     "id": "apis",
+     "label": "Required APIs",
+     "sublabel": "Logging, Pub/Sub, IAM and\nthe others the pipeline uses",
+     "icon": "gcp:cloud_apis",
+     "x": 600,
+     "y": 110,
+     "builds": [
+      "google_project_service\" \"required"
+     ]
+    },
+    {
+     "id": "next",
+     "label": "Log export pipeline",
+     "sublabel": "the audit-log templates\ndeploy into this project",
+     "icon": "gcp:pubsub",
+     "x": 870,
+     "y": 110,
+     "existing": true
+    }
+   ],
+   "edges": [
+    {
+     "from": "billing",
+     "to": "project",
+     "label": "billing link",
+     "tone": "muted"
+    },
+    {
+     "from": "project",
+     "to": "apis",
+     "label": "enables",
+     "tone": "muted"
+    },
+    {
+     "from": "apis",
+     "to": "next",
+     "label": "ready for",
+     "tone": "muted",
+     "dashed": true
+    }
+   ]
+  }
+ ]
+}

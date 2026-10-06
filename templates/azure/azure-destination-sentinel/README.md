@@ -6,6 +6,10 @@ Prepares Azure for the Abstract Azure Sentinel Destination: a Data Collection En
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
+![How Sentinel destination fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Production, when you create the Entra app registration yourself.

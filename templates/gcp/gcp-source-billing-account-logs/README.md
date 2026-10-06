@@ -6,6 +6,10 @@ A Cloud Logging sink on the billing account, which sits outside the organization
 
 **Cloud:** gcp · **Role:** source · **Scope:** billing-account
 
+![How Billing account audit logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Detecting billing-account takeover, project link changes and billing IAM changes.

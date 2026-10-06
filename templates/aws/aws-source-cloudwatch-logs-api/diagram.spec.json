@@ -1,115 +1,104 @@
 {
- "title": "aws.cloudwatch-logs",
+ "frame": {
+  "title": "CloudWatch Logs reach Abstract by API",
+  "subtitle": "No bucket or queue: Abstract reads log events straight from your log groups with a role the template builds",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 100,
+  "abstract_sublabel": "polls the Logs API\nparses to ACS",
+  "integration_y": 547
+ },
  "theme": "dark",
- "animate": false,
  "pages": [
   {
-   "name": "aws.cloudwatch-logs",
-   "groups": [
-    {
-     "id": "acct",
-     "label": "Customer AWS account",
-     "kind": "account",
-     "x": 40,
-     "y": 40,
-     "w": 800,
-     "h": 440,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 900,
-     "y": 40,
-     "w": 260,
-     "h": 440,
-     "color": "#FF216B"
-    }
-   ],
+   "name": "CloudWatch Logs",
    "nodes": [
     {
      "id": "lg",
      "label": "CloudWatch log groups",
+     "sublabel": "your existing groups;\nrole scoped to one or all",
      "icon": "aws:cloudwatch",
-     "parent": "acct",
-     "x": 140,
-     "y": 100,
-     "sublabel": "existing, one or all"
+     "x": 330,
+     "y": 110,
+     "existing": true
     },
     {
-     "id": "role",
-     "label": "IAM read role",
-     "icon": "aws:role",
-     "parent": "acct",
-     "x": 460,
-     "y": 280,
-     "sublabel": "trusts Abstract only"
+     "id": "user",
+     "label": "IAM user + access key",
+     "sublabel": "optional alternative:\nAuthMode=AccessKey",
+     "icon": "aws:long_term_security_credential",
+     "x": 60,
+     "y": 540,
+     "builds": [
+      "AWS::IAM::User"
+     ]
+    },
+    {
+     "id": "secret",
+     "label": "Secrets Manager",
+     "sublabel": "optional: holds the\naccess key",
+     "icon": "aws:secrets_manager",
+     "x": 330,
+     "y": 540,
+     "builds": [
+      "AWS::SecretsManager::Secret"
+     ]
     },
     {
      "id": "ssm",
      "label": "SSM parameter",
+     "sublabel": "optional: publishes\nthe role ARN",
      "icon": "aws:parameter_store",
-     "parent": "acct",
-     "x": 140,
-     "y": 290,
-     "sublabel": "optional, role ARN"
+     "x": 600,
+     "y": 540,
+     "builds": [
+      "AWS::SSM::Parameter"
+     ]
     },
     {
-     "id": "plat",
-     "label": "Abstract platform",
-     "sublabel": "reads via API",
-     "icon": "img:../../app/web/public/logo-mark.svg",
-     "parent": "abs",
-     "x": 85,
-     "y": 115,
-     "w": 90,
-     "h": 80
+     "id": "role",
+     "label": "IAM role",
+     "sublabel": "reads log groups only;\ntrusts Abstract with an External ID",
+     "icon": "aws:role",
+     "x": 870,
+     "y": 540,
+     "builds": [
+      "AbstractRole"
+     ]
     }
    ],
    "edges": [
     {
      "from": "lg",
-     "to": "plat",
-     "label": "FilterLogEvents API",
-     "tone": "brand",
+     "to": "abstract",
+     "label": "FilterLogEvents / GetLogEvents",
      "entry": [
       0,
-      0.3
+      0.5
      ],
-     "label_x": 0.2
+     "label_x": -0.3
     },
     {
-     "from": "plat",
+     "from": "user",
+     "to": "secret",
+     "label": "key stored",
+     "tone": "muted",
+     "dashed": true
+    },
+    {
+     "from": "abs-integration",
      "to": "role",
      "label": "AssumeRole + External ID",
      "tone": "amber",
      "dashed": true,
      "exit": [
       0,
-      0.85
+      0.5
      ],
      "entry": [
       1,
       0.5
-     ],
-     "label_x": 0.35
-    },
-    {
-     "from": "role",
-     "to": "lg",
-     "label": "read-only logs",
-     "tone": "muted",
-     "dashed": true,
-     "exit": [
-      0.5,
-      0
-     ],
-     "entry": [
-      1,
-      0.85
-     ],
-     "label_x": -0.4
+     ]
     }
    ]
   }

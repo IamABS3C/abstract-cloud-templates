@@ -6,6 +6,10 @@ Creates a hardened S3 bucket any log shipper can write to, the SQS queue S3 noti
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How Any logs in an S3 bucket fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 A custom shipper or a third-party product writes logs to S3 and none of the source-specific templates fits.

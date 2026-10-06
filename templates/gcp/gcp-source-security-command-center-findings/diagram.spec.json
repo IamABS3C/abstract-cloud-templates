@@ -1,0 +1,125 @@
+{
+ "frame": {
+  "title": "Security Command Center findings reach Abstract",
+  "subtitle": "A notification config, its own Pub/Sub topic, one pull subscription Abstract reads",
+  "height": 600,
+  "abstract_y": 150,
+  "abstract_sublabel": "pulls the subscription\nparses to ACS",
+  "integration_y": 394,
+  "cloud_label": "Your Google Cloud organization"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "SCC findings",
+   "groups": [
+    {
+     "id": "logproj",
+     "label": "Logging project",
+     "kind": "plain",
+     "color": "#4285F4",
+     "parent": "cloud",
+     "x": 470,
+     "y": 70,
+     "w": 600,
+     "h": 510
+    }
+   ],
+   "nodes": [
+    {
+     "id": "scc",
+     "label": "Security Command Center",
+     "icon": "gcp:security_command_center",
+     "x": 50,
+     "y": 140,
+     "sublabel": "Premium or Enterprise",
+     "existing": true
+    },
+    {
+     "id": "sink",
+     "label": "Notification config",
+     "icon": "gcp:security_command_center",
+     "x": 270,
+     "y": 140,
+     "sublabel": "organization scope;\nactive, unmuted findings",
+     "builds": [
+      "google_scc_v2_organization_notification_config"
+     ]
+    },
+    {
+     "id": "topic",
+     "label": "Pub/Sub topic",
+     "icon": "gcp:pubsub",
+     "x": 50,
+     "y": 70,
+     "sublabel": "abstract-audit-logs-scc",
+     "builds": [
+      "google_pubsub_topic\" \"scc"
+     ],
+     "parent": "logproj"
+    },
+    {
+     "id": "sub",
+     "label": "Pull subscription",
+     "icon": "gcp:pubsub",
+     "x": 300,
+     "y": 70,
+     "sublabel": "Abstract reads here",
+     "builds": [
+      "google_pubsub_subscription\" \"scc"
+     ],
+     "parent": "logproj"
+    },
+    {
+     "id": "sa",
+     "label": "Abstract's service account",
+     "icon": "gcp:identity_and_access_management",
+     "x": 50,
+     "y": 317,
+     "sublabel": "from the audit-log template;\nsubscriber on the findings\nsubscription",
+     "existing": true,
+     "parent": "logproj"
+    }
+   ],
+   "edges": [
+    {
+     "from": "scc",
+     "to": "sink",
+     "label": "findings"
+    },
+    {
+     "from": "sink",
+     "to": "topic",
+     "label": "publishes findings"
+    },
+    {
+     "from": "topic",
+     "to": "sub",
+     "label": ""
+    },
+    {
+     "from": "sub",
+     "to": "abstract",
+     "label": "pull",
+     "label_x": -0.4
+    },
+    {
+     "from": "abs-integration",
+     "to": "sa",
+     "label": "authenticates as",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.2
+    }
+   ]
+  }
+ ]
+}

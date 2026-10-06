@@ -6,6 +6,10 @@ Kinesis is an API-poll source: Abstract reads records directly from a stream. Th
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How Kinesis data stream fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Records already flow into a Kinesis data stream (or should), and Abstract should read the stream directly.

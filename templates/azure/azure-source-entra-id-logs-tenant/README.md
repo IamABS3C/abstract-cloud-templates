@@ -6,6 +6,10 @@ Entra ID activity logs are a single tenant-level diagnostic setting on the micro
 
 **Cloud:** azure · **Role:** source · **Scope:** tenant
 
+![How Entra ID logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Always, and early: sign-in and audit logs carry the identity detections customers care about.

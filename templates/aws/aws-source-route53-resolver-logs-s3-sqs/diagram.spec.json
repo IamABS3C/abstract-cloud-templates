@@ -1,167 +1,200 @@
 {
- "title": "aws.s3-sqs.cloudformation",
+ "frame": {
+  "title": "Route 53 Resolver query logs reach Abstract through S3 and SQS",
+  "subtitle": "Resolver writes query logs to the bucket; S3 queues a message per file, and Abstract polls the queue and reads the file",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 200,
+  "abstract_sublabel": "polls SQS, reads S3\nparses to ACS",
+  "integration_y": 547
+ },
  "theme": "dark",
- "animate": false,
  "pages": [
   {
-   "name": "aws.s3-sqs.cloudformation",
-   "groups": [
-    {
-     "id": "acct",
-     "label": "Customer AWS account",
-     "kind": "account",
-     "x": 40,
-     "y": 40,
-     "w": 800,
-     "h": 470,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 900,
-     "y": 40,
-     "w": 260,
-     "h": 470,
-     "color": "#FF216B"
-    }
-   ],
+   "name": "Resolver query logs",
    "nodes": [
     {
      "id": "prod",
-     "label": "Log producer",
-     "icon": "aws:cloudtrail",
-     "parent": "acct",
+     "label": "Resolver query logging",
+     "sublabel": "optional: config and one association\nper VPC id you list",
+     "icon": "aws:route_53",
      "x": 60,
-     "y": 120,
-     "sublabel": "CloudTrail, Flow Logs, WAF"
+     "y": 110,
+     "builds": [
+      "AWS::Route53Resolver::ResolverQueryLoggingConfig"
+     ]
     },
     {
-     "id": "s3",
+     "id": "bucket",
      "label": "Log bucket",
+     "sublabel": "hardened, versioned\nlifecycle expiry",
      "icon": "aws:s3",
-     "parent": "acct",
-     "x": 270,
-     "y": 120,
-     "sublabel": "hardened, versioned"
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "AWS::S3::Bucket",
+      "AWS::S3::BucketPolicy"
+     ]
     },
     {
-     "id": "sqs",
-     "label": "SQS queue",
-     "icon": "aws:sqs",
-     "parent": "acct",
-     "x": 500,
-     "y": 120,
-     "sublabel": "+ dead-letter queue"
-    },
-    {
-     "id": "sns",
+     "id": "topic",
      "label": "SNS topic",
+     "sublabel": "optional fan-out\n(S3ToSNSToSQS)",
      "icon": "aws:sns",
-     "parent": "acct",
-     "x": 385,
-     "y": 300,
-     "sublabel": "optional fan-out"
+     "x": 330,
+     "y": 330,
+     "builds": [
+      "AWS::SNS::Topic",
+      "AWS::SNS::TopicPolicy"
+     ]
     },
     {
-     "id": "role",
-     "label": "IAM role",
-     "icon": "aws:role",
-     "parent": "acct",
-     "x": 640,
-     "y": 300,
-     "sublabel": "trusts Abstract only"
+     "id": "queue",
+     "label": "SQS queue",
+     "sublabel": "Abstract polls here",
+     "icon": "aws:sqs",
+     "x": 600,
+     "y": 330,
+     "builds": [
+      "AWS::SQS::Queue",
+      "AWS::SQS::QueuePolicy"
+     ]
+    },
+    {
+     "id": "dlq",
+     "label": "Dead-letter queue",
+     "sublabel": "after repeated failures",
+     "icon": "aws:sqs",
+     "x": 600,
+     "y": 540,
+     "builds": [
+      "DeadLetterQueue"
+     ]
     },
     {
      "id": "kms",
      "label": "KMS key",
+     "sublabel": "optional, encrypts\nbucket and queue",
      "icon": "aws:key_management_service",
-     "parent": "acct",
      "x": 60,
-     "y": 300,
-     "sublabel": "optional"
+     "y": 540,
+     "builds": [
+      "AWS::KMS::Key"
+     ]
     },
     {
-     "id": "plat",
-     "label": "Abstract platform",
-     "sublabel": "polls SQS, reads S3",
-     "icon": "img:../../app/web/public/logo-mark.svg",
-     "parent": "abs",
-     "x": 85,
-     "y": 143,
-     "w": 90,
-     "h": 80
+     "id": "alarms",
+     "label": "CloudWatch alarms",
+     "sublabel": "optional: dead letters,\nqueue age",
+     "icon": "aws:cloudwatch",
+     "x": 330,
+     "y": 540,
+     "builds": [
+      "AWS::CloudWatch::Alarm"
+     ]
+    },
+    {
+     "id": "role",
+     "label": "IAM role",
+     "sublabel": "trusts Abstract only,\nwith an External ID",
+     "icon": "aws:role",
+     "x": 870,
+     "y": 540,
+     "builds": [
+      "AWS::IAM::Role"
+     ]
     }
    ],
    "edges": [
     {
      "from": "prod",
-     "to": "s3",
-     "label": "writes logs",
-     "tone": "brand"
+     "to": "bucket",
+     "label": "query log files"
     },
     {
-     "from": "s3",
-     "to": "sqs",
-     "label": "ObjectCreated",
-     "tone": "brand"
-    },
-    {
-     "from": "s3",
-     "to": "sns",
-     "label": "",
-     "tone": "muted",
-     "dashed": true,
+     "from": "bucket",
+     "to": "queue",
+     "label": "object created",
      "exit": [
       1,
       0.85
      ],
      "entry": [
-      0.5,
-      0
+      0,
+      0.3
      ]
     },
     {
-     "from": "sns",
-     "to": "sqs",
-     "label": "",
+     "from": "bucket",
+     "to": "topic",
+     "label": "optional",
      "tone": "muted",
      "dashed": true,
      "exit": [
-      1,
+      0,
+      0.85
+     ],
+     "entry": [
+      0,
       0.5
+     ]
+    },
+    {
+     "from": "topic",
+     "to": "queue",
+     "label": "subscription",
+     "tone": "muted",
+     "dashed": true
+    },
+    {
+     "from": "queue",
+     "to": "abstract",
+     "label": "poll",
+     "entry": [
+      0,
+      0.7
+     ],
+     "label_x": -0.3
+    },
+    {
+     "from": "bucket",
+     "to": "abstract",
+     "label": "GetObject",
+     "entry": [
+      0,
+      0.3
+     ],
+     "label_x": -0.5
+    },
+    {
+     "from": "queue",
+     "to": "dlq",
+     "label": "undeliverable",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      1,
+      0.9
      ],
      "entry": [
-      0,
-      0.85
+      1,
+      0.3
      ]
     },
     {
-     "from": "sqs",
-     "to": "plat",
-     "label": "poll",
-     "tone": "brand",
-     "entry": [
-      0,
-      0.2
-     ]
-    },
-    {
-     "from": "plat",
+     "from": "abs-integration",
      "to": "role",
      "label": "AssumeRole + External ID",
      "tone": "amber",
      "dashed": true,
      "exit": [
       0,
-      0.85
+      0.5
      ],
      "entry": [
       1,
       0.5
-     ],
-     "label_x": 0.35
+     ]
     }
    ]
   }

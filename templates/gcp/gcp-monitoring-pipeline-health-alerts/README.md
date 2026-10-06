@@ -6,6 +6,10 @@ A stalled consumer, a missing IAM grant and a deleted sink all look the same fro
 
 **Cloud:** gcp · **Role:** monitoring · **Scope:** project
 
+![How Pipeline health alerts fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Alongside gcp-source-audit-logs-organization, not later.

@@ -1,304 +1,140 @@
 {
- "title": "Sentinel destination - Microsoft Graph Bicep creates the app",
+ "frame": {
+  "title": "Bicep creates the app, then Abstract delivers to Sentinel",
+  "subtitle": "The Microsoft Graph Bicep extension makes the app registration, then the standard destination template is called",
+  "cloud_label": "Your resource group",
+  "height": 600,
+  "abstract_y": 151,
+  "abstract_label": "Abstract platform",
+  "abstract_sublabel": "sends processed events\nto your workspace"
+ },
  "theme": "dark",
  "pages": [
   {
-   "name": "Sentinel destination via Graph",
-   "groups": [
-    {
-     "id": "az",
-     "label": "Customer Azure tenant",
-     "kind": "plain",
-     "x": 40,
-     "y": 40,
-     "w": 920,
-     "h": 620,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 1000,
-     "y": 40,
-     "w": 220,
-     "h": 620,
-     "color": "#FF216B"
-    },
-    {
-     "id": "ws",
-     "label": "Log Analytics workspace",
-     "kind": "plain",
-     "x": 50,
-     "y": 360,
-     "w": 330,
-     "h": 190,
-     "color": "#f5c61e",
-     "parent": "az"
-    },
-    {
-     "id": "opt",
-     "label": "Optional: automateSecret",
-     "kind": "plain",
-     "x": 520,
-     "y": 20,
-     "w": 380,
-     "h": 170,
-     "color": "#7D7589",
-     "parent": "az"
-    }
-   ],
+   "name": "Sentinel destination, app by Graph",
    "nodes": [
-    {
-     "id": "tbl",
-     "label": "AbstractEventLogs_CL",
-     "icon": "azure:table",
-     "parent": "ws",
-     "x": 126,
-     "y": 60,
-     "sublabel": "custom table"
-    },
-    {
-     "id": "dcr",
-     "label": "Data Collection Rule",
-     "icon": "azure:filter",
-     "parent": "az",
-     "x": 560,
-     "y": 420,
-     "sublabel": "abstract-dcr"
-    },
-    {
-     "id": "dce",
-     "label": "Data Collection Endpoint",
-     "icon": "azure:service_endpoint",
-     "parent": "az",
-     "x": 760,
-     "y": 420,
-     "sublabel": "abstract-dce"
-    },
-    {
-     "id": "plat",
-     "label": "Abstract platform",
-     "icon": "azure:monitor",
-     "parent": "abs",
-     "x": 71,
-     "y": 420,
-     "sublabel": "Sentinel destination"
-    },
-    {
-     "id": "dep",
-     "label": "You (deployer)",
-     "icon": "azure:user",
-     "parent": "az",
-     "x": 50,
-     "y": 220,
-     "sublabel": "Azure CLI or PowerShell"
-    },
-    {
-     "id": "gb",
-     "label": "Graph Bicep",
-     "icon": "azure:code_file",
-     "parent": "az",
-     "x": 230,
-     "y": 220,
-     "sublabel": "microsoftGraphV1 extension"
-    },
     {
      "id": "app",
      "label": "App registration",
-     "icon": "azure:active_directory",
-     "parent": "az",
-     "x": 410,
-     "y": 220,
-     "sublabel": "and service principal"
+     "sublabel": "no API permissions,\ncreated as the deployer",
+     "icon": "azure:identity/App_Registrations",
+     "x": 60,
+     "y": 160,
+     "builds": [
+      "Microsoft.Graph/applications@"
+     ]
     },
     {
-     "id": "sw",
-     "label": "Secret writer",
-     "icon": "azure:user_permissions",
-     "parent": "opt",
-     "x": 40,
-     "y": 40,
-     "sublabel": "owns only this app"
+     "id": "sp",
+     "label": "Service principal",
+     "sublabel": "becomes the DCR role's\nprincipal",
+     "icon": "azure:identity/Enterprise_Applications",
+     "x": 330,
+     "y": 160,
+     "builds": [
+      "Microsoft.Graph/servicePrincipals@"
+     ]
     },
     {
-     "id": "ds",
-     "label": "Deployment script",
-     "icon": "azure:script_file",
-     "parent": "opt",
-     "x": 170,
-     "y": 40,
-     "sublabel": "creates secret"
+     "id": "mod",
+     "label": "Standard Sentinel destination",
+     "sublabel": "endpoint, rule, custom table and\nrole (the destination template)",
+     "icon": "azure:other/Data_Collection_Rules",
+     "x": 600,
+     "y": 160,
+     "builds": [
+      "'../azure-destination-sentinel/main.bicep'"
+     ]
+    },
+    {
+     "id": "script",
+     "label": "Secret script",
+     "sublabel": "creates the client secret\n(optional, automateSecret)",
+     "icon": "azure:management_governance/Automation_Accounts",
+     "x": 870,
+     "y": 360,
+     "builds": [
+      "Microsoft.Resources/deploymentScripts@"
+     ]
     },
     {
      "id": "kv",
      "label": "Key Vault",
-     "icon": "azure:key_vault",
-     "parent": "opt",
-     "x": 295,
-     "y": 40,
-     "sublabel": "client secret"
+     "sublabel": "holds the secret\n(optional)",
+     "icon": "azure:security/Key_Vaults",
+     "x": 600,
+     "y": 360,
+     "builds": [
+      "Microsoft.KeyVault/vaults@"
+     ]
+    },
+    {
+     "id": "writer",
+     "label": "Secret-writer identity",
+     "sublabel": "owns only this app\n(optional)",
+     "icon": "azure:identity/Managed_Identities",
+     "x": 330,
+     "y": 360,
+     "builds": [
+      "Microsoft.ManagedIdentity/userAssignedIdentities@"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "plat",
-     "to": "dce",
-     "tone": "brand",
-     "exit": [
-      0,
-      0.5
-     ],
-     "entry": [
-      1,
-      0.5
-     ],
-     "label": "Logs Ingestion API"
-    },
-    {
-     "from": "dce",
-     "to": "dcr",
-     "tone": "brand",
-     "exit": [
-      0,
-      0.5
-     ],
-     "entry": [
-      1,
-      0.5
-     ]
-    },
-    {
-     "from": "dcr",
-     "to": "tbl",
-     "tone": "brand",
-     "exit": [
-      0,
-      0.5
-     ],
-     "entry": [
-      1,
-      0.5
-     ],
-     "label": "Custom stream"
-    },
-    {
-     "from": "dep",
-     "to": "gb",
-     "tone": "brand",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0,
-      0.5
-     ],
-     "label": "deploys"
-    },
-    {
-     "from": "gb",
-     "to": "app",
-     "tone": "brand",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0,
-      0.5
-     ],
-     "label": "creates"
-    },
-    {
-     "from": "sw",
-     "to": "ds",
-     "tone": "muted",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0,
-      0.5
-     ],
-     "label": "runs as"
-    },
-    {
-     "from": "ds",
-     "to": "kv",
-     "tone": "brand",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0,
-      0.5
-     ]
-    },
-    {
-     "from": "sw",
-     "to": "app",
-     "tone": "muted",
-     "exit": [
-      0,
-      0.5
-     ],
-     "entry": [
-      0.25,
-      0
-     ],
-     "label": "owns"
-    },
-    {
      "from": "app",
-     "to": "dcr",
+     "to": "sp",
+     "label": "service principal"
+    },
+    {
+     "from": "sp",
+     "to": "mod",
+     "label": "principalId",
+     "label_x": -0.1
+    },
+    {
+     "from": "abstract",
+     "to": "mod",
+     "label": "sends events",
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.2
+    },
+    {
+     "from": "script",
+     "to": "kv",
+     "label": "stores secret",
      "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ]
+    },
+    {
+     "from": "writer",
+     "to": "kv",
+     "label": "runs the script as",
+     "tone": "muted",
+     "dashed": true,
      "exit": [
       1,
       0.5
      ],
      "entry": [
-      0.5,
-      0
-     ],
-     "label": "Metrics Publisher",
-     "label_x": -0.3
-    },
-    {
-     "from": "plat",
-     "to": "app",
-     "tone": "muted",
-     "exit": [
-      0.5,
-      0
-     ],
-     "entry": [
-      0.75,
-      0
-     ],
-     "label": "signs in as",
-     "dashed": true,
-     "label_x": 0.2
-    }
-   ],
-   "badges": [
-    {
-     "text": "new or existing",
-     "x": 292,
-     "y": 410,
-     "w": 120,
-     "tone": "muted"
-    }
-   ],
-   "notes": [
-    {
-     "text": "Never touches: analytics rules, workbooks, other tables",
-     "x": 90,
-     "y": 612,
-     "w": 420,
-     "h": 24
+      0,
+      0.5
+     ]
     }
    ]
   }

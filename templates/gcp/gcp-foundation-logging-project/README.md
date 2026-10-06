@@ -6,6 +6,10 @@ Optional: enables the APIs the pipeline needs on an existing project, or creates
 
 **Cloud:** gcp · **Role:** foundation · **Scope:** project
 
+![How Logging project fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Greenfield, or when the only candidate is a workload project.

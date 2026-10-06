@@ -6,6 +6,10 @@ A second organization sink writing to a Cloud Storage bucket for evidence and ba
 
 **Cloud:** gcp · **Role:** archive · **Scope:** organization
 
+![How Log archive bucket fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Evidence retention and backfill alongside the Pub/Sub stream.

@@ -6,6 +6,10 @@ Assign once at a management group and every subscription in it, today's and ever
 
 **Cloud:** azure · **Role:** source · **Scope:** management-group
 
+![How Azure logs, every subscription fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Any estate with more than about three subscriptions, or any estate that will grow.

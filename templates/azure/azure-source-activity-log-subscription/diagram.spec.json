@@ -1,117 +1,90 @@
 {
- "title": "One subscription's Activity Log \u2192 Event Hub",
+ "frame": {
+  "title": "One subscription's Activity Log reaches Abstract",
+  "subtitle": "A single diagnostic setting streams the Activity Log to the Event Hub you already deployed",
+  "cloud_label": "Your Azure subscription",
+  "height": 540,
+  "abstract_y": 161,
+  "abstract_sublabel": "reads the consumer group\nparses to ACS",
+  "integration_y": 367
+ },
  "theme": "dark",
  "pages": [
   {
-   "name": "Activity Log",
-   "width": 1340,
-   "height": 790,
-   "groups": [
-    {
-     "id": "sub",
-     "label": "One Azure subscription",
-     "kind": "plain",
-     "x": 60,
-     "y": 70,
-     "w": 760,
-     "h": 630,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 950,
-     "y": 70,
-     "w": 330,
-     "h": 630,
-     "color": "#FF216B"
-    }
-   ],
+   "name": "Activity Log, one subscription",
    "nodes": [
     {
-     "id": "arm",
-     "label": "ARM control plane",
-     "icon": "azure:management_portal",
-     "parent": "sub",
-     "x": 60,
-     "y": 90,
-     "sublabel": "create / update / delete"
-    },
-    {
-     "id": "rbac",
-     "label": "RBAC changes",
-     "icon": "azure:user_permissions",
-     "parent": "sub",
-     "x": 60,
-     "y": 250,
-     "sublabel": "every role assignment"
-    },
-    {
-     "id": "def",
-     "label": "Defender alerts",
-     "icon": "azure:security",
-     "parent": "sub",
-     "x": 60,
-     "y": 400,
-     "sublabel": "Security category, free"
-    },
-    {
-     "id": "al",
+     "id": "act",
      "label": "Activity Log",
-     "icon": "azure:monitor",
-     "parent": "sub",
-     "x": 330,
-     "y": 250,
-     "sublabel": "subscription scope, NOT regional"
+     "sublabel": "every create, update, delete\nand RBAC change",
+     "icon": "azure:management_governance/Activity_Log",
+     "x": 60,
+     "y": 170,
+     "existing": true
     },
     {
-     "id": "ds",
+     "id": "setting",
      "label": "Diagnostic setting",
-     "icon": "azure:log_search",
-     "parent": "sub",
-     "x": 560,
-     "y": 250,
-     "sublabel": "one per subscription"
+     "sublabel": "abstract-activity-logs\ncategories you choose",
+     "icon": "azure:management_governance/Diagnostics_Settings",
+     "x": 330,
+     "y": 170,
+     "builds": [
+      "Microsoft.Insights/diagnosticSettings@"
+     ]
     },
     {
      "id": "hub",
      "label": "Event hub",
-     "icon": "azure:event_hubs",
-     "parent": "abs",
-     "x": 100,
-     "y": 220,
-     "sublabel": "abs-prod-activity",
-     "fill": "#FF216B"
+     "sublabel": "abs-prod-activity\n(foundation template)",
+     "icon": "azure:iot/Event_Hubs",
+     "x": 600,
+     "y": 170,
+     "existing": true
+    },
+    {
+     "id": "listen",
+     "label": "Listen access",
+     "sublabel": "SAS listen rule or role\n(foundation template)",
+     "icon": "azure:security/Keys",
+     "x": 870,
+     "y": 360,
+     "existing": true
     }
    ],
    "edges": [
     {
-     "from": "arm",
-     "to": "al",
-     "tone": "muted"
+     "from": "act",
+     "to": "setting",
+     "label": "Activity Log events"
     },
     {
-     "from": "rbac",
-     "to": "al",
-     "tone": "brand"
-    },
-    {
-     "from": "def",
-     "to": "al",
-     "tone": "muted"
-    },
-    {
-     "from": "al",
-     "to": "ds",
-     "tone": "brand"
-    },
-    {
-     "from": "ds",
+     "from": "setting",
      "to": "hub",
-     "label": "one hub serves every region",
-     "tone": "brand",
-     "label_x": -0.3
+     "label": "streams to the hub",
+     "label_x": -0.1
+    },
+    {
+     "from": "hub",
+     "to": "abstract",
+     "label": "consume",
+     "label_x": -0.2
+    },
+    {
+     "from": "abs-integration",
+     "to": "listen",
+     "label": "authenticates with",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.2
     }
    ]
   }

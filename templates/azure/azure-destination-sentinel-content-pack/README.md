@@ -6,6 +6,10 @@ A self-contained approximation of the Abstract Microsoft Sentinel solution that 
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
+![How Sentinel content pack fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 A lab or private install of the Abstract Sentinel content.

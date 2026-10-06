@@ -6,6 +6,10 @@ A master stack nests the per-source child templates, so one deploy provisions an
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How Several sources, one stack fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Several AWS sources in the same account and region, where the shared identity and encryption should be set once.

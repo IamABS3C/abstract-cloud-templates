@@ -6,6 +6,10 @@ Turns on logging for one WAF web ACL into a hardened S3 bucket, with the SQS que
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How WAF logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 You want WAF request logs for a web ACL in Abstract.

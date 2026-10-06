@@ -6,6 +6,10 @@ The portal-wizard variant of the Sentinel destination: a deployment script creat
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
+![How Sentinel destination, app by script fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Portal-only teams and labs.

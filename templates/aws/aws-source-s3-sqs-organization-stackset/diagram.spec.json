@@ -1,262 +1,94 @@
 {
- "title": "aws.stacksets",
+ "frame": {
+  "title": "One source template rolled out to every account",
+  "subtitle": "A service-managed StackSet deploys the chosen S3 and SQS source template to each account in an OU",
+  "cloud_label": "Your AWS organization",
+  "height": 560,
+  "abstract_y": 321,
+  "abstract_sublabel": "polls each account's SQS,\nreads its S3"
+ },
  "theme": "dark",
- "animate": false,
  "pages": [
   {
-   "name": "aws.stacksets",
-   "groups": [
+   "name": "Organization rollout",
+   "nodes": [
     {
      "id": "mgmt",
      "label": "Management account",
-     "kind": "account",
-     "x": 40,
-     "y": 40,
-     "w": 220,
-     "h": 580,
-     "color": "#2e9bf0"
+     "sublabel": "you run deploy.sh with\nthe template, OU and regions",
+     "icon": "aws:organizations",
+     "x": 60,
+     "y": 330,
+     "existing": true
     },
     {
      "id": "ou",
-     "label": "Target OU, listed regions",
-     "kind": "plain",
-     "x": 300,
-     "y": 40,
-     "w": 540,
-     "h": 580,
-     "color": "#f5c61e"
+     "label": "Organizational unit",
+     "sublabel": "every account in it;\nnew accounts too with --auto-deploy",
+     "icon": "aws:organizations_organizational_unit",
+     "x": 600,
+     "y": 110,
+     "existing": true
     },
     {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 900,
-     "y": 40,
-     "w": 260,
-     "h": 580,
-     "color": "#FF216B"
-    },
-    {
-     "id": "m0",
-     "label": "Member account",
-     "kind": "account",
-     "parent": "ou",
-     "x": 30,
-     "y": 45,
-     "w": 470,
-     "h": 155,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "m1",
-     "label": "Member account",
-     "kind": "account",
-     "parent": "ou",
-     "x": 30,
-     "y": 215,
-     "w": 470,
-     "h": 155,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "m2",
-     "label": "New account, auto-deployed",
-     "kind": "account",
-     "parent": "ou",
-     "x": 30,
-     "y": 385,
-     "w": 470,
-     "h": 155,
-     "color": "#2e9bf0"
-    }
-   ],
-   "nodes": [
-    {
-     "id": "ss",
+     "id": "stackset",
      "label": "StackSet",
+     "sublabel": "service-managed,\nwith the chosen template",
      "icon": "aws:cloudformation",
-     "parent": "mgmt",
-     "x": 70,
-     "y": 245,
-     "sublabel": "service-managed"
+     "x": 330,
+     "y": 330,
+     "builds": [
+      "StackSet"
+     ]
     },
     {
-     "id": "plat",
-     "label": "Abstract platform",
-     "sublabel": "polls every account",
-     "icon": "img:../../app/web/public/logo-mark.svg",
-     "parent": "abs",
-     "x": 75,
-     "y": 235,
-     "w": 110,
-     "h": 98
-    },
-    {
-     "id": "stk0",
-     "label": "Stack instance",
-     "icon": "aws:cloudformation",
-     "parent": "m0",
-     "x": 40,
-     "y": 30,
-     "sublabel": "per region"
-    },
-    {
-     "id": "sqs0",
-     "label": "S3 + SQS",
-     "icon": "aws:sqs",
-     "parent": "m0",
-     "x": 200,
-     "y": 30,
-     "sublabel": "source path"
-    },
-    {
-     "id": "role0",
-     "label": "IAM role",
-     "icon": "aws:role",
-     "parent": "m0",
-     "x": 350,
-     "y": 30,
-     "sublabel": "External ID trust"
-    },
-    {
-     "id": "stk1",
-     "label": "Stack instance",
-     "icon": "aws:cloudformation",
-     "parent": "m1",
-     "x": 40,
-     "y": 30,
-     "sublabel": "per region"
-    },
-    {
-     "id": "sqs1",
-     "label": "S3 + SQS",
-     "icon": "aws:sqs",
-     "parent": "m1",
-     "x": 200,
-     "y": 30,
-     "sublabel": "source path"
-    },
-    {
-     "id": "role1",
-     "label": "IAM role",
-     "icon": "aws:role",
-     "parent": "m1",
-     "x": 350,
-     "y": 30,
-     "sublabel": "External ID trust"
-    },
-    {
-     "id": "stk2",
-     "label": "Stack instance",
-     "icon": "aws:cloudformation",
-     "parent": "m2",
-     "x": 40,
-     "y": 30,
-     "sublabel": "per region"
-    },
-    {
-     "id": "sqs2",
-     "label": "S3 + SQS",
-     "icon": "aws:sqs",
-     "parent": "m2",
-     "x": 200,
-     "y": 30,
-     "sublabel": "source path"
-    },
-    {
-     "id": "role2",
-     "label": "IAM role",
-     "icon": "aws:role",
-     "parent": "m2",
-     "x": 350,
-     "y": 30,
-     "sublabel": "External ID trust"
+     "id": "instances",
+     "label": "Stack instances",
+     "sublabel": "one per account and region;\nbuilds that template's bucket, queue, role",
+     "icon": "aws:stack",
+     "x": 600,
+     "y": 330,
+     "builds": [
+      "StackSet"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "ss",
-     "to": "stk0",
-     "tone": "brand",
-     "dashed": false,
-     "entry": [
-      0,
-      0.5
-     ],
-     "label": "deploy",
-     "label_x": 0.3
+     "from": "mgmt",
+     "to": "stackset",
+     "label": "deploy.sh"
     },
     {
-     "from": "plat",
-     "to": "role0",
-     "label": "",
-     "tone": "amber",
+     "from": "stackset",
+     "to": "ou",
+     "label": "targets",
+     "tone": "muted",
      "dashed": true,
      "exit": [
-      0,
-      0.2
-     ],
-     "entry": [
       1,
-      0.5
+      0.15
      ],
-     "label_x": 0.3
-    },
-    {
-     "from": "ss",
-     "to": "stk1",
-     "tone": "brand",
-     "dashed": false,
      "entry": [
       0,
       0.5
      ],
-     "label": "",
-     "label_x": 0.3
+     "label_x": -0.2
     },
     {
-     "from": "plat",
-     "to": "role1",
-     "label": "AssumeRole + External ID",
-     "tone": "amber",
-     "dashed": true,
-     "exit": [
-      0,
-      0.5
-     ],
-     "entry": [
-      1,
-      0.5
-     ],
-     "label_x": 0.3
+     "from": "stackset",
+     "to": "instances",
+     "label": "creates"
     },
     {
-     "from": "ss",
-     "to": "stk2",
-     "tone": "brand",
-     "dashed": true,
+     "from": "instances",
+     "to": "abstract",
+     "label": "poll + GetObject",
      "entry": [
       0,
       0.5
      ],
-     "label": "auto-deploy",
-     "label_x": 0.3
-    },
-    {
-     "from": "plat",
-     "to": "role2",
-     "label": "",
-     "tone": "amber",
-     "dashed": true,
-     "exit": [
-      0,
-      0.8
-     ],
-     "entry": [
-      1,
-      0.5
-     ],
-     "label_x": 0.3
+     "label_x": -0.3
     }
    ]
   }

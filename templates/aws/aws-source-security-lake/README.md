@@ -6,6 +6,10 @@ Registers Abstract as a Security Lake subscriber with S3 data access and an SQS 
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How Security Lake subscriber fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 WAF or other logs are centralised in Security Lake rather than in a per-service S3 bucket.

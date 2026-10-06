@@ -6,6 +6,10 @@ Creates the hardened destination bucket for S3 server access logging, the SQS qu
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How S3 server access logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 You want S3 server access logs for one or more buckets in Abstract.

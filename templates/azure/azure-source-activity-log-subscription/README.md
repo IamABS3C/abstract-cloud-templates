@@ -6,6 +6,10 @@ The pilot path: streams one subscription's Activity Log, every ARM create, updat
 
 **Cloud:** azure · **Role:** source · **Scope:** subscription
 
+![How Activity Log, one subscription fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 A single-subscription estate, a pilot, or a proof before committing to estate-wide governance, including when management-group rights are not yet granted.

@@ -1,249 +1,163 @@
 {
- "title": "App registrations through one Logic App",
+ "frame": {
+  "title": "A Logic App creates one Abstract app registration per subscription",
+  "subtitle": "One pre-consented identity runs it when a subscription appears, and secrets go to your Key Vault",
+  "cloud_label": "Your resource group",
+  "height": 680,
+  "abstract_y": 200,
+  "no_data_path": true
+ },
  "theme": "dark",
  "pages": [
   {
-   "name": "Automation app registration",
-   "groups": [
-    {
-     "id": "az",
-     "label": "Customer Azure tenant",
-     "kind": "plain",
-     "x": 40,
-     "y": 40,
-     "w": 920,
-     "h": 620,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 1000,
-     "y": 40,
-     "w": 220,
-     "h": 620,
-     "color": "#FF216B"
-    },
-    {
-     "id": "rg",
-     "label": "Central resource group",
-     "kind": "plain",
-     "x": 160,
-     "y": 20,
-     "w": 500,
-     "h": 330,
-     "color": "#f5c61e",
-     "parent": "az"
-    },
-    {
-     "id": "per",
-     "label": "Per subscription",
-     "kind": "plain",
-     "x": 340,
-     "y": 380,
-     "w": 570,
-     "h": 220,
-     "color": "#7D7589",
-     "parent": "az"
-    }
-   ],
+   "name": "App registrations, by Logic App",
    "nodes": [
     {
-     "id": "sub",
-     "label": "Subscription",
-     "icon": "azure:azure_subscription",
-     "parent": "az",
-     "x": 30,
-     "y": 190,
-     "sublabel": "created or tagged"
+     "id": "topic",
+     "label": "Subscription events",
+     "sublabel": "Event Grid system topic\noptional, off by default",
+     "icon": "azure:integration/Event_Grid_Topics",
+     "x": 60,
+     "y": 100,
+     "builds": [
+      "Microsoft.EventGrid/systemTopics@"
+     ]
     },
     {
-     "id": "mi",
-     "label": "Graph identity",
-     "icon": "azure:user_permissions",
-     "parent": "rg",
-     "x": 40,
-     "y": 40,
-     "sublabel": "existing, tier-0"
+     "id": "ident",
+     "label": "Managed identity",
+     "sublabel": "user-assigned, consented\nfor Microsoft Graph",
+     "icon": "azure:identity/Managed_Identities",
+     "x": 60,
+     "y": 330,
+     "existing": true
     },
     {
-     "id": "eg",
-     "label": "Event Grid topic",
-     "icon": "azure:event_grid",
-     "parent": "rg",
-     "x": 40,
-     "y": 170,
-     "sublabel": "optional, off by default"
+     "id": "wf",
+     "label": "Onboarding Logic App",
+     "sublabel": "abstract-appreg-onboarder",
+     "icon": "azure:iot/Logic_Apps",
+     "x": 330,
+     "y": 200,
+     "builds": [
+      "Microsoft.Logic/workflows@"
+     ]
     },
     {
-     "id": "la",
-     "label": "Logic App",
-     "icon": "azure:logic_app",
-     "parent": "rg",
-     "x": 200,
-     "y": 170,
-     "sublabel": "abstract-appreg-onboarder"
-    },
-    {
-     "id": "ag",
-     "label": "Action group",
-     "icon": "azure:azure_alert",
-     "parent": "rg",
-     "x": 380,
-     "y": 40,
-     "sublabel": "optional, failure webhook"
+     "id": "app",
+     "label": "App registration",
+     "sublabel": "one per subscription, named\nfor its id, made at run time",
+     "icon": "azure:identity/App_Registrations",
+     "x": 600,
+     "y": 200,
+     "builds": [
+      "Abstract-"
+     ]
     },
     {
      "id": "kv",
      "label": "Key Vault",
-     "icon": "azure:key_vault",
-     "parent": "az",
-     "x": 210,
-     "y": 470,
-     "sublabel": "prerequisite, central"
-    },
-    {
-     "id": "app",
-     "label": "Entra app",
-     "icon": "azure:active_directory",
-     "parent": "per",
-     "x": 120,
+     "sublabel": "holds each client secret",
+     "icon": "azure:security/Key_Vaults",
+     "x": 870,
      "y": 90,
-     "sublabel": "one per subscription"
+     "existing": true
     },
     {
      "id": "rbac",
-     "label": "Subscription RBAC",
-     "icon": "azure:roles",
-     "parent": "per",
-     "x": 420,
-     "y": 90,
-     "sublabel": "Reader, Data Receiver"
+     "label": "Subscription roles",
+     "sublabel": "Reader and Event Hubs\nData Receiver",
+     "icon": "azure:security/Keys",
+     "x": 870,
+     "y": 330,
+     "builds": [
+      "Microsoft.Authorization/roleAssignments"
+     ]
     },
     {
-     "id": "plat",
-     "label": "Abstract platform",
-     "icon": "azure:monitor",
-     "parent": "abs",
-     "x": 71,
-     "y": 470,
-     "sublabel": "signs in per subscription"
+     "id": "renew",
+     "label": "Renewal Logic App",
+     "sublabel": "daily, renews secrets\nnearing expiry (optional)",
+     "icon": "azure:iot/Logic_Apps",
+     "x": 330,
+     "y": 500,
+     "builds": [
+      "Microsoft.Logic/workflows@"
+     ]
+    },
+    {
+     "id": "alert",
+     "label": "Failure alert",
+     "sublabel": "action group to a webhook\n(optional)",
+     "icon": "azure:management_governance/Alerts",
+     "x": 60,
+     "y": 500,
+     "builds": [
+      "Microsoft.Insights/actionGroups@"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "sub",
-     "to": "eg",
-     "tone": "brand",
+     "from": "topic",
+     "to": "wf",
+     "label": "subscription created",
      "exit": [
       1,
       0.5
      ],
      "entry": [
       0,
-      0.5
+      0.3
      ],
-     "label": "event"
+     "label_x": -0.3
     },
     {
-     "from": "eg",
-     "to": "la",
-     "tone": "brand",
+     "from": "ident",
+     "to": "wf",
+     "label": "runs as",
      "exit": [
       1,
       0.5
      ],
      "entry": [
       0,
-      0.5
+      0.7
      ],
-     "label": "trigger"
+     "label_x": -0.3
     },
     {
-     "from": "mi",
-     "to": "la",
-     "tone": "muted",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0.5,
-      0
-     ],
-     "label": "runs as"
-    },
-    {
-     "from": "la",
-     "to": "ag",
-     "tone": "muted",
-     "exit": [
-      1,
-      0.25
-     ],
-     "entry": [
-      0,
-      0.5
-     ],
-     "label": "on failure"
-    },
-    {
-     "from": "la",
+     "from": "wf",
      "to": "app",
-     "tone": "brand",
-     "exit": [
-      1,
-      0.75
-     ],
-     "entry": [
-      0.5,
-      0
-     ],
-     "label": "Graph calls"
-    },
-    {
-     "from": "app",
-     "to": "rbac",
-     "tone": "muted",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0,
-      0.5
-     ],
-     "label": "granted"
+     "label": "creates",
+     "label_x": -0.1
     },
     {
      "from": "app",
      "to": "kv",
-     "tone": "muted",
+     "label": "client secret",
      "exit": [
-      0,
-      0.5
-     ],
-     "entry": [
       1,
       0.5
      ],
-     "label": "secret stored"
+     "entry": [
+      0,
+      0.5
+     ]
     },
     {
-     "from": "plat",
-     "to": "app",
-     "tone": "muted",
+     "from": "app",
+     "to": "rbac",
+     "label": "roles on that subscription",
      "exit": [
-      0.5,
-      0
+      1,
+      0.5
      ],
      "entry": [
-      0.75,
-      0
+      0,
+      0.5
      ],
-     "label": "signs in as",
-     "dashed": true
+     "label_x": 0.3
     }
    ]
   }

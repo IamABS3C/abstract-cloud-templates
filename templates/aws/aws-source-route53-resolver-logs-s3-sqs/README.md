@@ -6,6 +6,10 @@ Creates a Route 53 Resolver query-logging configuration for a list of VPCs, its 
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How Route 53 Resolver query logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 You want DNS query logs from your VPCs in Abstract.

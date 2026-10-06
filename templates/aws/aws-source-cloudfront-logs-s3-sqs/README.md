@@ -6,6 +6,10 @@ Creates the hardened S3 bucket CloudFront standard logging writes to, the SQS qu
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How CloudFront logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 You want CloudFront standard access logs in Abstract.

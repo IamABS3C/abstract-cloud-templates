@@ -1,0 +1,160 @@
+{
+ "frame": {
+  "title": "Alerts tell you when the GCP feed goes quiet",
+  "subtitle": "Cloud Monitoring alert policies on the sink, the subscription and the dead-letter topic; everything else looks green when data stops",
+  "cloud_label": "Your logging project",
+  "height": 620,
+  "no_data_path": true
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "gcp-monitoring-pipeline-health-alerts",
+   "groups": [],
+   "nodes": [
+    {
+     "id": "a_sink",
+     "label": "Sink errors",
+     "sublabel": "export failures\non the log sink",
+     "icon": "gcp:cloud_monitoring",
+     "x": 60,
+     "y": 110,
+     "builds": [
+      "google_monitoring_alert_policy\" \"sink_errors"
+     ]
+    },
+    {
+     "id": "a_stall",
+     "label": "Consumer stalled",
+     "sublabel": "oldest unacked message\nkeeps ageing",
+     "icon": "gcp:cloud_monitoring",
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "google_monitoring_alert_policy\" \"consumer_stalled"
+     ]
+    },
+    {
+     "id": "a_dark",
+     "label": "Feed went dark",
+     "sublabel": "no messages published\nfor too long",
+     "icon": "gcp:cloud_monitoring",
+     "x": 600,
+     "y": 110,
+     "builds": [
+      "google_monitoring_alert_policy\" \"feed_dark"
+     ]
+    },
+    {
+     "id": "a_dlq",
+     "label": "Dead letters",
+     "sublabel": "optional: the dead-letter\ntopic receives messages",
+     "icon": "gcp:cloud_monitoring",
+     "x": 870,
+     "y": 110,
+     "builds": [
+      "google_monitoring_alert_policy\" \"dead_letter"
+     ]
+    },
+    {
+     "id": "sink",
+     "label": "Log sink",
+     "sublabel": "your log sink",
+     "icon": "gcp:cloud_logging",
+     "x": 60,
+     "y": 400,
+     "existing": true
+    },
+    {
+     "id": "sub",
+     "label": "Abstract's subscription",
+     "sublabel": "the one Abstract reads",
+     "icon": "gcp:pubsub",
+     "x": 330,
+     "y": 400,
+     "existing": true
+    },
+    {
+     "id": "topic",
+     "label": "Pub/Sub topic",
+     "sublabel": "the pipeline's topic",
+     "icon": "gcp:pubsub",
+     "x": 600,
+     "y": 400,
+     "existing": true
+    },
+    {
+     "id": "dlq",
+     "label": "Dead-letter topic",
+     "sublabel": "if you use one",
+     "icon": "gcp:pubsub",
+     "x": 870,
+     "y": 400,
+     "existing": true
+    }
+   ],
+   "edges": [
+    {
+     "from": "a_sink",
+     "to": "sink",
+     "label": "watches",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "a_stall",
+     "to": "sub",
+     "label": "watches",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "a_dark",
+     "to": "topic",
+     "label": "watches",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "a_dlq",
+     "to": "dlq",
+     "label": "watches",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    }
+   ]
+  }
+ ]
+}

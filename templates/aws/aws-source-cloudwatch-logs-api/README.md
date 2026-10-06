@@ -6,6 +6,10 @@ CloudWatch Logs is an API-poll source with no bucket or queue: Abstract reads lo
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How CloudWatch Logs by API fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Logs live in CloudWatch Logs and Abstract should read them by API, with no bucket or queue in between.

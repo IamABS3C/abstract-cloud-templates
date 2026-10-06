@@ -6,6 +6,10 @@ Azure Policy cannot create Entra objects, so this policy deploys a deployment sc
 
 **Cloud:** azure · **Role:** access · **Scope:** management-group
 
+![How App registrations, by policy fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Only when governance mandates that every control arrive through Azure Policy.

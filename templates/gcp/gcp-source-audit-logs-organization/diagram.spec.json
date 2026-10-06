@@ -1,0 +1,177 @@
+{
+ "frame": {
+  "title": "Audit logs from every project reach Abstract",
+  "subtitle": "One organization sink, one Pub/Sub topic, one pull subscription Abstract reads",
+  "cloud_label": "Your Google Cloud organization",
+  "height": 560,
+  "abstract_y": 150,
+  "abstract_sublabel": "pulls the subscription\nparses to ACS",
+  "integration_y": 394
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Audit logs, whole organization",
+   "groups": [
+    {
+     "id": "logproj",
+     "label": "Logging project",
+     "kind": "plain",
+     "color": "#4285F4",
+     "parent": "cloud",
+     "x": 470,
+     "y": 70,
+     "w": 600,
+     "h": 470
+    }
+   ],
+   "nodes": [
+    {
+     "id": "projects",
+     "label": "Every project",
+     "sublabel": "including ones created later",
+     "icon": "gcp:project",
+     "x": 50,
+     "y": 140,
+     "existing": true
+    },
+    {
+     "id": "auditlogs",
+     "label": "Cloud Audit Logs",
+     "sublabel": "admin activity, system event,\npolicy denied, data access",
+     "icon": "gcp:cloud_audit_logs",
+     "x": 50,
+     "y": 340,
+     "existing": true
+    },
+    {
+     "id": "sink",
+     "label": "Organization log sink",
+     "sublabel": "aggregated, filtered",
+     "icon": "gcp:cloud_logging",
+     "x": 270,
+     "y": 140,
+     "builds": [
+      "google_logging_organization_sink"
+     ]
+    },
+    {
+     "id": "topic",
+     "label": "Pub/Sub topic",
+     "sublabel": "abstract-audit-logs",
+     "icon": "gcp:pubsub",
+     "parent": "logproj",
+     "x": 50,
+     "y": 70,
+     "builds": [
+      "google_pubsub_topic\" \"abstract"
+     ]
+    },
+    {
+     "id": "sub",
+     "label": "Pull subscription",
+     "sublabel": "Abstract reads here",
+     "icon": "gcp:pubsub",
+     "parent": "logproj",
+     "x": 300,
+     "y": 70,
+     "builds": [
+      "google_pubsub_subscription\" \"abstract"
+     ]
+    },
+    {
+     "id": "dlq",
+     "label": "Dead-letter topic",
+     "sublabel": "optional",
+     "icon": "gcp:pubsub",
+     "parent": "logproj",
+     "x": 470,
+     "y": 200,
+     "builds": [
+      "google_pubsub_topic\" \"dead_letter"
+     ]
+    },
+    {
+     "id": "sa",
+     "label": "Service account",
+     "sublabel": "subscriber on this\nsubscription only",
+     "icon": "gcp:identity_and_access_management",
+     "parent": "logproj",
+     "x": 50,
+     "y": 317,
+     "builds": [
+      "google_service_account\" \"abstract",
+      "google_pubsub_subscription_iam_member\" \"abstract"
+     ]
+    }
+   ],
+   "edges": [
+    {
+     "from": "projects",
+     "to": "sink",
+     "label": "log entries"
+    },
+    {
+     "from": "auditlogs",
+     "to": "sink",
+     "label": "",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.8
+     ]
+    },
+    {
+     "from": "sink",
+     "to": "topic",
+     "label": "matching entries"
+    },
+    {
+     "from": "topic",
+     "to": "sub",
+     "label": ""
+    },
+    {
+     "from": "sub",
+     "to": "abstract",
+     "label": "pull",
+     "label_x": -0.4
+    },
+    {
+     "from": "sub",
+     "to": "dlq",
+     "label": "undeliverable",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      1,
+      0.85
+     ],
+     "entry": [
+      0.5,
+      0
+     ]
+    },
+    {
+     "from": "abs-integration",
+     "to": "sa",
+     "label": "authenticates as",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.2
+    }
+   ]
+  }
+ ]
+}

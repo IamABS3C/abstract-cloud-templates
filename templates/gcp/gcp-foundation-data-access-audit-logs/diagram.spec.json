@@ -1,0 +1,85 @@
+{
+ "frame": {
+  "title": "Turns on the Data Access audit logs",
+  "subtitle": "Off by default in Google Cloud; until they are on, a sink filter for data_access matches nothing",
+  "cloud_label": "Your Google Cloud organization",
+  "height": 420,
+  "abstract_y": 80,
+  "abstract_sublabel": "receives them through\nthe audit-log pipeline"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "gcp-foundation-data-access-audit-logs",
+   "groups": [],
+   "nodes": [
+    {
+     "id": "config",
+     "label": "IAM audit config",
+     "sublabel": "organization, folder or project;\nthe log types you choose",
+     "icon": "gcp:identity_and_access_management",
+     "x": 60,
+     "y": 110,
+     "builds": [
+      "google_organization_iam_audit_config",
+      "google_folder_iam_audit_config",
+      "google_project_iam_audit_config"
+     ]
+    },
+    {
+     "id": "services",
+     "label": "Google Cloud services",
+     "sublabel": "the services you list,\nall services by default",
+     "icon": "gcp:cloud_generic",
+     "x": 330,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "logs",
+     "label": "Data Access logs",
+     "sublabel": "now written:\nDATA_READ, DATA_WRITE",
+     "icon": "gcp:cloud_audit_logs",
+     "x": 600,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "sink",
+     "label": "Your audit log sink",
+     "sublabel": "from an audit-log template;\nits filter includes data_access",
+     "icon": "gcp:cloud_logging",
+     "x": 870,
+     "y": 110,
+     "existing": true
+    }
+   ],
+   "edges": [
+    {
+     "from": "config",
+     "to": "services",
+     "label": "switches on",
+     "tone": "muted"
+    },
+    {
+     "from": "services",
+     "to": "logs",
+     "label": "write"
+    },
+    {
+     "from": "logs",
+     "to": "sink",
+     "label": "matching entries"
+    },
+    {
+     "from": "sink",
+     "to": "abstract",
+     "label": "existing pipeline",
+     "tone": "muted",
+     "dashed": true,
+     "label_x": -0.6
+    }
+   ]
+  }
+ ]
+}

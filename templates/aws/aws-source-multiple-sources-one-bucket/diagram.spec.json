@@ -1,190 +1,130 @@
 {
- "title": "aws.multi-source",
+ "frame": {
+  "title": "One deploy sets up several sources for Abstract",
+  "subtitle": "A master stack nests one child stack per enabled source; each child builds its own bucket, queue and role",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 321,
+  "abstract_sublabel": "polls SQS, reads S3,\ncalls APIs; parses to ACS"
+ },
  "theme": "dark",
- "animate": false,
  "pages": [
   {
-   "name": "aws.multi-source",
-   "groups": [
-    {
-     "id": "acct",
-     "label": "Customer AWS account",
-     "kind": "account",
-     "x": 40,
-     "y": 40,
-     "w": 800,
-     "h": 620,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 900,
-     "y": 40,
-     "w": 260,
-     "h": 620,
-     "color": "#FF216B"
-    },
-    {
-     "id": "nest",
-     "label": "Nested stacks, one per source",
-     "kind": "plain",
-     "parent": "acct",
-     "x": 200,
-     "y": 50,
-     "w": 560,
-     "h": 545,
-     "color": "#f5c61e"
-    }
-   ],
+   "name": "Several sources",
    "nodes": [
     {
      "id": "master",
      "label": "Master stack",
+     "sublabel": "one deploy; Abstract principal,\nExternal ID and encryption set once",
      "icon": "aws:cloudformation",
-     "parent": "acct",
-     "x": 40,
-     "y": 250,
-     "sublabel": "one deploy"
+     "x": 60,
+     "y": 330,
+     "builds": [
+      "AWS::CloudFormation::Stack"
+     ]
     },
     {
-     "id": "role",
-     "label": "IAM roles",
-     "icon": "aws:role",
-     "parent": "nest",
-     "x": 380,
-     "y": 20,
-     "sublabel": "one per source"
+     "id": "s3stacks",
+     "label": "S3 + SQS source stacks",
+     "sublabel": "each builds a bucket, queue and role;\nCloudTrail on, the rest opt in",
+     "icon": "aws:cloudformation",
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "CloudTrailStack",
+      "CloudFrontStack",
+      "LoadBalancerStack",
+      "Route53Stack",
+      "S3AccessLogsStack",
+      "VPCFlowLogsStack",
+      "WAFStack"
+     ]
     },
     {
-     "id": "prod",
-     "label": "Log producers",
-     "icon": "aws:cloudtrail",
-     "parent": "nest",
-     "x": 40,
-     "y": 150,
-     "sublabel": "CloudTrail on by default"
+     "id": "apistacks",
+     "label": "API-poll source stacks",
+     "sublabel": "CloudWatch Logs and Kinesis;\nan identity for Abstract each",
+     "icon": "aws:cloudformation",
+     "x": 330,
+     "y": 330,
+     "builds": [
+      "CloudWatchLogsStack",
+      "KinesisStack"
+     ]
     },
     {
-     "id": "s3",
-     "label": "Log buckets",
-     "icon": "aws:s3",
-     "parent": "nest",
-     "x": 210,
-     "y": 150,
-     "sublabel": "per S3 source"
-    },
-    {
-     "id": "sqs",
-     "label": "SQS + DLQ",
-     "icon": "aws:sqs",
-     "parent": "nest",
-     "x": 380,
-     "y": 150,
-     "sublabel": "per S3 source"
-    },
-    {
-     "id": "kin",
-     "label": "Kinesis stream",
-     "icon": "aws:kinesis_data_streams",
-     "parent": "nest",
-     "x": 210,
-     "y": 280,
-     "sublabel": "optional"
-    },
-    {
-     "id": "lake",
-     "label": "Lake subscriber",
-     "icon": "aws:data_lake_resource_icon",
-     "parent": "nest",
-     "x": 380,
-     "y": 410,
-     "sublabel": "Security Lake source"
-    },
-    {
-     "id": "plat",
-     "label": "Abstract platform",
-     "sublabel": "one config per source",
-     "icon": "img:../../app/web/public/logo-mark.svg",
-     "parent": "abs",
-     "x": 75,
-     "y": 224,
-     "w": 110,
-     "h": 98
+     "id": "lakestack",
+     "label": "Security Lake stack",
+     "sublabel": "Security Lake subscriber\nand SQS notification",
+     "icon": "aws:cloudformation",
+     "x": 330,
+     "y": 540,
+     "builds": [
+      "SecurityLakeStack"
+     ]
     }
    ],
    "edges": [
     {
      "from": "master",
-     "to": "nest",
-     "label": "nests",
-     "tone": "muted",
+     "to": "s3stacks",
+     "label": "nested stack",
+     "exit": [
+      1,
+      0.15
+     ],
      "entry": [
       0,
-      0.43
+      0.5
      ]
     },
     {
-     "from": "prod",
-     "to": "s3",
-     "label": "",
-     "tone": "brand"
+     "from": "master",
+     "to": "apistacks",
+     "label": "nested stack"
     },
     {
-     "from": "s3",
-     "to": "sqs",
-     "label": "",
-     "tone": "brand"
-    },
-    {
-     "from": "sqs",
-     "to": "plat",
-     "label": "poll SQS",
-     "tone": "brand",
-     "entry": [
-      0,
-      0.15
-     ],
-     "label_x": -0.3
-    },
-    {
-     "from": "lake",
-     "to": "plat",
-     "label": "SQS notice",
-     "tone": "brand",
-     "entry": [
-      0,
+     "from": "master",
+     "to": "lakestack",
+     "label": "nested stack",
+     "exit": [
+      1,
       0.85
      ],
-     "label_x": -0.7
+     "entry": [
+      0,
+      0.5
+     ]
     },
     {
-     "from": "kin",
-     "to": "plat",
-     "label": "GetRecords",
-     "tone": "brand",
+     "from": "s3stacks",
+     "to": "abstract",
+     "label": "S3 + SQS",
+     "entry": [
+      0,
+      0.2
+     ],
+     "label_x": -0.4
+    },
+    {
+     "from": "apistacks",
+     "to": "abstract",
+     "label": "API poll",
      "entry": [
       0,
       0.5
      ],
-     "label_x": -0.6
+     "label_x": -0.4
     },
     {
-     "from": "plat",
-     "to": "role",
-     "label": "AssumeRole + External ID",
-     "tone": "amber",
-     "dashed": true,
-     "exit": [
-      0.5,
-      0
-     ],
+     "from": "lakestack",
+     "to": "abstract",
+     "label": "S3 + SQS",
      "entry": [
-      1,
-      0.5
+      0,
+      0.8
      ],
-     "label_x": 0.45
+     "label_x": -0.4
     }
    ]
   }

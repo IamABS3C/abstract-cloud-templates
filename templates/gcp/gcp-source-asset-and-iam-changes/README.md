@@ -6,6 +6,10 @@ Cloud Asset Inventory publishes to Pub/Sub through its own feed, which no log si
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
 
+![How Asset and IAM changes fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Alongside gcp-source-audit-logs-organization, for policy diffs and asset inventory.

@@ -1,115 +1,120 @@
 {
- "title": "aws.kinesis",
+ "frame": {
+  "title": "A Kinesis data stream read directly by Abstract",
+  "subtitle": "No bucket or queue: Abstract reads records from the stream with a role the template builds",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 100,
+  "abstract_sublabel": "reads stream records\nparses to ACS",
+  "integration_y": 547
+ },
  "theme": "dark",
- "animate": false,
  "pages": [
   {
-   "name": "aws.kinesis",
-   "groups": [
-    {
-     "id": "acct",
-     "label": "Customer AWS account",
-     "kind": "account",
-     "x": 40,
-     "y": 40,
-     "w": 800,
-     "h": 440,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 900,
-     "y": 40,
-     "w": 260,
-     "h": 440,
-     "color": "#FF216B"
-    }
-   ],
+   "name": "Kinesis stream",
    "nodes": [
     {
-     "id": "ks",
-     "label": "Kinesis stream",
-     "icon": "aws:kinesis_data_streams",
-     "parent": "acct",
-     "x": 140,
-     "y": 100,
-     "sublabel": "existing or new"
+     "id": "prod",
+     "label": "Your producers",
+     "sublabel": "whatever writes to the stream",
+     "icon": "aws:traditional_server",
+     "x": 60,
+     "y": 110,
+     "existing": true
     },
     {
-     "id": "role",
-     "label": "IAM read role",
-     "icon": "aws:role",
-     "parent": "acct",
-     "x": 460,
-     "y": 280,
-     "sublabel": "trusts Abstract only"
+     "id": "stream",
+     "label": "Kinesis data stream",
+     "sublabel": "created only when StreamMode=CreateNew;\notherwise your existing stream",
+     "icon": "aws:kinesis_data_streams",
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "AWS::Kinesis::Stream"
+     ]
+    },
+    {
+     "id": "user",
+     "label": "IAM user + access key",
+     "sublabel": "optional alternative:\nAuthMode=AccessKey",
+     "icon": "aws:long_term_security_credential",
+     "x": 60,
+     "y": 540,
+     "builds": [
+      "AWS::IAM::User"
+     ]
+    },
+    {
+     "id": "secret",
+     "label": "Secrets Manager",
+     "sublabel": "optional: holds the\naccess key",
+     "icon": "aws:secrets_manager",
+     "x": 330,
+     "y": 540,
+     "builds": [
+      "AWS::SecretsManager::Secret"
+     ]
     },
     {
      "id": "ssm",
      "label": "SSM parameter",
+     "sublabel": "optional: publishes\nthe role ARN",
      "icon": "aws:parameter_store",
-     "parent": "acct",
-     "x": 140,
-     "y": 290,
-     "sublabel": "optional, role ARN"
+     "x": 600,
+     "y": 540,
+     "builds": [
+      "AWS::SSM::Parameter"
+     ]
     },
     {
-     "id": "plat",
-     "label": "Abstract platform",
-     "sublabel": "reads via API",
-     "icon": "img:../../app/web/public/logo-mark.svg",
-     "parent": "abs",
-     "x": 85,
-     "y": 115,
-     "w": 90,
-     "h": 80
+     "id": "role",
+     "label": "IAM role",
+     "sublabel": "reads the stream only;\ntrusts Abstract with an External ID",
+     "icon": "aws:role",
+     "x": 870,
+     "y": 540,
+     "builds": [
+      "AbstractRole"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "ks",
-     "to": "plat",
-     "label": "GetRecords API",
-     "tone": "brand",
-     "entry": [
-      0,
-      0.3
-     ],
-     "label_x": 0.2
+     "from": "prod",
+     "to": "stream",
+     "label": "records"
     },
     {
-     "from": "plat",
+     "from": "stream",
+     "to": "abstract",
+     "label": "GetRecords",
+     "entry": [
+      0,
+      0.5
+     ],
+     "label_x": -0.3
+    },
+    {
+     "from": "user",
+     "to": "secret",
+     "label": "key stored",
+     "tone": "muted",
+     "dashed": true
+    },
+    {
+     "from": "abs-integration",
      "to": "role",
      "label": "AssumeRole + External ID",
      "tone": "amber",
      "dashed": true,
      "exit": [
       0,
-      0.85
+      0.5
      ],
      "entry": [
       1,
       0.5
-     ],
-     "label_x": 0.35
-    },
-    {
-     "from": "role",
-     "to": "ks",
-     "label": "stream read",
-     "tone": "muted",
-     "dashed": true,
-     "exit": [
-      0.5,
-      0
-     ],
-     "entry": [
-      1,
-      0.85
-     ],
-     "label_x": -0.4
+     ]
     }
    ]
   }

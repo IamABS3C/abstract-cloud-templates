@@ -6,6 +6,10 @@ The same aggregated sink one ring in: every project in a folder and its sub-fold
 
 **Cloud:** gcp · **Role:** source · **Scope:** folder
 
+![How Audit logs, one folder fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Organization-scope logging.configWriter is not yet available.

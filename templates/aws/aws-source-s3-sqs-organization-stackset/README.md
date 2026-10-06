@@ -6,6 +6,10 @@ A wrapper around CloudFormation StackSets, service-managed for AWS Organizations
 
 **Cloud:** aws · **Role:** source · **Scope:** organization
 
+![How One source, every account fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## Deploy
 
 From a shell, in this folder:

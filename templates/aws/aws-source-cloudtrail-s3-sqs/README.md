@@ -6,6 +6,10 @@ Creates a CloudTrail trail, its hardened S3 bucket, the SNS topic and SQS queue 
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How CloudTrail logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 You want the account's (or organization's) API activity in Abstract and no trail delivers to a bucket Abstract can read yet.

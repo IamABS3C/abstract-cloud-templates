@@ -1,0 +1,126 @@
+{
+ "frame": {
+  "title": "Google Workspace audit logs reach Abstract by API",
+  "subtitle": "No sink or Pub/Sub: Abstract reads the Admin SDK Reports API with a delegated service account",
+  "cloud_label": "Your Google Cloud organization and Workspace",
+  "height": 700,
+  "abstract_y": 60,
+  "abstract_sublabel": "polls the Reports API\nparses to ACS",
+  "integration_y": 347
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "gcp-source-google-workspace-logs",
+   "groups": [
+    {
+     "id": "proj",
+     "label": "Logging project",
+     "kind": "plain",
+     "color": "#4285F4",
+     "parent": "cloud",
+     "x": 330,
+     "y": 280,
+     "w": 740,
+     "h": 390
+    }
+   ],
+   "nodes": [
+    {
+     "id": "workspace",
+     "label": "Google Workspace",
+     "sublabel": "logins, admin, Drive and\nthe other audit activities",
+     "icon": "gcp:administration",
+     "x": 60,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "reports",
+     "label": "Admin SDK Reports API",
+     "sublabel": "Google's own API\nfor Workspace audit data",
+     "icon": "gcp:cloud_apis",
+     "x": 600,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "admin",
+     "label": "Super admin",
+     "sublabel": "grants the service account\ndomain-wide delegation, by hand",
+     "icon": "gcp:administration",
+     "x": 60,
+     "y": 340,
+     "existing": true
+    },
+    {
+     "id": "api",
+     "label": "Admin SDK API",
+     "sublabel": "enabled in the project",
+     "icon": "gcp:cloud_apis",
+     "parent": "proj",
+     "x": 50,
+     "y": 230,
+     "builds": [
+      "google_project_service\" \"admin_sdk"
+     ]
+    },
+    {
+     "id": "sa",
+     "label": "Service account",
+     "sublabel": "read-only reporting scope\nvia delegation",
+     "icon": "gcp:identity_and_access_management",
+     "parent": "proj",
+     "x": 330,
+     "y": 60,
+     "builds": [
+      "google_service_account\" \"workspace"
+     ]
+    }
+   ],
+   "edges": [
+    {
+     "from": "workspace",
+     "to": "reports",
+     "label": "audit activities"
+    },
+    {
+     "from": "reports",
+     "to": "abstract",
+     "label": "activities.list",
+     "label_x": -0.3
+    },
+    {
+     "from": "admin",
+     "to": "sa",
+     "label": "domain-wide delegation",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "abs-integration",
+     "to": "sa",
+     "label": "authenticates as",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ]
+    }
+   ]
+  }
+ ]
+}

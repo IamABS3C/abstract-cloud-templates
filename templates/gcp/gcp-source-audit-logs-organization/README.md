@@ -6,6 +6,10 @@ One aggregated Cloud Logging sink at organization scope routes audit and platfor
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
 
+![How Audit logs, whole organization fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Every GCP engagement, from a single project up to a multi-folder organization.

@@ -6,6 +6,10 @@ Event Hubs publishes no consumer-lag metric, so when the Abstract consumer stall
 
 **Cloud:** azure · **Role:** monitoring · **Scope:** resource-group
 
+![How Pipeline health alerts fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Immediately after the Event Hub source, on every deployment.

@@ -1,0 +1,92 @@
+{
+ "frame": {
+  "title": "A second sink keeps an archive in Cloud Storage",
+  "subtitle": "For evidence and backfill, not detection: storage batches, so files land minutes to hours later",
+  "cloud_label": "Your Google Cloud organization",
+  "height": 560,
+  "abstract_y": 250,
+  "abstract_sublabel": "detection reads the\nPub/Sub pipeline, not this"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "gcp-archive-log-bucket",
+   "groups": [],
+   "nodes": [
+    {
+     "id": "projects",
+     "label": "Every project",
+     "sublabel": "audit and platform logs",
+     "icon": "gcp:project",
+     "x": 60,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "asink",
+     "label": "Archive sink",
+     "sublabel": "organization scope,\nsame filter as the pipeline",
+     "icon": "gcp:cloud_logging",
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "google_logging_organization_sink\" \"archive"
+     ]
+    },
+    {
+     "id": "bucket",
+     "label": "Archive bucket",
+     "sublabel": "retention policy, lifecycle;\nwrite access for the sink only",
+     "icon": "gcp:cloud_storage",
+     "x": 600,
+     "y": 110,
+     "builds": [
+      "google_storage_bucket\" \"archive",
+      "google_storage_bucket_iam_member\" \"archive_writer"
+     ]
+    },
+    {
+     "id": "psink",
+     "label": "Pipeline sink",
+     "sublabel": "from an audit-log template:\nthe detection path",
+     "icon": "gcp:cloud_logging",
+     "x": 330,
+     "y": 380,
+     "existing": true
+    }
+   ],
+   "edges": [
+    {
+     "from": "projects",
+     "to": "asink",
+     "label": "log entries"
+    },
+    {
+     "from": "asink",
+     "to": "bucket",
+     "label": "batched files"
+    },
+    {
+     "from": "projects",
+     "to": "psink",
+     "label": "",
+     "exit": [
+      1,
+      0.85
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "psink",
+     "to": "abstract",
+     "label": "real time, through Pub/Sub",
+     "tone": "muted",
+     "dashed": true
+    }
+   ]
+  }
+ ]
+}

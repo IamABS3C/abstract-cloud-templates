@@ -6,6 +6,10 @@ Creates the Entra app registration and service principal as the person deploying
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
+![How Sentinel destination, app by Graph fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Production, when the template should create the app registration and no pre-existing privileged identity is acceptable.

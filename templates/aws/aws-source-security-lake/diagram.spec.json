@@ -1,162 +1,126 @@
 {
- "title": "aws.waf-security-lake",
+ "frame": {
+  "title": "Security Lake data reaches Abstract as a subscriber",
+  "subtitle": "Abstract is registered as a Security Lake subscriber; it polls the SQS notification and reads the OCSF objects",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 200,
+  "abstract_sublabel": "polls SQS, reads S3\nparses to ACS",
+  "integration_y": 547
+ },
  "theme": "dark",
- "animate": false,
  "pages": [
   {
-   "name": "aws.waf-security-lake",
-   "groups": [
-    {
-     "id": "acct",
-     "label": "Customer AWS account",
-     "kind": "account",
-     "x": 40,
-     "y": 40,
-     "w": 800,
-     "h": 470,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 900,
-     "y": 40,
-     "w": 260,
-     "h": 470,
-     "color": "#FF216B"
-    },
-    {
-     "id": "sub",
-     "label": "Subscriber (this template)",
-     "kind": "plain",
-     "parent": "acct",
-     "x": 560,
-     "y": 70,
-     "w": 220,
-     "h": 370,
-     "color": "#f5c61e"
-    }
-   ],
+   "name": "Security Lake",
    "nodes": [
     {
-     "id": "waf",
-     "label": "AWS WAF",
+     "id": "src",
+     "label": "AWS log source",
+     "sublabel": "WAFv2 by default",
      "icon": "aws:waf",
-     "parent": "acct",
-     "x": 40,
-     "y": 120,
-     "sublabel": "web ACL logs"
+     "x": 60,
+     "y": 110,
+     "existing": true
     },
     {
      "id": "lake",
      "label": "Security Lake",
+     "sublabel": "your existing data lake",
      "icon": "aws:data_lake_resource_icon",
-     "parent": "acct",
-     "x": 220,
-     "y": 120,
-     "sublabel": "existing data lake"
+     "x": 330,
+     "y": 110,
+     "existing": true
     },
     {
-     "id": "s3",
-     "label": "Lake bucket",
+     "id": "bucket",
+     "label": "Lake S3 bucket",
+     "sublabel": "normalized OCSF objects",
      "icon": "aws:s3",
-     "parent": "acct",
-     "x": 400,
-     "y": 120,
-     "sublabel": "OCSF objects"
+     "x": 600,
+     "y": 110,
+     "existing": true
     },
     {
-     "id": "sqs",
-     "label": "Notification queue",
+     "id": "notify",
+     "label": "SQS notification",
+     "sublabel": "Security Lake owns the queue;\nthe template turns it on",
      "icon": "aws:sqs",
-     "parent": "sub",
-     "x": 71,
-     "y": 50,
-     "sublabel": "SQS"
+     "x": 600,
+     "y": 330,
+     "builds": [
+      "AWS::SecurityLake::SubscriberNotification"
+     ]
     },
     {
-     "id": "role",
-     "label": "Subscriber role",
+     "id": "sub",
+     "label": "Security Lake subscriber",
+     "sublabel": "Abstract's account ID\nand External ID",
      "icon": "aws:role",
-     "parent": "sub",
-     "x": 71,
-     "y": 220,
-     "sublabel": "made by Security Lake"
-    },
-    {
-     "id": "plat",
-     "label": "Abstract platform",
-     "sublabel": "polls SQS, reads S3",
-     "icon": "img:../../app/web/public/logo-mark.svg",
-     "parent": "abs",
-     "x": 85,
-     "y": 150,
-     "w": 90,
-     "h": 80
+     "x": 870,
+     "y": 540,
+     "builds": [
+      "AWS::SecurityLake::Subscriber"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "waf",
+     "from": "src",
      "to": "lake",
-     "label": "WAFV2",
-     "tone": "brand"
+     "label": "logs"
     },
     {
      "from": "lake",
-     "to": "s3",
-     "label": "writes OCSF",
-     "tone": "brand"
+     "to": "bucket",
+     "label": "OCSF objects"
     },
     {
-     "from": "s3",
-     "to": "sqs",
-     "label": "new object",
-     "tone": "brand",
-     "label_x": -0.4
-    },
-    {
-     "from": "sqs",
-     "to": "plat",
-     "label": "poll",
-     "tone": "brand",
+     "from": "lake",
+     "to": "notify",
+     "label": "new objects",
+     "exit": [
+      1,
+      0.85
+     ],
      "entry": [
       0,
-      0.12
+      0.5
      ]
     },
     {
-     "from": "plat",
-     "to": "role",
-     "label": "AssumeRole + External ID",
+     "from": "notify",
+     "to": "abstract",
+     "label": "poll",
+     "entry": [
+      0,
+      0.7
+     ],
+     "label_x": -0.3
+    },
+    {
+     "from": "bucket",
+     "to": "abstract",
+     "label": "GetObject",
+     "entry": [
+      0,
+      0.3
+     ],
+     "label_x": -0.5
+    },
+    {
+     "from": "abs-integration",
+     "to": "sub",
+     "label": "Account ID + External ID",
      "tone": "amber",
      "dashed": true,
      "exit": [
       0,
-      0.85
-     ],
-     "entry": [
-      1,
-      0.5
-     ],
-     "label_x": 0.35
-    },
-    {
-     "from": "role",
-     "to": "s3",
-     "label": "S3 read",
-     "tone": "muted",
-     "dashed": true,
-     "exit": [
-      0,
       0.5
      ],
      "entry": [
       1,
-      0.85
-     ],
-     "label_x": -0.3
+      0.5
+     ]
     }
    ]
   }

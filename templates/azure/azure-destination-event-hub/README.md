@@ -6,6 +6,10 @@ Provisions the Azure side of the Abstract Azure EventHub Destination: an Event H
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
+![How Event Hub destination fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## Deploy
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FIamABS3C%2Fabstract-cloud-templates%2Fmain%2Ftemplates%2Fazure%2Fazure-destination-event-hub%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FIamABS3C%2Fabstract-cloud-templates%2Fmain%2Ftemplates%2Fazure%2Fazure-destination-event-hub%2FcreateUiDefinition.json)

@@ -6,6 +6,10 @@ A Lambda-backed custom resource that does at deploy time what plain CloudFormati
 
 **Cloud:** aws · **Role:** foundation · **Scope:** account
 
+![How Log delivery lookup helper fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 A deploy needs a value CloudFormation cannot look up by name (a KMS alias, a queue name, a web ACL name), or needs S3 access logging or load balancer access logs switched on.

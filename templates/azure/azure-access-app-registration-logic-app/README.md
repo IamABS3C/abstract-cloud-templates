@@ -6,6 +6,10 @@ The recommended path for per-subscription app registrations: one Logic App in on
 
 **Cloud:** azure · **Role:** access · **Scope:** resource-group
 
+![How App registrations, by Logic App fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Per-subscription app registrations for Microsoft Graph or Microsoft 365 collection, unless governance mandates Azure Policy.

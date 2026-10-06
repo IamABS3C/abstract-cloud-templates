@@ -1,103 +1,92 @@
 {
- "title": "Abstract -> Event Hubs destination",
+ "frame": {
+  "title": "Abstract delivers processed events into your Event Hub",
+  "subtitle": "A namespace and one hub take the events in; Abstract signs in with a send-only key or a role",
+  "cloud_label": "Your resource group",
+  "height": 710,
+  "abstract_y": 141,
+  "abstract_label": "Abstract platform",
+  "abstract_sublabel": "sends processed events\nto your hub"
+ },
  "theme": "dark",
  "pages": [
   {
    "name": "Event Hub destination",
-   "groups": [
-    {
-     "id": "az",
-     "label": "Customer Azure tenant",
-     "kind": "plain",
-     "x": 40,
-     "y": 40,
-     "w": 920,
-     "h": 520,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 1000,
-     "y": 40,
-     "w": 220,
-     "h": 520,
-     "color": "#FF216B"
-    },
-    {
-     "id": "ns",
-     "label": "Event Hubs namespace",
-     "kind": "plain",
-     "x": 290,
-     "y": 80,
-     "w": 520,
-     "h": 400,
-     "color": "#f5c61e",
-     "parent": "az"
-    }
-   ],
    "nodes": [
+    {
+     "id": "net",
+     "label": "Network rules",
+     "sublabel": "public access stays on\nin Safe Mode",
+     "icon": "azure:networking/Network_Security_Groups",
+     "x": 60,
+     "y": 90,
+     "parent": "ns",
+     "builds": [
+      "Microsoft.EventHub/namespaces/networkRuleSets@"
+     ]
+    },
     {
      "id": "hub",
      "label": "Destination hub",
-     "icon": "azure:event_hubs",
+     "sublabel": "abstract-destination-hub\n4 partitions, 7-day retention",
+     "icon": "azure:iot/Event_Hubs",
+     "x": 260,
+     "y": 90,
      "parent": "ns",
-     "x": 230,
-     "y": 80,
-     "sublabel": "abstract-destination-hub"
+     "builds": [
+      "Microsoft.EventHub/namespaces/eventhubs@"
+     ]
     },
     {
-     "id": "sas",
-     "label": "Send-only SAS",
-     "icon": "azure:lock",
-     "parent": "ns",
-     "x": 70,
-     "y": 270,
-     "sublabel": "abstract-send"
-    },
-    {
-     "id": "rbac",
-     "label": "Data Sender role",
-     "icon": "azure:roles",
-     "parent": "ns",
-     "x": 390,
-     "y": 270,
-     "sublabel": "optional, RBAC"
+     "id": "diag",
+     "label": "Namespace diagnostics",
+     "sublabel": "optional, to your workspace\nor storage account",
+     "icon": "azure:management_governance/Diagnostics_Settings",
+     "x": 60,
+     "y": 370,
+     "builds": [
+      "Microsoft.Insights/diagnosticSettings@"
+     ]
     },
     {
      "id": "pe",
      "label": "Private endpoint",
-     "icon": "azure:virtual_network",
-     "parent": "az",
-     "x": 70,
-     "y": 160,
-     "sublabel": "optional"
+     "sublabel": "optional, with a private\nDNS zone group",
+     "icon": "azure:networking/Private_Endpoint",
+     "x": 330,
+     "y": 370,
+     "builds": [
+      "Microsoft.Network/privateEndpoints@"
+     ]
     },
     {
-     "id": "diag",
-     "label": "Diagnostic settings",
-     "icon": "azure:diagnostics",
-     "parent": "az",
-     "x": 70,
-     "y": 350,
-     "sublabel": "optional"
+     "id": "rule",
+     "label": "Send rule",
+     "sublabel": "abstract-send, Send only\n(enableSas)",
+     "icon": "azure:security/Keys",
+     "x": 870,
+     "y": 370,
+     "builds": [
+      "Microsoft.EventHub/namespaces/authorizationRules@"
+     ]
     },
     {
-     "id": "plat",
-     "label": "Abstract platform",
-     "icon": "azure:monitor",
-     "parent": "abs",
-     "x": 71,
-     "y": 160,
-     "sublabel": "EventHub destination"
+     "id": "role",
+     "label": "Data Sender role",
+     "sublabel": "Event Hubs Data Sender\nfor a principal (optional)",
+     "icon": "azure:identity/Managed_Identities",
+     "x": 870,
+     "y": 540,
+     "builds": [
+      "Microsoft.Authorization/roleAssignments@"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "plat",
+     "from": "abstract",
      "to": "hub",
-     "tone": "brand",
+     "label": "delivers events",
      "exit": [
       0,
       0.5
@@ -106,71 +95,82 @@
       1,
       0.5
      ],
-     "label": "processed events"
+     "label_x": 0.2
     },
     {
-     "from": "sas",
-     "to": "hub",
-     "tone": "muted",
+     "from": "abstract",
+     "to": "rule",
+     "label": "authenticates with",
+     "tone": "amber",
+     "dashed": true,
      "exit": [
-      0.5,
-      0
-     ],
-     "entry": [
       0,
-      0.5
-     ],
-     "label": "Send only"
-    },
-    {
-     "from": "rbac",
-     "to": "hub",
-     "tone": "muted",
-     "exit": [
-      0.5,
-      0
+      0.7
      ],
      "entry": [
       1,
-      0.75
+      0.5
      ],
-     "label": "or Entra RBAC"
+     "label_x": 0.2
+    },
+    {
+     "from": "abstract",
+     "to": "role",
+     "label": "or authenticates with",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.9
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.2
     },
     {
      "from": "pe",
      "to": "ns",
+     "label": "private link",
      "tone": "muted",
+     "dashed": true,
      "exit": [
-      1,
-      0.5
+      0.5,
+      0
      ],
      "entry": [
-      0,
-      0.2975
-     ],
-     "label": "private link"
+      0.5,
+      1
+     ]
     },
     {
-     "from": "ns",
-     "to": "diag",
+     "from": "diag",
+     "to": "ns",
+     "label": "namespace logs",
      "tone": "muted",
+     "dashed": true,
      "exit": [
-      0,
-      0.7725
+      0.5,
+      0
      ],
      "entry": [
-      1,
-      0.5
+      0.2,
+      1
      ]
     }
    ],
-   "badges": [
+   "groups": [
     {
-     "text": "Standard, TLS 1.2",
-     "x": 660,
-     "y": 126,
-     "w": 150,
-     "tone": "muted"
+     "id": "ns",
+     "label": "Event Hubs namespace",
+     "kind": "plain",
+     "color": "#2e9bf0",
+     "parent": "cloud",
+     "x": 330,
+     "y": 60,
+     "w": 470,
+     "h": 250
     }
    ]
   }

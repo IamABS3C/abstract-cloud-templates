@@ -6,6 +6,10 @@ Security Command Center does not flow through the Log Router; it publishes to Pu
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
 
+![How Security Command Center findings fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Security Command Center Premium or Enterprise is on and its findings should reach Abstract.

@@ -1,100 +1,56 @@
 {
- "title": "Key Vault role assignment helper",
+ "frame": {
+  "title": "Grants one role on an existing Key Vault",
+  "subtitle": "One role assignment lets one principal read or manage secrets in the vault",
+  "cloud_label": "Your resource group",
+  "height": 420,
+  "abstract_y": 130,
+  "no_data_path": true
+ },
  "theme": "dark",
  "pages": [
   {
-   "name": "Key Vault role assignment",
-   "groups": [
-    {
-     "id": "az",
-     "label": "Customer resource group",
-     "kind": "plain",
-     "x": 40,
-     "y": 40,
-     "w": 820,
-     "h": 400,
-     "color": "#2e9bf0"
-    }
-   ],
+   "name": "Key Vault secrets reader",
    "nodes": [
     {
-     "id": "caller",
-     "label": "Sentinel templates",
-     "icon": "azure:code_file",
-     "parent": "az",
-     "x": 70,
-     "y": 70,
-     "sublabel": "call as module"
-    },
-    {
-     "id": "pr",
+     "id": "who",
      "label": "Principal",
-     "icon": "azure:user_permissions",
-     "parent": "az",
-     "x": 70,
-     "y": 230,
-     "sublabel": "identity or user"
+     "sublabel": "the identity you name",
+     "icon": "azure:identity/Enterprise_Applications",
+     "x": 60,
+     "y": 130,
+     "existing": true
     },
     {
-     "id": "ra",
+     "id": "role",
      "label": "Role assignment",
-     "icon": "azure:roles",
-     "parent": "az",
-     "x": 380,
-     "y": 230,
-     "sublabel": "Secrets Officer or User"
+     "sublabel": "one role, scoped to\nthe vault",
+     "icon": "azure:security/Keys",
+     "x": 330,
+     "y": 130,
+     "builds": [
+      "Microsoft.Authorization/roleAssignments@"
+     ]
     },
     {
      "id": "kv",
      "label": "Key Vault",
-     "icon": "azure:key_vault",
-     "parent": "az",
-     "x": 660,
-     "y": 230,
-     "sublabel": "existing, not modified"
+     "sublabel": "the vault itself\nis not changed",
+     "icon": "azure:security/Key_Vaults",
+     "x": 600,
+     "y": 130,
+     "existing": true
     }
    ],
    "edges": [
     {
-     "from": "caller",
-     "to": "ra",
-     "tone": "muted",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0.5,
-      0
-     ],
-     "label": "one role"
+     "from": "who",
+     "to": "role",
+     "label": "is granted"
     },
     {
-     "from": "pr",
-     "to": "ra",
-     "tone": "muted",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0,
-      0.5
-     ],
-     "label": "granted to"
-    },
-    {
-     "from": "ra",
+     "from": "role",
      "to": "kv",
-     "tone": "muted",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0,
-      0.5
-     ],
      "label": "scoped to"
     }
    ]

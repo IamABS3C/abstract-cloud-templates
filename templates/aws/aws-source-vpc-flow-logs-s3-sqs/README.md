@@ -6,6 +6,10 @@ Creates a VPC flow log on one VPC, subnet or network interface, its hardened S3 
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
+![How VPC Flow Logs fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 You want network flow records for a VPC, subnet or interface in Abstract.

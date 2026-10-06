@@ -1,223 +1,153 @@
 {
- "title": "aws.s3-sqs.terraform",
+ "frame": {
+  "title": "One queue per source, for a bucket you already have",
+  "subtitle": "A routing layer sends each prefix to its own queue; Abstract polls each queue and reads the bucket",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 200,
+  "abstract_sublabel": "one configuration\nper queue",
+  "integration_y": 547
+ },
  "theme": "dark",
- "animate": false,
  "pages": [
   {
-   "name": "aws.s3-sqs.terraform",
-   "groups": [
-    {
-     "id": "acct",
-     "label": "Customer AWS account",
-     "kind": "account",
-     "x": 40,
-     "y": 40,
-     "w": 800,
-     "h": 580,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 900,
-     "y": 40,
-     "w": 260,
-     "h": 580,
-     "color": "#FF216B"
-    },
-    {
-     "id": "route",
-     "label": "routing_mode, pick one",
-     "kind": "plain",
-     "parent": "acct",
-     "x": 240,
-     "y": 100,
-     "w": 200,
-     "h": 470,
-     "color": "#f5c61e"
-    }
-   ],
+   "name": "Existing bucket",
    "nodes": [
     {
-     "id": "s3",
+     "id": "bucket",
      "label": "Security bucket",
+     "sublabel": "holds several sources\nunder different prefixes",
      "icon": "aws:s3",
-     "parent": "acct",
-     "x": 40,
-     "y": 290,
-     "sublabel": "existing, prefixed"
+     "x": 60,
+     "y": 110,
+     "existing": true
     },
     {
-     "id": "r1",
-     "label": "Bucket notification",
-     "icon": "aws:message",
-     "parent": "route",
-     "x": 61,
-     "y": 40,
-     "sublabel": "direct"
-    },
-    {
-     "id": "r2",
-     "label": "SNS topic",
+     "id": "routing",
+     "label": "Routing layer",
+     "sublabel": "pick one: bucket notification,\nSNS fan-out or EventBridge rule",
      "icon": "aws:sns",
-     "parent": "route",
-     "x": 61,
-     "y": 190,
-     "sublabel": "sns"
+     "x": 330,
+     "y": 330,
+     "builds": [
+      "aws_s3_bucket_notification",
+      "aws_sns_topic",
+      "aws_cloudwatch_event_rule"
+     ]
     },
     {
-     "id": "r3",
-     "label": "EventBridge rules",
-     "icon": "aws:eventbridge",
-     "parent": "route",
-     "x": 61,
-     "y": 340,
-     "sublabel": "eventbridge"
-    },
-    {
-     "id": "q1",
-     "label": "CloudTrail queue",
+     "id": "queues",
+     "label": "Source queues",
+     "sublabel": "one queue for each prefix",
      "icon": "aws:sqs",
-     "parent": "acct",
-     "x": 540,
-     "y": 140,
-     "sublabel": "+ DLQ"
+     "x": 600,
+     "y": 330,
+     "builds": [
+      "aws_sqs_queue"
+     ]
     },
     {
-     "id": "q2",
-     "label": "GuardDuty queue",
+     "id": "dlq",
+     "label": "Dead-letter queue",
+     "sublabel": "one per source",
      "icon": "aws:sqs",
-     "parent": "acct",
-     "x": 540,
-     "y": 290,
-     "sublabel": "+ DLQ"
+     "x": 600,
+     "y": 540,
+     "builds": [
+      "aws_sqs_queue"
+     ]
     },
     {
-     "id": "q3",
-     "label": "Security Hub queue",
-     "icon": "aws:sqs",
-     "parent": "acct",
-     "x": 540,
-     "y": 440,
-     "sublabel": "+ DLQ"
+     "id": "alarms",
+     "label": "CloudWatch alarms",
+     "sublabel": "optional: one per source,\nwhen its dead-letter queue fills",
+     "icon": "aws:cloudwatch",
+     "x": 330,
+     "y": 540,
+     "builds": [
+      "aws_cloudwatch_metric_alarm"
+     ]
     },
     {
      "id": "role",
      "label": "IAM role",
+     "sublabel": "one role for every\nconfiguration, with an External ID",
      "icon": "aws:role",
-     "parent": "acct",
-     "x": 640,
-     "y": 20,
-     "sublabel": "shared, External ID"
-    },
-    {
-     "id": "alarm",
-     "label": "DLQ alarms",
-     "icon": "aws:alarm",
-     "parent": "acct",
-     "x": 40,
-     "y": 440,
-     "sublabel": "one per source"
-    },
-    {
-     "id": "plat",
-     "label": "Abstract platform",
-     "sublabel": "one config per queue",
-     "icon": "img:../../app/web/public/logo-mark.svg",
-     "parent": "abs",
-     "x": 75,
-     "y": 280,
-     "w": 110,
-     "h": 98
+     "x": 870,
+     "y": 540,
+     "builds": [
+      "aws_iam_role"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "s3",
-     "to": "route",
-     "label": "ObjectCreated",
-     "tone": "brand",
-     "entry": [
-      0,
-      0.487
-     ]
-    },
-    {
-     "from": "route",
-     "to": "q1",
-     "label": "cloudtrail/",
-     "tone": "brand",
+     "from": "bucket",
+     "to": "routing",
+     "label": "object created",
      "exit": [
       1,
-      0.168
-     ]
-    },
-    {
-     "from": "route",
-     "to": "q2",
-     "label": "guardduty/",
-     "tone": "brand",
-     "exit": [
-      1,
-      0.487
-     ]
-    },
-    {
-     "from": "route",
-     "to": "q3",
-     "label": "securityhub/",
-     "tone": "brand",
-     "exit": [
-      1,
-      0.806
-     ]
-    },
-    {
-     "from": "q1",
-     "to": "plat",
-     "label": "",
-     "tone": "brand",
-     "entry": [
-      0,
-      0.15
-     ]
-    },
-    {
-     "from": "q2",
-     "to": "plat",
-     "label": "poll",
-     "tone": "brand",
+      0.85
+     ],
      "entry": [
       0,
       0.5
      ]
     },
     {
-     "from": "q3",
-     "to": "plat",
-     "label": "",
-     "tone": "brand",
+     "from": "routing",
+     "to": "queues",
+     "label": "filtered by prefix"
+    },
+    {
+     "from": "queues",
+     "to": "abstract",
+     "label": "poll",
      "entry": [
       0,
-      0.85
+      0.7
+     ],
+     "label_x": -0.3
+    },
+    {
+     "from": "bucket",
+     "to": "abstract",
+     "label": "GetObject",
+     "entry": [
+      0,
+      0.3
+     ],
+     "label_x": -0.5
+    },
+    {
+     "from": "queues",
+     "to": "dlq",
+     "label": "undeliverable",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      1,
+      0.9
+     ],
+     "entry": [
+      1,
+      0.3
      ]
     },
     {
-     "from": "plat",
+     "from": "abs-integration",
      "to": "role",
      "label": "AssumeRole + External ID",
      "tone": "amber",
      "dashed": true,
      "exit": [
-      0.5,
-      0
+      0,
+      0.5
      ],
      "entry": [
       1,
       0.5
-     ],
-     "label_x": 0.45
+     ]
     }
    ]
   }

@@ -1,121 +1,136 @@
 {
- "title": "Sentinel destination - deployment script creates the app",
+ "frame": {
+  "title": "A deployment script makes the app, then Abstract delivers to Sentinel",
+  "subtitle": "The same ingestion stack as the standard template, plus an app registration and secret created for you",
+  "cloud_label": "Your resource group",
+  "height": 730,
+  "abstract_y": 151,
+  "abstract_label": "Abstract platform",
+  "abstract_sublabel": "sends processed events\nto your workspace"
+ },
  "theme": "dark",
  "pages": [
   {
-   "name": "Sentinel destination with app",
-   "groups": [
-    {
-     "id": "az",
-     "label": "Customer Azure tenant",
-     "kind": "plain",
-     "x": 40,
-     "y": 40,
-     "w": 920,
-     "h": 620,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 1000,
-     "y": 40,
-     "w": 220,
-     "h": 620,
-     "color": "#FF216B"
-    },
-    {
-     "id": "ws",
-     "label": "Log Analytics workspace",
-     "kind": "plain",
-     "x": 50,
-     "y": 360,
-     "w": 330,
-     "h": 190,
-     "color": "#f5c61e",
-     "parent": "az"
-    }
-   ],
+   "name": "Sentinel destination, app by script",
    "nodes": [
     {
-     "id": "tbl",
-     "label": "AbstractEventLogs_CL",
-     "icon": "azure:table",
-     "parent": "ws",
-     "x": 126,
-     "y": 60,
-     "sublabel": "custom table"
+     "id": "dce",
+     "label": "Data Collection Endpoint",
+     "sublabel": "abstract-dce\nAbstract sends here",
+     "icon": "azure:other/Data_Collection_Rules",
+     "x": 870,
+     "y": 160,
+     "builds": [
+      "Microsoft.Insights/dataCollectionEndpoints@"
+     ]
     },
     {
      "id": "dcr",
      "label": "Data Collection Rule",
-     "icon": "azure:filter",
-     "parent": "az",
-     "x": 560,
-     "y": 420,
-     "sublabel": "abstract-dcr"
+     "sublabel": "abstract-dcr\noptional ASIM dataflows",
+     "icon": "azure:other/Data_Collection_Rules",
+     "x": 600,
+     "y": 160,
+     "builds": [
+      "Microsoft.Insights/dataCollectionRules@"
+     ]
     },
     {
-     "id": "dce",
-     "label": "Data Collection Endpoint",
-     "icon": "azure:service_endpoint",
-     "parent": "az",
-     "x": 760,
-     "y": 420,
-     "sublabel": "abstract-dce"
+     "id": "table",
+     "label": "Custom table",
+     "sublabel": "AbstractEventLogs_CL",
+     "icon": "azure:management_governance/Log_Analytics_Workspaces",
+     "x": 60,
+     "y": 90,
+     "parent": "ws",
+     "builds": [
+      "Microsoft.OperationalInsights/workspaces/tables@"
+     ]
     },
     {
-     "id": "plat",
-     "label": "Abstract platform",
-     "icon": "azure:monitor",
-     "parent": "abs",
-     "x": 71,
-     "y": 420,
-     "sublabel": "Sentinel destination"
+     "id": "sent",
+     "label": "Sentinel onboarding",
+     "sublabel": "new workspace and Sentinel,\nonly if createWorkspace",
+     "icon": "azure:security/Azure_Sentinel",
+     "x": 60,
+     "y": 230,
+     "parent": "ws",
+     "builds": [
+      "Microsoft.OperationalInsights/workspaces@",
+      "Microsoft.SecurityInsights/onboardingStates@"
+     ]
     },
     {
-     "id": "mi",
+     "id": "errors",
+     "label": "DCR error logs",
+     "sublabel": "DCRLogErrors table\noptional, on by default",
+     "icon": "azure:management_governance/Diagnostics_Settings",
+     "x": 260,
+     "y": 230,
+     "parent": "ws",
+     "builds": [
+      "Microsoft.Insights/diagnosticSettings@"
+     ]
+    },
+    {
+     "id": "role",
+     "label": "Metrics Publisher role",
+     "sublabel": "Monitoring Metrics Publisher on\nthe DCR for the new service principal",
+     "icon": "azure:security/Keys",
+     "x": 870,
+     "y": 340,
+     "builds": [
+      "Microsoft.Authorization/roleAssignments@"
+     ]
+    },
+    {
+     "id": "prov",
      "label": "Provisioning identity",
-     "icon": "azure:user_permissions",
-     "parent": "az",
-     "x": 50,
-     "y": 50,
-     "sublabel": "prerequisite, tier-0"
+     "sublabel": "tier-0 managed identity\nyou create first",
+     "icon": "azure:identity/Managed_Identities",
+     "x": 870,
+     "y": 520,
+     "existing": true
     },
     {
-     "id": "kv",
-     "label": "Key Vault",
-     "icon": "azure:key_vault",
-     "parent": "az",
-     "x": 50,
-     "y": 220,
-     "sublabel": "optional, holds secret"
-    },
-    {
-     "id": "ds",
+     "id": "script",
      "label": "Deployment script",
-     "icon": "azure:script_file",
-     "parent": "az",
-     "x": 230,
-     "y": 220,
-     "sublabel": "abstract-create-app"
+     "sublabel": "abstract-create-app",
+     "icon": "azure:management_governance/Automation_Accounts",
+     "x": 600,
+     "y": 520,
+     "builds": [
+      "Microsoft.Resources/deploymentScripts@"
+     ]
     },
     {
      "id": "app",
      "label": "App registration",
-     "icon": "azure:active_directory",
-     "parent": "az",
-     "x": 410,
-     "y": 220,
-     "sublabel": "and service principal"
+     "sublabel": "and service principal,\nno API permissions",
+     "icon": "azure:identity/App_Registrations",
+     "x": 330,
+     "y": 520,
+     "builds": [
+      "appScript.properties.outputs.appId"
+     ]
+    },
+    {
+     "id": "kv",
+     "label": "Key Vault",
+     "sublabel": "new or existing, holds the\nclient secret",
+     "icon": "azure:security/Key_Vaults",
+     "x": 60,
+     "y": 520,
+     "builds": [
+      "Microsoft.KeyVault/vaults@"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "plat",
+     "from": "abstract",
      "to": "dce",
-     "tone": "brand",
+     "label": "sends events",
      "exit": [
       0,
       0.5
@@ -124,12 +139,12 @@
       1,
       0.5
      ],
-     "label": "Logs Ingestion API"
+     "label_x": 0.2
     },
     {
      "from": "dce",
      "to": "dcr",
-     "tone": "brand",
+     "label": "routes by rule",
      "exit": [
       0,
       0.5
@@ -137,12 +152,13 @@
      "entry": [
       1,
       0.5
-     ]
+     ],
+     "label_x": 0
     },
     {
      "from": "dcr",
-     "to": "tbl",
-     "tone": "brand",
+     "to": "table",
+     "label": "writes",
      "exit": [
       0,
       0.5
@@ -151,98 +167,94 @@
       1,
       0.5
      ],
-     "label": "Custom stream"
+     "label_x": 0.2
     },
     {
-     "from": "mi",
-     "to": "ds",
+     "from": "dcr",
+     "to": "errors",
+     "label": "ingestion errors",
      "tone": "muted",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0.5,
-      0
-     ],
-     "label": "runs as"
-    },
-    {
-     "from": "ds",
-     "to": "kv",
-     "tone": "brand",
+     "dashed": true,
      "exit": [
       0,
-      0.5
+      0.9
      ],
      "entry": [
       1,
       0.5
      ],
-     "label": "client secret"
-    },
-    {
-     "from": "ds",
-     "to": "app",
-     "tone": "brand",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0,
-      0.5
-     ],
-     "label": "creates"
-    },
-    {
-     "from": "app",
-     "to": "dcr",
-     "tone": "muted",
-     "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
-      0.5,
-      0
-     ],
-     "label": "Metrics Publisher",
      "label_x": -0.3
     },
     {
-     "from": "plat",
-     "to": "app",
-     "tone": "muted",
+     "from": "role",
+     "to": "dcr",
+     "label": "may write to the DCR",
+     "tone": "amber",
+     "dashed": true,
      "exit": [
-      0.5,
-      0
+      0,
+      0.5
      ],
      "entry": [
-      0.75,
-      0
+      1,
+      0.85
      ],
-     "label": "signs in as",
-     "dashed": true,
-     "label_x": 0.2
+     "label_x": 0.4
+    },
+    {
+     "from": "prov",
+     "to": "script",
+     "label": "runs",
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0
+    },
+    {
+     "from": "script",
+     "to": "app",
+     "label": "creates",
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0
+    },
+    {
+     "from": "app",
+     "to": "kv",
+     "label": "client secret",
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0
     }
    ],
-   "badges": [
+   "groups": [
     {
-     "text": "new or existing",
-     "x": 292,
-     "y": 410,
-     "w": 120,
-     "tone": "muted"
-    }
-   ],
-   "notes": [
-    {
-     "text": "Never touches: analytics rules, workbooks, other tables",
-     "x": 90,
-     "y": 612,
-     "w": 420,
-     "h": 24
+     "id": "ws",
+     "label": "Log Analytics workspace (new or existing)",
+     "kind": "plain",
+     "color": "#2e9bf0",
+     "parent": "cloud",
+     "x": 40,
+     "y": 70,
+     "w": 440,
+     "h": 380
     }
    ]
   }

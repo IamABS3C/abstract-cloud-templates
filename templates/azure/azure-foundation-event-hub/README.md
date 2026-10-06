@@ -6,6 +6,10 @@ Azure Monitor cannot send diagnostic data directly to a third party, so every Az
 
 **Cloud:** azure · **Role:** foundation · **Scope:** resource-group
 
+![How Event Hub source fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Any time Azure telemetry needs to reach Abstract: Activity Log, Entra ID sign-in and audit logs, Defender XDR streaming, or resource logs.

@@ -6,6 +6,10 @@ Admin Activity audit logs are always on; Data Access logs are off by default, an
 
 **Cloud:** gcp · **Role:** foundation · **Scope:** organization
 
+![How Data Access audit logging fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Data Access signal (BigQuery reads, Cloud Storage object reads, KMS use) is needed, decided per service.

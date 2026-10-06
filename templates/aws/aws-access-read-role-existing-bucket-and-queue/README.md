@@ -6,6 +6,10 @@ Creates only the least-privilege IAM role Abstract assumes, with an External ID,
 
 **Cloud:** aws · **Role:** access · **Scope:** account
 
+![How Read role, existing bucket fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## When to use
 
 Logs already land in a bucket that notifies a queue, and Abstract only needs a role to read them.

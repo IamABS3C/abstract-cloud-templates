@@ -1,167 +1,136 @@
 {
- "title": "Abstract Sentinel solution (managed app)",
+ "frame": {
+  "title": "Sentinel content for Abstract data, installed in your workspace",
+  "subtitle": "Connector tiles, a parser, hunting queries, rules, workbooks and playbooks, with rules and automation off",
+  "cloud_label": "Your resource group (Sentinel workspace)",
+  "height": 660,
+  "abstract_y": 291,
+  "abstract_sublabel": "events arrive via the\ndestination template"
+ },
  "theme": "dark",
  "pages": [
   {
-   "name": "Managed app",
-   "groups": [
-    {
-     "id": "az",
-     "label": "Customer Azure tenant",
-     "kind": "plain",
-     "x": 40,
-     "y": 40,
-     "w": 920,
-     "h": 520,
-     "color": "#2e9bf0"
-    },
-    {
-     "id": "abs",
-     "label": "Abstract",
-     "kind": "plain",
-     "x": 1000,
-     "y": 40,
-     "w": 220,
-     "h": 520,
-     "color": "#FF216B"
-    },
-    {
-     "id": "ws",
-     "label": "Existing Sentinel workspace",
-     "kind": "plain",
-     "x": 40,
-     "y": 50,
-     "w": 850,
-     "h": 420,
-     "color": "#f5c61e",
-     "parent": "az"
-    }
-   ],
+   "name": "Sentinel content pack",
    "nodes": [
     {
-     "id": "tbl",
-     "label": "AbstractEventLogs_CL",
-     "icon": "azure:table",
-     "parent": "ws",
-     "x": 50,
-     "y": 90,
-     "sublabel": "existing, not created"
+     "id": "table",
+     "label": "Abstract events table",
+     "sublabel": "AbstractEventLogs_CL\n(destination template)",
+     "icon": "azure:management_governance/Log_Analytics_Workspaces",
+     "x": 870,
+     "y": 300,
+     "existing": true
     },
     {
      "id": "parser",
-     "label": "ASIM parser",
-     "icon": "azure:functions",
-     "parent": "ws",
-     "x": 250,
-     "y": 90,
-     "sublabel": "ASim_AbstractEvent"
+     "label": "ASim_AbstractEvent",
+     "sublabel": "parser function (saved search)",
+     "icon": "azure:management_governance/Log_Analytics_Workspaces",
+     "x": 600,
+     "y": 300,
+     "builds": [
+      "Microsoft.OperationalInsights/workspaces/savedSearches"
+     ]
     },
     {
      "id": "hunt",
      "label": "Hunting queries",
-     "icon": "azure:log_search",
-     "parent": "ws",
-     "x": 430,
-     "y": 90,
-     "sublabel": "3 saved searches"
+     "sublabel": "three, saved searches",
+     "icon": "azure:security/Azure_Sentinel",
+     "x": 330,
+     "y": 300,
+     "builds": [
+      "Microsoft.OperationalInsights/workspaces/savedSearches"
+     ]
     },
     {
-     "id": "wb",
-     "label": "Workbooks",
-     "icon": "azure:dashboard",
-     "parent": "ws",
-     "x": 590,
-     "y": 90,
-     "sublabel": "3 workbooks"
-    },
-    {
-     "id": "conn",
-     "label": "Connector tiles",
-     "icon": "azure:connectors",
-     "parent": "ws",
-     "x": 750,
-     "y": 90,
-     "sublabel": "2 definitions"
-    },
-    {
-     "id": "pkg",
-     "label": "Solution package",
-     "icon": "azure:pack",
-     "parent": "ws",
-     "x": 50,
-     "y": 280,
-     "sublabel": "contentPackages record"
-    },
-    {
-     "id": "ar",
+     "id": "rules",
      "label": "Analytics rules",
-     "icon": "azure:alerts",
-     "parent": "ws",
-     "x": 250,
-     "y": 280,
-     "sublabel": "2, disabled on install"
+     "sublabel": "two, installed disabled",
+     "icon": "azure:security/Azure_Sentinel",
+     "x": 600,
+     "y": 100,
+     "builds": [
+      "Microsoft.OperationalInsights/workspaces/providers/alertRules"
+     ]
     },
     {
      "id": "auto",
      "label": "Automation rules",
-     "icon": "azure:automation",
-     "parent": "ws",
-     "x": 430,
-     "y": 280,
-     "sublabel": "3, disabled on install"
+     "sublabel": "three, installed disabled,\nscoped to this pack's rules",
+     "icon": "azure:security/Azure_Sentinel",
+     "x": 330,
+     "y": 100,
+     "builds": [
+      "Microsoft.OperationalInsights/workspaces/providers/automationRules"
+     ]
     },
     {
-     "id": "pb",
+     "id": "play",
      "label": "Playbooks",
-     "icon": "azure:logic_apps",
-     "parent": "ws",
-     "x": 610,
-     "y": 280,
-     "sublabel": "enrich, verdict, tune"
+     "sublabel": "enrich, verdict and tune\n(Logic Apps)",
+     "icon": "azure:iot/Logic_Apps",
+     "x": 60,
+     "y": 100,
+     "builds": [
+      "Microsoft.Logic/workflows"
+     ]
     },
     {
-     "id": "api",
-     "label": "Abstract API",
-     "icon": "azure:monitor",
-     "parent": "abs",
-     "x": 71,
-     "y": 330,
-     "sublabel": "abstractBaseUrl"
+     "id": "wb",
+     "label": "Workbooks",
+     "sublabel": "three",
+     "icon": "azure:analytics/Azure_Workbooks",
+     "x": 600,
+     "y": 500,
+     "builds": [
+      "Microsoft.Insights/workbooks"
+     ]
+    },
+    {
+     "id": "tiles",
+     "label": "Connector tiles",
+     "sublabel": "two data connector\ndefinitions",
+     "icon": "azure:security/Azure_Sentinel",
+     "x": 330,
+     "y": 500,
+     "builds": [
+      "Microsoft.OperationalInsights/workspaces/providers/dataConnectorDefinitions"
+     ]
     }
    ],
    "edges": [
     {
-     "from": "tbl",
-     "to": "parser",
-     "tone": "muted",
+     "from": "abstract",
+     "to": "table",
+     "label": "events",
      "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
       0,
       0.5
      ],
-     "label": "reads"
+     "entry": [
+      1,
+      0.5
+     ],
+     "label_x": 0.2
     },
     {
-     "from": "ar",
-     "to": "auto",
-     "tone": "brand",
+     "from": "table",
+     "to": "parser",
+     "label": "read by",
      "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
       0,
       0.5
      ],
-     "label": "incidents"
+     "entry": [
+      1,
+      0.5
+     ]
     },
     {
      "from": "auto",
-     "to": "pb",
-     "tone": "brand",
+     "to": "rules",
+     "label": "scoped to",
      "exit": [
       1,
       0.5
@@ -169,22 +138,20 @@
      "entry": [
       0,
       0.5
-     ],
-     "label": "runs"
+     ]
     },
     {
-     "from": "pb",
-     "to": "api",
-     "tone": "brand",
+     "from": "auto",
+     "to": "play",
+     "label": "runs",
      "exit": [
-      1,
-      0.5
-     ],
-     "entry": [
       0,
       0.5
      ],
-     "label": "API calls"
+     "entry": [
+      1,
+      0.5
+     ]
     }
    ]
   }

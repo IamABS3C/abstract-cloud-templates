@@ -6,6 +6,10 @@ A small helper that grants one role to one principal on an existing Key Vault. T
 
 **Cloud:** azure · **Role:** access · **Scope:** resource-group
 
+![How Key Vault secrets reader fits together](diagram.png)
+
+Editable source: [diagram.drawio](diagram.drawio)
+
 ## Deploy
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FIamABS3C%2Fabstract-cloud-templates%2Fmain%2Ftemplates%2Fazure%2Fazure-access-key-vault-secrets-reader%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FIamABS3C%2Fabstract-cloud-templates%2Fmain%2Ftemplates%2Fazure%2Fazure-access-key-vault-secrets-reader%2FcreateUiDefinition.json)

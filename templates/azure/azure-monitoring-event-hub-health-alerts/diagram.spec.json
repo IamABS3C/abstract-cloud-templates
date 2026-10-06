@@ -1,118 +1,114 @@
 {
- "title": "Know when the Azure pipeline stops",
+ "frame": {
+  "title": "Alerts tell you when the Event Hub feed stalls",
+  "subtitle": "Alert rules watch the namespace for a stalled consumer, a stopped producer and capacity errors",
+  "cloud_label": "Your resource group",
+  "height": 560,
+  "abstract_y": 200,
+  "no_data_path": true
+ },
  "theme": "dark",
  "pages": [
   {
-   "name": "Health alerts",
-   "width": 1380,
-   "height": 790,
-   "groups": [
+   "name": "Pipeline health alerts",
+   "nodes": [
     {
      "id": "ns",
      "label": "Event Hubs namespace",
-     "kind": "plain",
+     "sublabel": "the one Abstract reads\n(foundation template)",
+     "icon": "azure:iot/Event_Hubs",
      "x": 60,
-     "y": 70,
-     "w": 560,
-     "h": 630,
-     "color": "#f5c61e"
+     "y": 200,
+     "existing": true
     },
     {
-     "id": "mon",
-     "label": "Azure Monitor",
-     "kind": "plain",
-     "x": 700,
-     "y": 70,
-     "w": 600,
-     "h": 630,
-     "color": "#2e9bf0"
-    }
-   ],
-   "nodes": [
-    {
-     "id": "in",
-     "label": "IncomingMessages",
-     "icon": "azure:event_hubs",
-     "parent": "ns",
-     "x": 60,
-     "y": 110,
-     "sublabel": "producers healthy"
+     "id": "q",
+     "label": "Consumer-stalled rule",
+     "sublabel": "outgoing traffic collapses\nwhile incoming continues",
+     "icon": "azure:management_governance/Alerts",
+     "x": 330,
+     "y": 90,
+     "builds": [
+      "Microsoft.Insights/scheduledQueryRules@"
+     ]
     },
     {
-     "id": "out",
-     "label": "OutgoingBytes",
-     "icon": "azure:event_hubs",
-     "parent": "ns",
-     "x": 60,
-     "y": 290,
-     "sublabel": "ZERO when consumer stalls"
-    },
-    {
-     "id": "quota",
-     "label": "ThrottledRequests",
-     "icon": "azure:alerts",
-     "parent": "ns",
-     "x": 60,
-     "y": 450,
-     "sublabel": "TU ceiling hit"
-    },
-    {
-     "id": "sqr",
-     "label": "Scheduled query rule",
-     "icon": "azure:log_search",
-     "parent": "mon",
-     "x": 60,
-     "y": 170,
-     "sublabel": "KQL always returns a row"
-    },
-    {
-     "id": "metric",
-     "label": "Metric alert",
-     "icon": "azure:azure_alert",
-     "parent": "mon",
-     "x": 60,
-     "y": 380,
-     "sublabel": "never fires on sparse data"
+     "id": "m",
+     "label": "Four metric alerts",
+     "sublabel": "ingestion stopped, throttled,\nuser errors, quota exceeded",
+     "icon": "azure:management_governance/Alerts",
+     "x": 330,
+     "y": 330,
+     "builds": [
+      "Microsoft.Insights/metricAlerts@"
+     ]
     },
     {
      "id": "ag",
      "label": "Action group",
-     "icon": "azure:notification_hub",
-     "parent": "mon",
-     "x": 340,
-     "y": 260,
-     "sublabel": "attach one or nobody hears"
+     "sublabel": "your notifications, if you\npass one (optional)",
+     "icon": "azure:management_governance/Monitor",
+     "x": 600,
+     "y": 200,
+     "existing": true
     }
    ],
    "edges": [
     {
-     "from": "in",
-     "to": "sqr",
-     "tone": "muted"
+     "from": "ns",
+     "to": "q",
+     "label": "watches",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label_x": 0.6
     },
     {
-     "from": "out",
-     "to": "sqr",
-     "label": "the stall signal",
-     "tone": "brand",
+     "from": "ns",
+     "to": "m",
+     "label": "watches",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ],
+     "label_x": 0.6
+    },
+    {
+     "from": "q",
+     "to": "ag",
+     "label": "notifies",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.3
+     ],
      "label_x": -0.3
     },
     {
-     "from": "quota",
-     "to": "metric",
-     "tone": "muted"
-    },
-    {
-     "from": "sqr",
+     "from": "m",
      "to": "ag",
-     "tone": "brand"
-    },
-    {
-     "from": "metric",
-     "to": "ag",
-     "label": "sparse Sum may never fire",
-     "tone": "warn",
-     "label_x": -0.1
+     "label": "notifies",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.7
+     ],
+     "label_x": -0.3
     }
    ]
   }

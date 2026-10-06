@@ -1,0 +1,128 @@
+{
+ "frame": {
+  "title": "A lookup helper other stacks call at deploy time",
+  "subtitle": "A Lambda-backed custom resource resolves and checks things CloudFormation cannot, and can switch on some logging",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "no_data_path": true
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Helper",
+   "nodes": [
+    {
+     "id": "stacks",
+     "label": "Your other stacks",
+     "sublabel": "call the exported ServiceToken",
+     "icon": "aws:cloudformation",
+     "x": 60,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "fn",
+     "label": "Helper function",
+     "sublabel": "Lambda with inline Python",
+     "icon": "aws:lambda",
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "AWS::Lambda::Function"
+     ]
+    },
+    {
+     "id": "lookups",
+     "label": "Things it looks up",
+     "sublabel": "KMS alias, queue, stream, web ACL,\nbucket and log group: read-only",
+     "icon": "aws:bucket",
+     "x": 600,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "op",
+     "label": "Custom resource",
+     "sublabel": "optional: one lookup at deploy time\nwhen Operation is set",
+     "icon": "aws:cloudformation",
+     "x": 330,
+     "y": 330,
+     "builds": [
+      "Custom::AbstractHelper"
+     ]
+    },
+    {
+     "id": "wiring",
+     "label": "Producer wiring",
+     "sublabel": "optional writes: S3 access logging,\nload balancer access logs",
+     "icon": "aws:elastic_load_balancing",
+     "x": 600,
+     "y": 330,
+     "existing": true
+    },
+    {
+     "id": "role",
+     "label": "Execution role",
+     "sublabel": "read-only lookups; write rights\nonly when wiring is allowed",
+     "icon": "aws:role",
+     "x": 60,
+     "y": 540,
+     "builds": [
+      "AWS::IAM::Role"
+     ]
+    },
+    {
+     "id": "logs",
+     "label": "Log group",
+     "sublabel": "the function's logs",
+     "icon": "aws:cloudwatch",
+     "x": 330,
+     "y": 540,
+     "builds": [
+      "AWS::Logs::LogGroup"
+     ]
+    }
+   ],
+   "edges": [
+    {
+     "from": "stacks",
+     "to": "fn",
+     "label": "ServiceToken"
+    },
+    {
+     "from": "fn",
+     "to": "lookups",
+     "label": "read-only calls"
+    },
+    {
+     "from": "op",
+     "to": "fn",
+     "label": "invokes",
+     "exit": [
+      0,
+      0.15
+     ],
+     "entry": [
+      0,
+      0.85
+     ]
+    },
+    {
+     "from": "fn",
+     "to": "wiring",
+     "label": "optional writes",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      1,
+      0.85
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    }
+   ]
+  }
+ ]
+}
