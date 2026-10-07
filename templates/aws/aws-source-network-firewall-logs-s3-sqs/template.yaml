@@ -1,0 +1,527 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - AWS Network Firewall logs to Abstract. Creates a hardened log
+  bucket, turns on S3 logging for your existing firewall (alert logs always, flow and
+  TLS logs by choice, each under its own prefix), one SQS queue per log type and the role Abstract
+  assumes to read them. Not yet deployed by Abstract; canary pending.
+
+Metadata:
+  # Where each setting comes from. AWS documentation wins over the Launchpad data
+  # where they disagree (recorded in the comment beside the setting).
+  Sources:
+    - https://docs.aws.amazon.com/network-firewall/latest/developerguide/logging-s3.html
+      # Object keys are <prefix>/AWSLogs/<account>/network-firewall/<log-type>/<Region>/<firewall>/...
+      # The Launchpad filters on network-firewall/<type>/ directly under the prefix; that would
+      # match nothing, so each queue filters on the full documented path and the .log.gz suffix
+      # (the console's monitoring dashboard writes Athena metadata files into the same bucket).
+      # A prefix must not start with "/" (it produces "//AWSLogs").
+      # Bucket policy: delivery.logs.amazonaws.com PutObject with bucket-owner-full-control and
+      # GetBucketAcl, conditioned on aws:SourceAccount (and aws:SourceArn, per the CloudWatch page).
+    - https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/AWS-logs-infrastructure-V2-S3.html
+    - https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-networkfirewall-loggingconfiguration.html
+      # The logging configuration changes ONE log destination per update: switch one log type
+      # on or off per stack update. A create may hold several (the page's own example creates
+      # an ALERT and a FLOW destination in one resource).
+    - tools/launchpad/data/scenarios.json network-firewall-logs (three queues, three configurations, dataformat nd)
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Naming" }
+        Parameters: [NamePrefix]
+      - Label: { default: "Abstract identity (provided by Abstract)" }
+        Parameters: [AbstractPrincipalArn, ExternalId]
+      - Label: { default: "Network Firewall" }
+        Parameters: [FirewallArn, LogPrefix, EnableFlowLogs, EnableTlsLogs]
+      - Label: { default: "Bucket and queues" }
+        Parameters: [LogRetentionDays, QueueVisibilityTimeoutSeconds, DlqMaxReceiveCount]
+      - Label: { default: "Hardening (optional)" }
+        Parameters: [PermissionsBoundaryArn, MaxSessionDurationSeconds]
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract
+    Description: Prefix for created resource names. Lowercase, because it is part of the bucket name.
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,18}[a-z0-9]$"
+    ConstraintDescription: Lowercase letters, digits and hyphens, 3-20 chars.
+
+  AbstractPrincipalArn:
+    Type: String
+    Default: ""
+    Description: >-
+      The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare
+      12-digit account id (expanded to arn:aws:iam::<acct>:root).
+    AllowedPattern: "^$|^[0-9]{12}$|^arn:aws[a-z-]*:iam::[0-9]{12}:(root|(role|user)/.+)$"
+    ConstraintDescription: Provide a 12-digit account id or a valid IAM ARN.
+
+  ExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: "External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the integration in the Abstract console, once, and give the same value to whoever deploys the role."
+    MinLength: 0
+    MaxLength: 1224
+
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    Description: "Optional IAM permissions-boundary policy ARN attached to every role the stack creates. Find it with: aws iam list-policies --scope Local --query Policies[].Arn"
+    AllowedPattern: "^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$"
+
+  MaxSessionDurationSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 43200
+    Description: Maximum duration of Abstract's assumed session (3600-43200 seconds, the range IAM accepts for a role).
+
+  LogRetentionDays:
+    Type: Number
+    Default: 365
+    MinValue: 0
+    MaxValue: 3650
+    Description: Days to keep log objects in the bucket before they expire (0 = keep forever).
+
+  QueueVisibilityTimeoutSeconds:
+    Type: Number
+    Default: 900
+    MinValue: 30
+    MaxValue: 43200
+    Description: Visibility timeout of the notification queue(s); longer than Abstract takes to process one object.
+
+  DlqMaxReceiveCount:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 1000
+    Description: Receives before a notification moves to the dead-letter queue. 5 surfaces a permanent failure within minutes.
+
+  FirewallArn:
+    Type: String
+    Description: "ARN of your existing Network Firewall in this Region. It must have no logging configuration yet. Find it with: aws network-firewall list-firewalls"
+    AllowedPattern: "^$|^arn:aws[a-z-]*:network-firewall:[a-z0-9-]+:[0-9]{12}:firewall/.+$"
+
+  LogPrefix:
+    Type: String
+    Default: network-firewall
+    Description: >-
+      Top-level key prefix for the logs. Each log type goes under <LogPrefix>/<type>.
+      No leading or trailing slash.
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9!_.*'()-]*(/[A-Za-z0-9!_.*'()-]+)*$"
+    ConstraintDescription: No leading or trailing slash, no double slash.
+
+  EnableFlowLogs:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Send flow logs (every flow the stateful engine sees; by far the larger volume).
+
+  EnableTlsLogs:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Send TLS logs. Only a firewall with a TLS inspection configuration writes them.
+
+Rules:
+  RequireIdentity:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AbstractPrincipalArn, ""]]
+        AssertDescription: AbstractPrincipalArn is required (provided by Abstract).
+      - Assert: !Not [!Equals [!Ref ExternalId, ""]]
+        AssertDescription: ExternalId is required (provided by Abstract).
+  RequireFirewall:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref FirewallArn, ""]]
+        AssertDescription: FirewallArn is required.
+
+Conditions:
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  ExpireLogs: !Not [!Equals [!Ref LogRetentionDays, 0]]
+  # An ARN contains ":" so Split returns "arn" as element 0; a bare account id has no ":".
+  PrincipalIsBareAccount: !Equals
+    - !Select [0, !Split [":", !Ref AbstractPrincipalArn]]
+    - !Ref AbstractPrincipalArn
+  DoFlow: !Equals [!Ref EnableFlowLogs, "true"]
+  DoTls: !Equals [!Ref EnableTlsLogs, "true"]
+
+Resources:
+  LogBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    DependsOn: [AlertQueuePolicy, FlowQueuePolicy, TlsQueuePolicy]
+    Properties:
+      BucketName: !Sub "${NamePrefix}-nfw-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: expire-current
+            Status: !If [ExpireLogs, Enabled, Disabled]
+            ExpirationInDays: !If [ExpireLogs, !Ref LogRetentionDays, 3650]
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt AlertQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: !Sub "${LogPrefix}/alert/AWSLogs/${AWS::AccountId}/network-firewall/alert/"
+                  - Name: suffix
+                    Value: .log.gz
+          - !If
+            - DoFlow
+            - Event: s3:ObjectCreated:*
+              Queue: !GetAtt FlowQueue.Arn
+              Filter:
+                S3Key:
+                  Rules:
+                    - Name: prefix
+                      Value: !Sub "${LogPrefix}/flow/AWSLogs/${AWS::AccountId}/network-firewall/flow/"
+                    - Name: suffix
+                      Value: .log.gz
+            - !Ref AWS::NoValue
+          - !If
+            - DoTls
+            - Event: s3:ObjectCreated:*
+              Queue: !GetAtt TlsQueue.Arn
+              Filter:
+                S3Key:
+                  Rules:
+                    - Name: prefix
+                      Value: !Sub "${LogPrefix}/tls/AWSLogs/${AWS::AccountId}/network-firewall/tls/"
+                    - Name: suffix
+                      Value: .log.gz
+            - !Ref AWS::NoValue
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: Source, Value: NetworkFirewall }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+  LogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LogBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt LogBucket.Arn, !Sub "${LogBucket.Arn}/*"]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: AWSLogDeliveryWrite
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${LogBucket.Arn}/${LogPrefix}/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"
+          - Sid: AWSLogDeliveryAclCheck
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt LogBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"
+
+  AlertDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-nfw-alert-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  AlertQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-nfw-alert-queue"
+      VisibilityTimeout: !Ref QueueVisibilityTimeoutSeconds
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt AlertDeadLetterQueue.Arn
+        maxReceiveCount: !Ref DlqMaxReceiveCount
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  AlertQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref AlertQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource: !GetAtt AlertQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: AllowS3Notify
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt AlertQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:s3:::${NamePrefix}-nfw-${AWS::AccountId}-${AWS::Region}"
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  FlowDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-nfw-flow-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  FlowQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-nfw-flow-queue"
+      VisibilityTimeout: !Ref QueueVisibilityTimeoutSeconds
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FlowDeadLetterQueue.Arn
+        maxReceiveCount: !Ref DlqMaxReceiveCount
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  FlowQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref FlowQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource: !GetAtt FlowQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: AllowS3Notify
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt FlowQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:s3:::${NamePrefix}-nfw-${AWS::AccountId}-${AWS::Region}"
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  TlsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-nfw-tls-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  TlsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-nfw-tls-queue"
+      VisibilityTimeout: !Ref QueueVisibilityTimeoutSeconds
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TlsDeadLetterQueue.Arn
+        maxReceiveCount: !Ref DlqMaxReceiveCount
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  TlsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref TlsQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource: !GetAtt TlsQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: AllowS3Notify
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt TlsQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:s3:::${NamePrefix}-nfw-${AWS::AccountId}-${AWS::Region}"
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  FirewallLogging:
+    Type: AWS::NetworkFirewall::LoggingConfiguration
+    DependsOn: [LogBucketPolicy]
+    Properties:
+      FirewallArn: !Ref FirewallArn
+      LoggingConfiguration:
+        LogDestinationConfigs:
+          - LogType: ALERT
+            LogDestinationType: S3
+            LogDestination:
+              bucketName: !Ref LogBucket
+              prefix: !Sub "${LogPrefix}/alert"
+          - !If
+            - DoFlow
+            - LogType: FLOW
+              LogDestinationType: S3
+              LogDestination:
+                bucketName: !Ref LogBucket
+                prefix: !Sub "${LogPrefix}/flow"
+            - !Ref AWS::NoValue
+          - !If
+            - DoTls
+            - LogType: TLS
+              LogDestinationType: S3
+              LogDestination:
+                bucketName: !Ref LogBucket
+                prefix: !Sub "${LogPrefix}/tls"
+            - !Ref AWS::NoValue
+
+  AbstractIngestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-nfw-role"
+      Description: Role assumed by Abstract Security to read log objects and consume their notifications.
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - PrincipalIsBareAccount
+                - !Sub "arn:${AWS::Partition}:iam::${AbstractPrincipalArn}:root"
+                - !Ref AbstractPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: read-s3-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListLogBucket
+                Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketLocation]
+                Resource: !GetAtt LogBucket.Arn
+              - Sid: ReadLogObjects
+                Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !Sub "${LogBucket.Arn}/${LogPrefix}/*"
+        - PolicyName: consume-sqs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsumeQueue
+                Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:ChangeMessageVisibility
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                Resource:
+                  - !GetAtt AlertQueue.Arn
+                  - !GetAtt FlowQueue.Arn
+                  - !GetAtt TlsQueue.Arn
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+Outputs:
+  AwsRegion:
+    Description: The Region -> the Abstract integration's region field.
+    Value: !Ref AWS::Region
+  BucketNameOut:
+    Description: Log bucket -> the Abstract integration's S3 bucket field.
+    Value: !Ref LogBucket
+  RoleArn:
+    Description: Role ARN -> the Abstract integration's Assume Role ARN.
+    Value: !GetAtt AbstractIngestRole.Arn
+
+  AlertQueueUrl:
+    Description: ALERT queue URL -> the Abstract integration's SQS queue URL.
+    Value: !Ref AlertQueue
+  AlertQueueArn:
+    Description: ALERT queue ARN -> the Abstract integration's SQS queue ARN.
+    Value: !GetAtt AlertQueue.Arn
+  AlertDeadLetterQueueUrl:
+    Description: ALERT dead-letter queue URL; watch it with aws-monitoring-sqs-dead-letter-alarms.
+    Value: !Ref AlertDeadLetterQueue
+
+  FlowQueueUrl:
+    Description: FLOW queue URL -> the Abstract integration's SQS queue URL.
+    Value: !Ref FlowQueue
+  FlowQueueArn:
+    Description: FLOW queue ARN -> the Abstract integration's SQS queue ARN.
+    Value: !GetAtt FlowQueue.Arn
+  FlowDeadLetterQueueUrl:
+    Description: FLOW dead-letter queue URL; watch it with aws-monitoring-sqs-dead-letter-alarms.
+    Value: !Ref FlowDeadLetterQueue
+
+  TlsQueueUrl:
+    Description: TLS queue URL -> the Abstract integration's SQS queue URL.
+    Value: !Ref TlsQueue
+  TlsQueueArn:
+    Description: TLS queue ARN -> the Abstract integration's SQS queue ARN.
+    Value: !GetAtt TlsQueue.Arn
+  TlsDeadLetterQueueUrl:
+    Description: TLS dead-letter queue URL; watch it with aws-monitoring-sqs-dead-letter-alarms.
+    Value: !Ref TlsDeadLetterQueue

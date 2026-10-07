@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - Read-only IAM role for the AWS CloudWatch Metrics integration
+  (role family cloudwatch_metrics_api_role). Abstract assumes the role with an
+  External ID and reads CloudWatch metrics plus RDS instance descriptions. No bucket,
+  no queue. Not yet deployed by Abstract; canary pending.
+
+Metadata:
+  # Where each permission and setting comes from. AWS documentation wins over the
+  # Launchpad data where they disagree.
+  Sources:
+    - https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudwatch.html
+      # cloudwatch:GetMetricStatistics and cloudwatch:ListMetrics name no resource type, so
+      # IAM accepts them only on Resource "*". They are reads of metric data, not of logs.
+    - https://docs.aws.amazon.com/service-authorization/latest/reference/list_rds.html
+      # rds:DescribeDBInstances takes the db resource type, so it is scoped to this account's
+      # instances (any Region, because the Abstract integration names its own Region).
+    - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_third-party.html
+    - tools/launchpad/launchpad.py _cfn_cwmetrics and data/api-contract.json (cloudwatch_metrics_api_role)
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Naming" }
+        Parameters: [NamePrefix]
+      - Label: { default: "Abstract identity (provided by Abstract)" }
+        Parameters: [AbstractPrincipalArn, ExternalId]
+      - Label: { default: "Hardening (optional)" }
+        Parameters: [PermissionsBoundaryArn, MaxSessionDurationSeconds]
+    ParameterLabels:
+      AbstractPrincipalArn: { default: "Abstract principal ARN or 12-digit account ID" }
+      ExternalId: { default: "External ID (shared secret from Abstract)" }
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract-cw-metrics
+    Description: Prefix for the created IAM role name.
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$"
+    ConstraintDescription: Lowercase letters, digits and hyphens, 3-42 chars.
+
+  AbstractPrincipalArn:
+    Type: String
+    Default: ""
+    Description: >-
+      The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare
+      12-digit account id (expanded to arn:aws:iam::<acct>:root).
+    AllowedPattern: "^$|^[0-9]{12}$|^arn:aws[a-z-]*:iam::[0-9]{12}:(root|(role|user)/.+)$"
+    ConstraintDescription: Provide a 12-digit account id or a valid IAM ARN.
+
+  ExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: "External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the integration in the Abstract console, once, and give the same value to whoever deploys the role."
+    MinLength: 0
+    MaxLength: 1224
+
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    Description: "Optional IAM permissions-boundary policy ARN to attach to the role. Find it with: aws iam list-policies --scope Local --query Policies[].Arn"
+    AllowedPattern: "^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$"
+
+  MaxSessionDurationSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 43200
+    Description: Maximum duration of an assumed session (3600-43200 seconds, the range IAM accepts for a role).
+
+Rules:
+  RequireIdentity:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AbstractPrincipalArn, ""]]
+        AssertDescription: AbstractPrincipalArn is required (provided by Abstract).
+      - Assert: !Not [!Equals [!Ref ExternalId, ""]]
+        AssertDescription: ExternalId is required (provided by Abstract).
+
+Conditions:
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  # An ARN contains ":" so Split returns "arn" as element 0; a bare account id has no ":".
+  PrincipalIsBareAccount: !Equals
+    - !Select [0, !Split [":", !Ref AbstractPrincipalArn]]
+    - !Ref AbstractPrincipalArn
+
+Resources:
+  AbstractMetricsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-role"
+      Description: Role assumed by Abstract Security to read CloudWatch metrics and RDS instance descriptions.
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - PrincipalIsBareAccount
+                - !Sub "arn:${AWS::Partition}:iam::${AbstractPrincipalArn}:root"
+                - !Ref AbstractPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: read-cloudwatch-metrics
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # No resource type exists for these two actions (Service Authorization Reference).
+              - Sid: ReadMetrics
+                Effect: Allow
+                Action: [cloudwatch:GetMetricStatistics, cloudwatch:ListMetrics]
+                Resource: "*"
+              - Sid: DescribeRdsInstances
+                Effect: Allow
+                Action: [rds:DescribeDBInstances]
+                # Listing every instance is not authorized against a db ARN, so a scoped
+                # resource here would deny it. The statement holds this one read action only.
+                Resource: "*"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+Outputs:
+  RoleArn:
+    Description: Paste this Role ARN into the Abstract CloudWatch Metrics integration (role_arn).
+    Value: !GetAtt AbstractMetricsRole.Arn
+  AwsRegion:
+    Description: The Region this stack ran in; the integration's region field names the Region whose metrics it reads.
+    Value: !Ref AWS::Region

@@ -1,0 +1,27 @@
+{
+ "frame": {
+  "title": "Abstract writes your events into your own bucket",
+  "subtitle": "The template builds only the write role; your bucket, its encryption and its ownership settings stay as they are",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 150,
+  "integration_y": 547,
+  "abstract_sublabel": "batches normalized events\nwrites them as files"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Export role",
+   "nodes": [
+    {"id": "bucket", "label": "Destination bucket", "sublabel": "your existing bucket;\nwrites only under ExportPrefix", "icon": "aws:s3", "x": 330, "y": 110, "existing": true},
+    {"id": "kms", "label": "KMS key", "sublabel": "only if the bucket uses one;\nthe role gets GenerateDataKey", "icon": "aws:key_management_service", "x": 60, "y": 540, "existing": true},
+    {"id": "role", "label": "IAM role", "sublabel": "s3:PutObject under the prefix,\nno GetObject, no DeleteObject", "icon": "aws:role", "x": 600, "y": 540, "builds": ["AWS::IAM::Role"]}
+   ],
+   "edges": [
+    {"from": "abs-integration", "to": "role", "label": "AssumeRole + External ID", "tone": "amber", "dashed": true, "exit": [0, 0.5], "entry": [1, 0.5]},
+    {"from": "abstract", "to": "bucket", "label": "PutObject", "exit": [0, 0.3], "entry": [1, 0.5], "label_x": 0.5},
+    {"from": "role", "to": "kms", "label": "encrypt", "tone": "muted", "dashed": true, "exit": [0, 0.5], "entry": [1, 0.5]}
+   ]
+  }
+ ]
+}

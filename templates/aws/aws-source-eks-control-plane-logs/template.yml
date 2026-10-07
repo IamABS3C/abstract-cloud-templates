@@ -1,0 +1,158 @@
+id: aws-source-eks-control-plane-logs
+title: 'EKS control-plane logs to Abstract: Firehose to S3'
+cloud: aws
+role: source
+scope: account
+summary: Subscribes your EKS cluster's control-plane log group to a Firehose delivery stream that decompresses the
+  records and writes one log line per line to a new hardened bucket, plus the SQS queue the bucket notifies and the
+  role Abstract assumes to read them. For clusters too busy for the CloudWatch Logs API read. Not yet deployed by
+  Abstract; canary pending.
+formats:
+- cloudformation
+- script
+permissions:
+- role: Create IAM roles, S3 buckets, SQS queues, Firehose delivery streams and CloudWatch Logs subscription filters
+  where: The target AWS account and Region
+  why: 'Deployer: the stack creates the whole path; deploy.sh passes CAPABILITY_NAMED_IAM because it names the role.'
+- role: firehose:PutRecord, firehose:PutRecordBatch
+  where: This stack's delivery stream (a role CloudWatch Logs assumes, conditioned on aws:SourceArn)
+  why: 'CloudWatch Logs: send the subscribed log events to Firehose.'
+- role: s3:PutObject, s3:GetObject, s3:AbortMultipartUpload, s3:GetBucketLocation, s3:ListBucket, s3:ListBucketMultipartUploads
+  where: The bucket, objects only under eks/ and firehose-errors/eks/ (a role Firehose assumes)
+  why: 'Firehose: write batched log lines and its error objects.'
+- role: sts:AssumeRole, conditioned on sts:ExternalId
+  where: <NamePrefix>-eks-role
+  why: 'Abstract: only the Abstract principal you supply can assume it, and only with the matching External ID.'
+- role: s3:ListBucket, s3:GetBucketLocation, s3:GetObject
+  where: The bucket, under eks/
+  why: 'Abstract: read the objects each notification points at.'
+- role: sqs:ReceiveMessage, sqs:DeleteMessage, sqs:ChangeMessageVisibility, sqs:GetQueueAttributes, sqs:GetQueueUrl
+  where: The logs queue
+  why: 'Abstract: consume the notifications.'
+creates:
+- 'A subscription filter on /aws/eks/<ClusterName>/cluster (FilterPattern, empty by default): this adds to your log
+  group, and deleting the stack removes it'
+- 'A Firehose delivery stream (encrypted with an AWS owned key) that decompresses CloudWatch Logs records, keeps only
+  the log lines (message extraction), ends each record with a newline and writes uncompressed objects under eks/<ClusterName>/;
+  failed records go under firehose-errors/eks/, which the queue never sees'
+- 'A hardened bucket <NamePrefix>-eks-<account>-<region>: Block Public Access, ACLs disabled, HTTPS-only policy,
+  versioning, lifecycle expiry, retained on stack delete'
+- An SQS queue and dead-letter queue (SSE-SQS), notified for each new object under eks/<ClusterName>/
+- Two service roles (CloudWatch Logs to Firehose, Firehose to S3) and the cross-account role <NamePrefix>-eks-role
+  trusted only by the Abstract principal, with the External ID
+never_touches:
+- 'The cluster and its logging settings: turning control-plane log types on is a prerequisite, not done here'
+- The log group's retention and its other subscription filters
+prerequisites:
+- AWS CLI v2, authenticated to the account and Region of the cluster, and jq for deploy.sh
+- 'Control-plane logging turned on for the log types you need, which creates the log group: aws eks update-cluster-config
+  --name <cluster> --logging ''{"clusterLogging":[{"types":["audit","authenticator"],"enabled":true}]}''. Audit at
+  full verbosity on a busy cluster is one of the largest log sources in AWS'
+- The log group must have room for one more subscription filter
+- The Abstract principal ARN (or account ID) and External ID, from the AWS S3 SQS Source integration in the Abstract
+  console
+- 'In Abstract, the AWS S3 SQS Source with dataformat nd and a parser for EKS audit JSON. Abstract has no managed EKS
+  integration. Message extraction drops the log stream name, so authenticator and audit lines arrive mixed'
+- 'At low volume, the CloudWatch Logs API read (aws-source-cloudwatch-logs-api) is one role instead of six resources;
+  with Security Lake, EKS audit logs are a native Security Lake source'
+parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for created resource names. Lowercase, because it is part of the bucket name.
+  default: abstract
+- name: AbstractPrincipalArn
+  type: string
+  required: false
+  description: The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare 12-digit account id
+    (expanded to arn:aws:iam::<acct>:root).
+  default: ''
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+  example: <AbstractPrincipalArn>
+- name: ExternalId
+  type: securestring
+  required: false
+  description: 'External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the
+    integration in the Abstract console, once, and give the same value to whoever deploys the role.'
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: PermissionsBoundaryArn
+  type: string
+  required: false
+  description: 'Optional IAM permissions-boundary policy ARN attached to every role the stack creates. Find it with:
+    aws iam list-policies --scope Local --query Policies[].Arn'
+  default: ''
+  find_it: aws iam list-policies --scope Local --query Policies[].Arn
+- name: MaxSessionDurationSeconds
+  type: int
+  required: false
+  description: Maximum duration of Abstract's assumed session (3600-43200 seconds, the range IAM accepts for a role).
+  default: 3600
+- name: LogRetentionDays
+  type: int
+  required: false
+  description: Days to keep log objects in the bucket before they expire (0 = keep forever).
+  default: 365
+- name: QueueVisibilityTimeoutSeconds
+  type: int
+  required: false
+  description: Visibility timeout of the notification queue(s); longer than Abstract takes to process one object.
+  default: 900
+- name: DlqMaxReceiveCount
+  type: int
+  required: false
+  description: Receives before a notification moves to the dead-letter queue. 5 surfaces a permanent failure within
+    minutes.
+  default: 5
+- name: BufferIntervalSeconds
+  type: int
+  required: false
+  description: Firehose writes an object at least this often (60-900 s). Longer means fewer, larger objects.
+  default: 300
+- name: BufferSizeMB
+  type: int
+  required: false
+  description: Firehose writes an object when this much data is buffered (1-128 MB), whichever comes first.
+  default: 64
+- name: ClusterName
+  type: string
+  required: true
+  description: 'Name of your EKS cluster. Its log group /aws/eks/<name>/cluster must already exist. Find it with:
+    aws eks list-clusters'
+  find_it: aws eks list-clusters
+- name: FilterPattern
+  type: string
+  required: false
+  description: CloudWatch Logs filter pattern applied before Firehose bills anything. Empty sends every line. The group
+    mixes JSON audit lines with plain-text lines, and a JSON pattern such as { $.verb != "get" } drops every plain-text
+    line; use one only if you send audit logs alone.
+  default: ''
+outputs:
+- AwsRegion
+- BucketNameOut
+- RoleArn
+- SqsQueueUrl
+- SqsQueueArn
+- SqsDeadLetterQueueUrl
+- DeliveryStreamName
+abstract:
+  integration: aws_s3_sqs_source
+verify:
+- check: The stack outputs carry the values the Abstract integration needs
+  command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
+  healthy: RoleArn, SqsQueueUrl, SqsQueueArn, BucketNameOut and AwsRegion are present.
+- check: The log group is subscribed
+  command: aws logs describe-subscription-filters --log-group-name /aws/eks/<cluster>/cluster
+  healthy: The filter <NamePrefix>-eks-to-abstract points at the delivery stream.
+- check: Objects hold plain log lines, not gzipped envelopes
+  command: aws s3 cp s3://<bucket>/<object-key> - | head -3
+  healthy: Each line is one JSON audit event (or one plain log line), with no messageType or logEvents wrapper.
+- check: Nothing lands under firehose-errors/
+  command: aws s3 ls s3://<bucket>/firehose-errors/ --recursive | tail -3
+  healthy: No objects.
+cost: Firehose ingestion per GB plus S3 storage and one SQS message per object; the filter pattern is where volume and
+  cost are controlled.
+when_to_use: You want EKS control-plane (especially audit) logs in Abstract and the cluster is too busy for the
+  CloudWatch Logs API read.
+when_not_to_use: The cluster is quiet (use aws-source-cloudwatch-logs-api), or Security Lake already collects EKS audit
+  logs (use aws-source-security-lake).
+live_test: static

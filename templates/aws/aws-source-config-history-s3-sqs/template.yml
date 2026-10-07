@@ -1,0 +1,133 @@
+id: aws-source-config-history-s3-sqs
+title: 'AWS Config history to Abstract: new bucket and queue'
+cloud: aws
+role: source
+scope: account
+summary: Creates a hardened bucket AWS Config may deliver to, the SQS queue it notifies for each configuration history
+  file, the role Abstract assumes to read them and, only when you opt in, this Region's AWS Config delivery channel.
+  Abstract reads it with the generic S3 source and a custom parser. Deployed in a test account on 2026-10-07. A Config history file reached the queue, and the role was assumed with its External ID.
+formats:
+- cloudformation
+- script
+permissions:
+- role: Create IAM roles, S3 buckets, SQS queues and (opt-in) AWS Config delivery channels
+  where: The target AWS account and Region
+  why: 'Deployer: the stack creates the whole path; deploy.sh passes CAPABILITY_NAMED_IAM because it names the role.'
+- role: s3:GetBucketAcl, s3:ListBucket, s3:PutObject (with bucket-owner-full-control), conditioned on aws:SourceAccount
+  where: The bucket, PutObject only under AWSLogs/<account>/Config/ (bucket policy)
+  why: 'AWS Config (config.amazonaws.com): check the bucket and deliver history files.'
+- role: sts:AssumeRole, conditioned on sts:ExternalId
+  where: <NamePrefix>-config-role
+  why: 'Abstract: only the Abstract principal you supply can assume it, and only with the matching External ID.'
+- role: s3:ListBucket, s3:GetBucketLocation, s3:GetObject
+  where: The bucket, under AWSLogs/<account>/Config/
+  why: 'Abstract: read the objects each notification points at.'
+- role: sqs:ReceiveMessage, sqs:DeleteMessage, sqs:ChangeMessageVisibility, sqs:GetQueueAttributes, sqs:GetQueueUrl
+  where: The history queue
+  why: 'Abstract: consume the notifications.'
+creates:
+- 'A hardened bucket <NamePrefix>-config-<account>-<region>: Block Public Access, ACLs disabled, HTTPS-only policy,
+  versioning, lifecycle expiry, retained on stack delete'
+- An SQS queue and dead-letter queue (SSE-SQS), notified for each .json.gz file under AWSLogs/<account>/Config/, so
+  the empty ConfigWritabilityCheckFile never reaches Abstract
+- 'Only with CreateDeliveryChannel=true: this Region''s AWS Config delivery channel, pointed at the bucket, with no
+  periodic snapshots; deleting the stack deletes the channel, and AWS Config then delivers nothing'
+- A cross-account IAM role <NamePrefix>-config-role trusted only by the Abstract principal, with the External ID
+never_touches:
+- The configuration recorder, its recorded resource types and any AWS Config rules
+- An existing delivery channel, unless you opt in (and an account has at most one per Region)
+prerequisites:
+- AWS CLI v2, authenticated to the account and Region, and jq for deploy.sh
+- AWS Config recording in this Region (aws configservice describe-configuration-recorders)
+- 'With an existing delivery channel (the usual case), leave CreateDeliveryChannel=false and repoint it after deploying,
+  with no key prefix: aws configservice put-delivery-channel --delivery-channel name=<channel-name>,s3BucketName=<BucketNameOut>.
+  Then confirm aws configservice describe-delivery-channels shows no s3KeyPrefix: a prefix moves the files outside
+  AWSLogs/<account>/Config/, where the bucket policy refuses them and the queue never hears of them'
+- The Abstract principal ARN (or account ID) and External ID, from the AWS S3 SQS Source integration in the Abstract
+  console
+- 'In Abstract, the AWS S3 SQS Source with dataformat json and json_key configurationItems, and a parser built
+  against a real ConfigHistory file. Abstract has no managed AWS Config integration'
+- 'Configuration snapshots re-send every recorded resource; this template does not schedule them. If you deliver
+  snapshots on purpose, they reach the same queue'
+parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for created resource names. Lowercase, because it is part of the bucket name.
+  default: abstract
+- name: AbstractPrincipalArn
+  type: string
+  required: false
+  description: The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare 12-digit account id
+    (expanded to arn:aws:iam::<acct>:root).
+  default: ''
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+  example: <AbstractPrincipalArn>
+- name: ExternalId
+  type: securestring
+  required: false
+  description: 'External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the
+    integration in the Abstract console, once, and give the same value to whoever deploys the role.'
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: PermissionsBoundaryArn
+  type: string
+  required: false
+  description: 'Optional IAM permissions-boundary policy ARN attached to every role the stack creates. Find it with:
+    aws iam list-policies --scope Local --query Policies[].Arn'
+  default: ''
+  find_it: aws iam list-policies --scope Local --query Policies[].Arn
+- name: MaxSessionDurationSeconds
+  type: int
+  required: false
+  description: Maximum duration of Abstract's assumed session (3600-43200 seconds, the range IAM accepts for a role).
+  default: 3600
+- name: LogRetentionDays
+  type: int
+  required: false
+  description: Days to keep log objects in the bucket before they expire (0 = keep forever).
+  default: 365
+- name: QueueVisibilityTimeoutSeconds
+  type: int
+  required: false
+  description: Visibility timeout of the notification queue(s); longer than Abstract takes to process one object.
+  default: 900
+- name: DlqMaxReceiveCount
+  type: int
+  required: false
+  description: Receives before a notification moves to the dead-letter queue. 5 surfaces a permanent failure within
+    minutes.
+  default: 5
+- name: CreateDeliveryChannel
+  type: string
+  required: false
+  description: true creates this Region's AWS Config delivery channel pointing at the new bucket. Only when the account
+    has a configuration recorder and NO delivery channel yet; an account has one per Region. Leave false to repoint an
+    existing channel yourself.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+outputs:
+- AwsRegion
+- BucketNameOut
+- RoleArn
+- SqsQueueUrl
+- SqsQueueArn
+- SqsDeadLetterQueueUrl
+abstract:
+  integration: aws_s3_sqs_source
+verify:
+- check: The stack outputs carry the values the Abstract integration needs
+  command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
+  healthy: RoleArn, SqsQueueUrl, SqsQueueArn, BucketNameOut and AwsRegion are present.
+- check: AWS Config delivers to the new bucket
+  command: aws configservice describe-delivery-channel-status
+  healthy: configHistoryDeliveryInfo shows lastStatus SUCCESS for the new bucket after the next delivery (up to six
+    hours).
+- check: Nothing is failing into the dead-letter queue
+  command: aws sqs get-queue-attributes --queue-url <dead-letter-queue-url> --attribute-names ApproximateNumberOfMessagesVisible
+  healthy: Zero messages.
+cost: S3 storage and one SQS message per history file (one per resource type every six hours that something changed).
+when_to_use: You want configuration changes and drift in Abstract, from AWS Config's history files.
+when_not_to_use: You collect AWS Config through Security Lake or an organization aggregator you already read.
+live_test: canary

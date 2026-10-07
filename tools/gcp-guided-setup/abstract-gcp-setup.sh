@@ -643,6 +643,29 @@ mon_delete() {
 alert_policy_names() { api_names "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/alertPolicies?pageSize=200" alertPolicies "Abstract log pipeline"; }
 alert_channel_names() { api_names "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/notificationChannels?pageSize=200" notificationChannels "Abstract log pipeline"; }
 found() { byhand "found, not recorded: $1. Check it is Abstract's, then: $2"; }
+# look <what> <how to remove> <describe command...>: found, absent, or COULD NOT CHECK. A denied or
+# failed lookup is never read as absent; that false zero once listed nothing beside a live topic.
+look() {
+  local what="$1" how="$2" out; shift 2
+  if out=$("$@" 2>&1); then found "$what" "$how"
+  # Absent only when the error says so and nothing in it says access was refused: Google answers
+  # "does not exist or you do not have access" for both, and that is not proof of absence.
+  elif grep -qiE 'NOT_FOUND|Resource not found' <<<"$out" \
+       && ! grep -qiE 'PERMISSION_DENIED|denied|not authori[sz]ed|do not have access|forbidden' <<<"$out"; then :
+  else bad "could not check $what: ${out%%$'\n'*}"; fi
+}
+# mon_list <collection> <what>: sets MON_NAMES to the Monitoring objects named "Abstract log pipeline…",
+# or reports a failure. Not called through $(…): a bad() inside a subshell is never counted.
+MON_NAMES=""
+mon_list() {
+  local body code; body=$(curl -s -w '\n%{http_code}' -H "Authorization: Bearer $(token)" \
+    "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/$1?pageSize=200"); code=${body##*$'\n'}
+  if [[ "$code" != 200 ]]; then bad "could not list $2 in $LOG_PROJECT (HTTP $code)"; MON_NAMES=""; return 1; fi
+  MON_NAMES=$(python3 -c '
+import json, sys
+for o in json.loads(sys.argv[1]).get(sys.argv[2], []):
+    if o.get("displayName", "").startswith("Abstract log pipeline"): print(o["name"])' "${body%$'\n'*}" "$1")
+}
 
 # Without saved answers (a Cloud Shell session opened from the templates button is temporary), look
 # for what the setup makes by its default names, and list it. Nothing found by name is deleted:
@@ -650,16 +673,21 @@ found() { byhand "found, not recorded: $1. Check it is Abstract's, then: $2"; }
 discover_all() {
   LOG_PROJECT="$FIND_PROJECT"
   why "No saved answers, so nothing is recorded as made here. Listing what carries the setup's names in $LOG_PROJECT."
-  gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT" >/dev/null 2>&1 \
-    && found "subscription $SUB" "gcloud pubsub subscriptions delete $SUB --project=$LOG_PROJECT"
-  gcloud pubsub topics describe "$TOPIC" --project="$LOG_PROJECT" >/dev/null 2>&1 \
-    && found "topic $TOPIC" "gcloud pubsub topics delete $TOPIC --project=$LOG_PROJECT"
+  look "subscription $SUB" "gcloud pubsub subscriptions delete $SUB --project=$LOG_PROJECT" \
+    gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT"
+  look "topic $TOPIC" "gcloud pubsub topics delete $TOPIC --project=$LOG_PROJECT" \
+    gcloud pubsub topics describe "$TOPIC" --project="$LOG_PROJECT"
   local a; for a in "$SA" "$WS_SA"; do
-    gcloud iam service-accounts describe "$a@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT" >/dev/null 2>&1 \
-      && found "service account $a" "gcloud iam service-accounts delete $a@$LOG_PROJECT.iam.gserviceaccount.com --project=$LOG_PROJECT"; done
-  local n; for n in $(gcloud pubsub subscriptions list --project="$LOG_PROJECT" --filter='name:abstract-probe-' --format='value(name.basename())' 2>/dev/null); do
-    found "probe subscription $n" "gcloud pubsub subscriptions delete $n --project=$LOG_PROJECT"; done
-  for n in $(alert_policy_names) $(alert_channel_names); do found "alert $n" "delete it under Monitoring > Alerting in the console"; done
+    look "service account $a" "gcloud iam service-accounts delete $a@$LOG_PROJECT.iam.gserviceaccount.com --project=$LOG_PROJECT" \
+      gcloud iam service-accounts describe "$a@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT"; done
+  local n probes
+  if probes=$(gcloud pubsub subscriptions list --project="$LOG_PROJECT" --filter='name:abstract-probe-' --format='value(name.basename())' 2>&1); then
+    for n in $probes; do found "probe subscription $n" "gcloud pubsub subscriptions delete $n --project=$LOG_PROJECT"; done
+  else bad "could not list probe subscriptions in $LOG_PROJECT: ${probes%%$'\n'*}"; fi
+  if mon_list alertPolicies "alert policies"; then
+    for n in $MON_NAMES; do found "alert policy $n" "delete it under Monitoring > Alerting in the console"; done; fi
+  if mon_list notificationChannels "notification channels"; then
+    for n in $MON_NAMES; do found "alert channel $n" "delete it under Monitoring > Alerting > Edit notification channels"; done; fi
   byhand "the log sink lives on your organization, folder or project, not here. Find it with: gcloud logging sinks list --organization=<org-id> --filter='destination:$TOPIC' (or --folder / --project)"
   kept "logging project $LOG_PROJECT: this script never deletes it."
 }

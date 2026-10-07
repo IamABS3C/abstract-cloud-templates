@@ -490,9 +490,16 @@ Resources:
     Properties:
       AliasName: !Sub alias/${NamePrefix}-WAF
       TargetKeyId: !Ref AbstractKmsKey
+  NotificationDestinationsReady:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    Condition: CreateBucket
+    Metadata:
+      QueuePolicy: !If [CreateQueue, !Ref NotificationQueuePolicy, '']
+      TopicPolicy: !If [UseSns, !Ref NotificationTopicPolicy, '']
   LogBucket:
     Type: AWS::S3::Bucket
     Condition: CreateBucket
+    DependsOn: [NotificationDestinationsReady]
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Metadata:
@@ -663,7 +670,12 @@ Resources:
               Resource: !GetAtt NotificationQueue.Arn
               Condition:
                 ArnLike:
-                  aws:SourceArn: !GetAtt LogBucket.Arn
+                  aws:SourceArn: !Sub
+                    - arn:${AWS::Partition}:s3:::${Bucket}
+                    - Bucket: !If
+                        - AutoBucketName
+                        - !Sub ${NamePrefix}-waf-logs-${AWS::AccountId}-${AWS::Region}
+                        - !Ref BucketName
                 StringEquals:
                   aws:SourceAccount: !Ref AWS::AccountId
             - !Ref AWS::NoValue
@@ -709,7 +721,12 @@ Resources:
               Resource: !Ref NotificationTopic
               Condition:
                 ArnLike:
-                  aws:SourceArn: !GetAtt LogBucket.Arn
+                  aws:SourceArn: !Sub
+                    - arn:${AWS::Partition}:s3:::${Bucket}
+                    - Bucket: !If
+                        - AutoBucketName
+                        - !Sub ${NamePrefix}-waf-logs-${AWS::AccountId}-${AWS::Region}
+                        - !Ref BucketName
                 StringEquals:
                   aws:SourceAccount: !Ref AWS::AccountId
             - !Ref AWS::NoValue

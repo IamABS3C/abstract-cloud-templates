@@ -13,7 +13,7 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label: { default: "Template hosting" }
-        Parameters: [TemplateBaseUrl]
+        Parameters: [TemplateBaseUrl, NamePrefix]
       - Label: { default: "Shared Abstract identity / auth" }
         Parameters: [AuthMode, AbstractPrincipalArn, ExternalId, StoreCredentialsInSecretsManager, ExportToSsm]
       - Label: { default: "Shared encryption" }
@@ -37,6 +37,16 @@ Metadata:
       ExternalId: { default: "External ID (from Abstract)" }
 
 Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract
+    AllowedPattern: "^[a-z][a-z0-9-]{1,10}$"
+    ConstraintDescription: 2 to 11 lowercase letters, digits or hyphens, starting with a letter.
+    Description: >-
+      Prefix for every child stack's resource names, 2 to 11 characters so every bucket name stays within
+      S3's 63-character limit in every Region. IAM role names are global to the account, so a
+      second Region, or a second copy in the same Region, needs a different prefix. Keep "abstract"
+      for an existing stack: changing it renames, and so replaces, its roles and queues.
   TemplateBaseUrl:
     Type: String
     Default: https://abstract-cloud-templates-launch.s3.us-east-1.amazonaws.com/templates/aws/nested
@@ -192,7 +202,7 @@ Resources:
     Properties:
       TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-cloudtrail-s3-sqs.yaml"
       Parameters:
-        NamePrefix: abstract-cloudtrail
+        NamePrefix: !Sub "${NamePrefix}-cloudtrail"
         AuthMode: !Ref AuthMode
         AbstractPrincipalArn: !Ref AbstractPrincipalArn
         ExternalId: !Ref ExternalId
@@ -214,7 +224,7 @@ Resources:
     Properties:
       TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-cloudfront-logs-s3-sqs.yaml"
       Parameters:
-        NamePrefix: abstract-cloudfront
+        NamePrefix: !Sub "${NamePrefix}-cloudfront"
         AuthMode: !Ref AuthMode
         AbstractPrincipalArn: !Ref AbstractPrincipalArn
         ExternalId: !Ref ExternalId
@@ -237,7 +247,7 @@ Resources:
     Properties:
       TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-load-balancer-logs-s3-sqs.yaml"
       Parameters:
-        NamePrefix: abstract-alb
+        NamePrefix: !Sub "${NamePrefix}-alb"
         AuthMode: !Ref AuthMode
         AbstractPrincipalArn: !Ref AbstractPrincipalArn
         ExternalId: !Ref ExternalId
@@ -260,7 +270,7 @@ Resources:
     Properties:
       TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-route53-resolver-logs-s3-sqs.yaml"
       Parameters:
-        NamePrefix: abstract-route53
+        NamePrefix: !Sub "${NamePrefix}-route53"
         AuthMode: !Ref AuthMode
         AbstractPrincipalArn: !Ref AbstractPrincipalArn
         ExternalId: !Ref ExternalId
@@ -283,7 +293,7 @@ Resources:
     Properties:
       TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-s3-access-logs-s3-sqs.yaml"
       Parameters:
-        NamePrefix: abstract-s3access
+        NamePrefix: !Sub "${NamePrefix}-s3access"
         AuthMode: !Ref AuthMode
         AbstractPrincipalArn: !Ref AbstractPrincipalArn
         ExternalId: !Ref ExternalId
@@ -306,7 +316,7 @@ Resources:
     Properties:
       TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-vpc-flow-logs-s3-sqs.yaml"
       Parameters:
-        NamePrefix: abstract-vpcflow
+        NamePrefix: !Sub "${NamePrefix}-vpcflow"
         AuthMode: !Ref AuthMode
         AbstractPrincipalArn: !Ref AbstractPrincipalArn
         ExternalId: !Ref ExternalId
@@ -330,7 +340,10 @@ Resources:
     Properties:
       TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-waf-logs-s3-sqs.yaml"
       Parameters:
-        NamePrefix: abstract-waf
+        NamePrefix: !Sub "${NamePrefix}-waf"
+        # WAF delivers only to a bucket whose name starts with aws-waf-logs-, which the child's generated
+        # name never does. 52 characters at the longest prefix and Region, within S3's 63.
+        BucketName: !Sub "aws-waf-logs-${NamePrefix}-${AWS::AccountId}-${AWS::Region}"
         AuthMode: !Ref AuthMode
         AbstractPrincipalArn: !Ref AbstractPrincipalArn
         ExternalId: !Ref ExternalId
@@ -354,7 +367,7 @@ Resources:
     Properties:
       TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-cloudwatch-logs-api.yaml"
       Parameters:
-        NamePrefix: abstract-cwl
+        NamePrefix: !Sub "${NamePrefix}-cwl"
         AuthMode: !Ref AuthMode
         AbstractPrincipalArn: !Ref AbstractPrincipalArn
         ExternalId: !Ref ExternalId
@@ -369,7 +382,7 @@ Resources:
     Properties:
       TemplateURL: !Sub "${TemplateBaseUrl}/aws-source-kinesis-stream.yaml"
       Parameters:
-        NamePrefix: abstract-kinesis
+        NamePrefix: !Sub "${NamePrefix}-kinesis"
         AuthMode: !Ref AuthMode
         AbstractPrincipalArn: !Ref AbstractPrincipalArn
         ExternalId: !Ref ExternalId

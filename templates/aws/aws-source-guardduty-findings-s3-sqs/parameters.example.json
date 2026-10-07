@@ -1,0 +1,46 @@
+[
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "abstract"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "PermissionsBoundaryArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "MaxSessionDurationSeconds",
+    "ParameterValue": "3600"
+  },
+  {
+    "ParameterKey": "LogRetentionDays",
+    "ParameterValue": "365"
+  },
+  {
+    "ParameterKey": "QueueVisibilityTimeoutSeconds",
+    "ParameterValue": "900"
+  },
+  {
+    "ParameterKey": "DlqMaxReceiveCount",
+    "ParameterValue": "5"
+  },
+  {
+    "ParameterKey": "DetectorId",
+    "ParameterValue": "<DetectorId>"
+  },
+  {
+    "ParameterKey": "CreatePublishingDestination",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "GuardDutyServicePrincipal",
+    "ParameterValue": "guardduty.amazonaws.com"
+  }
+]

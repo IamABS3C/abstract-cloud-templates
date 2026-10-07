@@ -1,0 +1,173 @@
+{
+ "frame": {
+  "title": "GuardDuty findings reach Abstract through an encrypted bucket",
+  "subtitle": "Your detector exports to a new bucket under a new key; the bucket notifies a queue Abstract polls",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 150,
+  "integration_y": 547,
+  "abstract_sublabel": "polls the queue, reads and decrypts\nparses findings to ACS"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "GuardDuty",
+   "nodes": [
+    {
+     "id": "detector",
+     "label": "GuardDuty detector",
+     "sublabel": "your detector in this Region",
+     "icon": "aws:guardduty",
+     "x": 60,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "dest",
+     "label": "Publishing destination",
+     "sublabel": "the detector's S3 export",
+     "icon": "aws:guardduty",
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "AWS::GuardDuty::PublishingDestination"
+     ]
+    },
+    {
+     "id": "bucket",
+     "label": "Findings bucket",
+     "sublabel": "only aws:kms uploads\nunder this key",
+     "icon": "aws:s3",
+     "x": 600,
+     "y": 110,
+     "builds": [
+      "AWS::S3::Bucket"
+     ]
+    },
+    {
+     "id": "key",
+     "label": "KMS key",
+     "sublabel": "GuardDuty may GenerateDataKey;\nretained on delete",
+     "icon": "aws:key_management_service",
+     "x": 330,
+     "y": 540,
+     "builds": [
+      "AWS::KMS::Key"
+     ]
+    },
+    {
+     "id": "queue",
+     "label": "SQS queue + DLQ",
+     "sublabel": "new .jsonl.gz objects",
+     "icon": "aws:sqs",
+     "x": 870,
+     "y": 330,
+     "builds": [
+      "AWS::SQS::Queue"
+     ]
+    },
+    {
+     "id": "role",
+     "label": "IAM role",
+     "sublabel": "GetObject, queue consume,\nkms:Decrypt on the key",
+     "icon": "aws:role",
+     "x": 600,
+     "y": 540,
+     "builds": [
+      "AbstractIngestRole"
+     ]
+    }
+   ],
+   "edges": [
+    {
+     "from": "detector",
+     "to": "dest",
+     "label": "findings"
+    },
+    {
+     "from": "dest",
+     "to": "bucket",
+     "label": "PutObject"
+    },
+    {
+     "from": "dest",
+     "to": "key",
+     "label": "GenerateDataKey",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.85
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "bucket",
+     "to": "queue",
+     "label": "ObjectCreated",
+     "exit": [
+      1,
+      0.85
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "bucket",
+     "to": "abstract",
+     "label": "GetObject",
+     "entry": [
+      0,
+      0.3
+     ],
+     "label_x": -0.5
+    },
+    {
+     "from": "queue",
+     "to": "abstract",
+     "label": "poll",
+     "entry": [
+      0,
+      0.7
+     ],
+     "label_x": -0.4
+    },
+    {
+     "from": "abs-integration",
+     "to": "role",
+     "label": "AssumeRole + External ID",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ]
+    },
+    {
+     "from": "role",
+     "to": "key",
+     "label": "Decrypt",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ]
+    }
+   ]
+  }
+ ]
+}

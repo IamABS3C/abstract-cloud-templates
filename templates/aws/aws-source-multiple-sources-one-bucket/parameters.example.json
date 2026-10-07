@@ -1,5 +1,9 @@
 [
   {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "abstract"
+  },
+  {
     "ParameterKey": "TemplateBaseUrl",
     "ParameterValue": "https://abstract-cloud-templates-launch.s3.us-east-1.amazonaws.com/templates/aws/nested"
   },

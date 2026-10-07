@@ -1,0 +1,84 @@
+id: aws-access-cloudwatch-metrics-role
+title: 'CloudWatch metrics to Abstract: read-only role'
+cloud: aws
+role: access
+scope: account
+summary: Creates only the read-only IAM role Abstract assumes, with an External ID, to read CloudWatch metrics and
+  describe RDS instances for the AWS CloudWatch Metrics integration. There is no bucket and no queue. Deployed in a test account on 2026-10-07. The role was assumed with its External ID.
+formats:
+- cloudformation
+- script
+permissions:
+- role: Create IAM roles
+  where: The target AWS account
+  why: 'Deployer: the template creates the role Abstract assumes; deploy.sh passes CAPABILITY_NAMED_IAM because it
+    names the role.'
+- role: sts:AssumeRole, conditioned on sts:ExternalId
+  where: <NamePrefix>-role
+  why: 'Abstract: only the Abstract principal you supply can assume it, and only with the matching External ID.'
+- role: cloudwatch:GetMetricStatistics, cloudwatch:ListMetrics
+  where: Resource "*", because these two actions have no resource type in IAM
+  why: 'Abstract: read metric data points and list the metrics in a namespace.'
+- role: rds:DescribeDBInstances
+  where: All RDS instances in the account (the list action cannot be scoped to a resource)
+  why: 'Abstract: resolve RDS instance dimensions to names.'
+creates:
+- An IAM role <NamePrefix>-role trusted only by the Abstract principal, conditioned on the External ID
+- One inline policy with the CloudWatch metric reads and the scoped RDS describe
+never_touches:
+- Metrics, alarms, dashboards and RDS instances; the role can only read them
+- IAM principals other than the role the stack creates
+prerequisites:
+- AWS CLI v2, authenticated, and jq for deploy.sh
+- The Abstract principal ARN (or account ID) and External ID for your tenant, from the CloudWatch Metrics integration
+  in the Abstract console
+- 'The permission set is the platform''s own cloudwatch_metrics_api_role (GetMetricStatistics, ListMetrics,
+  DescribeDBInstances); if the integration reports missing metrics for a service, add that service''s specific Describe
+  action rather than a wildcard'
+parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for the created IAM role name.
+  default: abstract-cw-metrics
+- name: AbstractPrincipalArn
+  type: string
+  required: false
+  description: The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare 12-digit account id
+    (expanded to arn:aws:iam::<acct>:root).
+  default: ''
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+  example: <AbstractPrincipalArn>
+- name: ExternalId
+  type: securestring
+  required: false
+  description: 'External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the
+    integration in the Abstract console, once, and give the same value to whoever deploys the role.'
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: PermissionsBoundaryArn
+  type: string
+  required: false
+  description: 'Optional IAM permissions-boundary policy ARN to attach to the role. Find it with: aws iam list-policies
+    --scope Local --query Policies[].Arn'
+  default: ''
+  find_it: aws iam list-policies --scope Local --query Policies[].Arn
+- name: MaxSessionDurationSeconds
+  type: int
+  required: false
+  description: Maximum duration of an assumed session (3600-43200 seconds, the range IAM accepts for a role).
+  default: 3600
+outputs:
+- RoleArn
+- AwsRegion
+abstract:
+  integration: cloudwatch_metrics
+verify:
+- check: The role ARN is available for the Abstract integration
+  command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
+  healthy: RoleArn is present; paste it into the CloudWatch Metrics integration with the namespace and Region to read.
+- check: The role can read metrics
+  command: aws cloudwatch list-metrics --namespace AWS/EC2 --max-items 5
+  healthy: Run as the role (or an identity with the same policy), the call returns metrics instead of AccessDenied.
+when_to_use: You want infrastructure metrics in Abstract next to your logs, usually for correlation rather than detection.
+when_not_to_use: You want log data; CloudWatch Logs has its own template (aws-source-cloudwatch-logs-api).
+live_test: canary

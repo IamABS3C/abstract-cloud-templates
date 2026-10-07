@@ -1,0 +1,104 @@
+{
+ "frame": {
+  "title": "A message in a dead-letter queue reaches someone in minutes",
+  "subtitle": "One alarm per dead-letter queue you already have, all publishing to one topic; no data path to Abstract",
+  "cloud_label": "Your AWS account",
+  "height": 560,
+  "abstract_y": 150,
+  "abstract_sublabel": "keeps polling the main queues;\nthe dead-letter queues are yours",
+  "no_data_path": true
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "DLQ alarms",
+   "nodes": [
+    {
+     "id": "dlq",
+     "label": "Dead-letter queues",
+     "sublabel": "up to ten, already attached\nto your Abstract queues",
+     "icon": "aws:sqs",
+     "x": 60,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "alarm",
+     "label": "CloudWatch alarms",
+     "sublabel": "one per queue:\nmessages visible > threshold",
+     "icon": "aws:alarm",
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "AWS::CloudWatch::Alarm"
+     ]
+    },
+    {
+     "id": "topic",
+     "label": "SNS topic",
+     "sublabel": "named NamePrefix-dlq-alarms",
+     "icon": "aws:sns",
+     "x": 600,
+     "y": 110,
+     "builds": [
+      "AWS::SNS::Topic"
+     ]
+    },
+    {
+     "id": "email",
+     "label": "Email subscription",
+     "sublabel": "optional: AlarmEmail",
+     "icon": "aws:email",
+     "x": 870,
+     "y": 110,
+     "builds": [
+      "AWS::SNS::Subscription"
+     ]
+    },
+    {
+     "id": "other",
+     "label": "Pager, chat or tickets",
+     "sublabel": "subscribe them to the topic\nyourself",
+     "icon": "aws:users",
+     "x": 870,
+     "y": 330,
+     "existing": true
+    }
+   ],
+   "edges": [
+    {
+     "from": "dlq",
+     "to": "alarm",
+     "label": "depth metric"
+    },
+    {
+     "from": "alarm",
+     "to": "topic",
+     "label": "ALARM / OK"
+    },
+    {
+     "from": "topic",
+     "to": "email",
+     "label": "notify",
+     "tone": "muted",
+     "dashed": true
+    },
+    {
+     "from": "topic",
+     "to": "other",
+     "label": "notify",
+     "tone": "muted",
+     "dashed": true,
+     "exit": [
+      1,
+      0.85
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    }
+   ]
+  }
+ ]
+}

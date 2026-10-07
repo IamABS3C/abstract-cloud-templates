@@ -1,0 +1,424 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - Security Hub findings to Abstract. Creates an EventBridge rule for
+  Security Hub's finding events, a Firehose delivery stream that writes them one per
+  line to a new hardened bucket, the SQS queue the bucket notifies and the role Abstract
+  assumes to read them. Not yet deployed by Abstract; canary pending.
+
+Metadata:
+  # Where each setting comes from. AWS documentation wins over the Launchpad data
+  # where they disagree (recorded in the comment beside the setting).
+  Sources:
+    - https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-cwe-event-formats.html
+      # Security Hub CSPM sends "Security Hub Findings - Imported" (ASFF), one finding per event.
+    - https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-v2-cwe-event-types.html
+      # Security Hub sends "Findings Imported V2" (OCSF). Both use source aws.securityhub, so a
+      # rule must name the detail-type or it receives both shapes. The Launchpad names only the
+      # CSPM type; FindingsDetailType chooses one shape per stack.
+    - https://docs.aws.amazon.com/firehose/latest/dev/controlling-access.html#using-iam-s3
+      # The Firehose role's S3 actions and its sts:ExternalId = account condition.
+    - https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-kinesisfirehose-deliverystream-processor.html
+      # AppendDelimiterToRecord puts each finding on its own line (dataformat nd); compression
+      # stays off so objects are plain NDJSON. ErrorOutputPrefix sits outside the notified prefix.
+    - https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-use-identity-based.html
+    - tools/launchpad/data/scenarios.json security-hub-firehose
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Naming" }
+        Parameters: [NamePrefix]
+      - Label: { default: "Abstract identity (provided by Abstract)" }
+        Parameters: [AbstractPrincipalArn, ExternalId]
+      - Label: { default: "Security Hub" }
+        Parameters: [FindingsDetailType]
+      - Label: { default: "Firehose" }
+        Parameters: [BufferIntervalSeconds, BufferSizeMB]
+      - Label: { default: "Bucket and queue" }
+        Parameters: [LogRetentionDays, QueueVisibilityTimeoutSeconds, DlqMaxReceiveCount]
+      - Label: { default: "Hardening (optional)" }
+        Parameters: [PermissionsBoundaryArn, MaxSessionDurationSeconds]
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract
+    Description: Prefix for created resource names. Lowercase, because it is part of the bucket name.
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,18}[a-z0-9]$"
+    ConstraintDescription: Lowercase letters, digits and hyphens, 3-20 chars.
+
+  AbstractPrincipalArn:
+    Type: String
+    Default: ""
+    Description: >-
+      The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare
+      12-digit account id (expanded to arn:aws:iam::<acct>:root).
+    AllowedPattern: "^$|^[0-9]{12}$|^arn:aws[a-z-]*:iam::[0-9]{12}:(root|(role|user)/.+)$"
+    ConstraintDescription: Provide a 12-digit account id or a valid IAM ARN.
+
+  ExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: "External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the integration in the Abstract console, once, and give the same value to whoever deploys the role."
+    MinLength: 0
+    MaxLength: 1224
+
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    Description: "Optional IAM permissions-boundary policy ARN attached to every role the stack creates. Find it with: aws iam list-policies --scope Local --query Policies[].Arn"
+    AllowedPattern: "^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$"
+
+  MaxSessionDurationSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 43200
+    Description: Maximum duration of Abstract's assumed session (3600-43200 seconds, the range IAM accepts for a role).
+
+  LogRetentionDays:
+    Type: Number
+    Default: 365
+    MinValue: 0
+    MaxValue: 3650
+    Description: Days to keep log objects in the bucket before they expire (0 = keep forever).
+
+  QueueVisibilityTimeoutSeconds:
+    Type: Number
+    Default: 900
+    MinValue: 30
+    MaxValue: 43200
+    Description: Visibility timeout of the notification queue(s); longer than Abstract takes to process one object.
+
+  DlqMaxReceiveCount:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 1000
+    Description: Receives before a notification moves to the dead-letter queue. 5 surfaces a permanent failure within minutes.
+
+  BufferIntervalSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 60
+    MaxValue: 900
+    Description: Firehose writes an object at least this often (60-900 s). Longer means fewer, larger objects.
+
+  BufferSizeMB:
+    Type: Number
+    Default: 64
+    MinValue: 1
+    MaxValue: 128
+    Description: Firehose writes an object when this much data is buffered (1-128 MB), whichever comes first.
+
+  FindingsDetailType:
+    Type: String
+    Default: Security Hub Findings - Imported
+    AllowedValues:
+      - Security Hub Findings - Imported
+      - Findings Imported V2
+    Description: >-
+      Which finding events to collect. "Security Hub Findings - Imported" is Security Hub
+      CSPM (ASFF). "Findings Imported V2" is Security Hub (OCSF). One shape per stack, so
+      one parser per Abstract configuration; deploy twice for both.
+
+Rules:
+  RequireIdentity:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AbstractPrincipalArn, ""]]
+        AssertDescription: AbstractPrincipalArn is required (provided by Abstract).
+      - Assert: !Not [!Equals [!Ref ExternalId, ""]]
+        AssertDescription: ExternalId is required (provided by Abstract).
+
+Conditions:
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  ExpireLogs: !Not [!Equals [!Ref LogRetentionDays, 0]]
+  # An ARN contains ":" so Split returns "arn" as element 0; a bare account id has no ":".
+  PrincipalIsBareAccount: !Equals
+    - !Select [0, !Split [":", !Ref AbstractPrincipalArn]]
+    - !Ref AbstractPrincipalArn
+
+Resources:
+  LogBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    DependsOn: [FindingsQueuePolicy]
+    Properties:
+      BucketName: !Sub "${NamePrefix}-securityhub-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: expire-current
+            Status: !If [ExpireLogs, Enabled, Disabled]
+            ExpirationInDays: !If [ExpireLogs, !Ref LogRetentionDays, 3650]
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt FindingsQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: securityhub/
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: Source, Value: SecurityHub }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+  LogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LogBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt LogBucket.Arn, !Sub "${LogBucket.Arn}/*"]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  FindingsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-securityhub-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  FindingsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-securityhub-queue"
+      VisibilityTimeout: !Ref QueueVisibilityTimeoutSeconds
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FindingsDeadLetterQueue.Arn
+        maxReceiveCount: !Ref DlqMaxReceiveCount
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  FindingsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref FindingsQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource: !GetAtt FindingsQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: AllowS3Notify
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt FindingsQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:s3:::${NamePrefix}-securityhub-${AWS::AccountId}-${AWS::Region}"
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  FirehoseDeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Lets Amazon Data Firehose write this stack's delivery stream into the log bucket.
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: firehose-write-s3
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: BucketLevel
+                Effect: Allow
+                Action: [s3:GetBucketLocation, s3:ListBucket, s3:ListBucketMultipartUploads]
+                Resource: !GetAtt LogBucket.Arn
+              - Sid: ObjectLevel
+                Effect: Allow
+                Action: [s3:PutObject, s3:GetObject, s3:AbortMultipartUpload]
+                Resource:
+                  - !Sub "${LogBucket.Arn}/securityhub/*"
+                  - !Sub "${LogBucket.Arn}/firehose-errors/securityhub/*"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  DeliveryStream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamName: !Sub "${NamePrefix}-securityhub"
+      DeliveryStreamType: DirectPut
+      DeliveryStreamEncryptionConfigurationInput:
+        KeyType: AWS_OWNED_CMK
+      ExtendedS3DestinationConfiguration:
+        BucketARN: !GetAtt LogBucket.Arn
+        RoleARN: !GetAtt FirehoseDeliveryRole.Arn
+        Prefix: securityhub/
+        ErrorOutputPrefix: firehose-errors/securityhub/
+        CompressionFormat: UNCOMPRESSED
+        BufferingHints:
+          IntervalInSeconds: !Ref BufferIntervalSeconds
+          SizeInMBs: !Ref BufferSizeMB
+        ProcessingConfiguration:
+          Enabled: true
+          Processors:
+            # No Delimiter parameter: the processor's default delimiter is a newline.
+            - Type: AppendDelimiterToRecord
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  EventsToFirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Lets the EventBridge rule put Security Hub findings into this stack's delivery stream.
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: put-to-firehose
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: PutFindings
+                Effect: Allow
+                Action: [firehose:PutRecord, firehose:PutRecordBatch]
+                Resource: !GetAtt DeliveryStream.Arn
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  FindingsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${NamePrefix}-securityhub-findings"
+      Description: Security Hub finding events to Abstract Security, through Firehose and S3.
+      State: ENABLED
+      EventPattern:
+        source: [aws.securityhub]
+        detail-type: [!Ref FindingsDetailType]
+      Targets:
+        - Id: firehose
+          Arn: !GetAtt DeliveryStream.Arn
+          RoleArn: !GetAtt EventsToFirehoseRole.Arn
+
+  AbstractIngestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-securityhub-role"
+      Description: Role assumed by Abstract Security to read log objects and consume their notifications.
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - PrincipalIsBareAccount
+                - !Sub "arn:${AWS::Partition}:iam::${AbstractPrincipalArn}:root"
+                - !Ref AbstractPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: read-s3-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListLogBucket
+                Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketLocation]
+                Resource: !GetAtt LogBucket.Arn
+              - Sid: ReadLogObjects
+                Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !Sub "${LogBucket.Arn}/securityhub/*"
+        - PolicyName: consume-sqs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsumeQueue
+                Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:ChangeMessageVisibility
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                Resource:
+                  - !GetAtt FindingsQueue.Arn
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+Outputs:
+  AwsRegion:
+    Description: The Region -> the Abstract integration's region field.
+    Value: !Ref AWS::Region
+  BucketNameOut:
+    Description: Log bucket -> the Abstract integration's S3 bucket field.
+    Value: !Ref LogBucket
+  RoleArn:
+    Description: Role ARN -> the Abstract integration's Assume Role ARN.
+    Value: !GetAtt AbstractIngestRole.Arn
+
+  SqsQueueUrl:
+    Description: Findings queue URL -> the Abstract integration's SQS queue URL.
+    Value: !Ref FindingsQueue
+  SqsQueueArn:
+    Description: Findings queue ARN -> the Abstract integration's SQS queue ARN.
+    Value: !GetAtt FindingsQueue.Arn
+  SqsDeadLetterQueueUrl:
+    Description: Findings dead-letter queue URL; watch it with aws-monitoring-sqs-dead-letter-alarms.
+    Value: !Ref FindingsDeadLetterQueue
+  DeliveryStreamName:
+    Description: The Firehose delivery stream; its error objects land under firehose-errors/, which Abstract never reads.
+    Value: !Ref DeliveryStream

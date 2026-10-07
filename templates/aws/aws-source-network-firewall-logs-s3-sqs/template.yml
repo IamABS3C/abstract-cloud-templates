@@ -1,0 +1,159 @@
+id: aws-source-network-firewall-logs-s3-sqs
+title: 'Network Firewall logs to Abstract: bucket and three queues'
+cloud: aws
+role: source
+scope: account
+summary: Creates a hardened log bucket, turns on S3 logging for your existing AWS Network Firewall (alert logs always,
+  flow and TLS logs by choice, each under its own prefix), one SQS queue per log type and the role Abstract assumes to
+  read them. Each log type is its own shape and becomes its own Abstract configuration. Not yet deployed by Abstract;
+  canary pending.
+formats:
+- cloudformation
+- script
+permissions:
+- role: Create IAM roles, S3 buckets, SQS queues and Network Firewall logging configurations
+  where: The target AWS account and Region
+  why: 'Deployer: the stack creates the whole path; deploy.sh passes CAPABILITY_NAMED_IAM because it names the role.'
+- role: s3:PutObject (with bucket-owner-full-control), s3:GetBucketAcl, conditioned on aws:SourceAccount and aws:SourceArn
+  where: The log bucket, under LogPrefix (bucket policy)
+  why: 'Log delivery (delivery.logs.amazonaws.com): write the firewall''s log files.'
+- role: sts:AssumeRole, conditioned on sts:ExternalId
+  where: <NamePrefix>-nfw-role
+  why: 'Abstract: only the Abstract principal you supply can assume it, and only with the matching External ID.'
+- role: s3:ListBucket, s3:GetBucketLocation, s3:GetObject
+  where: The log bucket, under LogPrefix
+  why: 'Abstract: read the objects each notification points at.'
+- role: sqs:ReceiveMessage, sqs:DeleteMessage, sqs:ChangeMessageVisibility, sqs:GetQueueAttributes, sqs:GetQueueUrl
+  where: The alert, flow and TLS queues
+  why: 'Abstract: consume the notifications.'
+creates:
+- 'A hardened log bucket <NamePrefix>-nfw-<account>-<region>: Block Public Access, ACLs disabled, HTTPS-only policy,
+  versioning, lifecycle expiry, retained on stack delete'
+- 'Three SQS queues with dead-letter queues (alert, flow, TLS; SSE-SQS). Each is notified only for its own log type''s
+  .log.gz files, and the flow and TLS queues stay idle unless their log type is on'
+- 'The logging configuration of your existing firewall (alert, plus flow and TLS when chosen): this changes the
+  firewall''s logging, and deleting the stack removes it'
+- A cross-account IAM role <NamePrefix>-nfw-role trusted only by the Abstract principal, with the External ID
+never_touches:
+- The firewall's policy, rule groups, subnets and endpoints
+- Other firewalls in the account
+prerequisites:
+- AWS CLI v2, authenticated to the account and Region of the firewall, and jq for deploy.sh
+- An existing Network Firewall with no logging configuration yet; a firewall has one logging configuration, so remove
+  an existing one (or keep it and skip this template) first
+- The Abstract principal ARN (or account ID) and External ID, from the integration in the Abstract console
+- 'Network Firewall changes one log destination per update: after the stack exists, switch EnableFlowLogs or EnableTlsLogs
+  in separate stack updates, never both at once'
+- 'TLS logs exist only for a firewall with a TLS inspection configuration'
+- 'In Abstract, one AWS S3 SQS Source configuration per log type you turn on, each with dataformat nd and its own
+  parser: alert, flow and TLS records are different shapes. Abstract has no managed Network Firewall integration'
+parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for created resource names. Lowercase, because it is part of the bucket name.
+  default: abstract
+- name: AbstractPrincipalArn
+  type: string
+  required: false
+  description: The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare 12-digit account id
+    (expanded to arn:aws:iam::<acct>:root).
+  default: ''
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+  example: <AbstractPrincipalArn>
+- name: ExternalId
+  type: securestring
+  required: false
+  description: 'External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the
+    integration in the Abstract console, once, and give the same value to whoever deploys the role.'
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: PermissionsBoundaryArn
+  type: string
+  required: false
+  description: 'Optional IAM permissions-boundary policy ARN attached to every role the stack creates. Find it with:
+    aws iam list-policies --scope Local --query Policies[].Arn'
+  default: ''
+  find_it: aws iam list-policies --scope Local --query Policies[].Arn
+- name: MaxSessionDurationSeconds
+  type: int
+  required: false
+  description: Maximum duration of Abstract's assumed session (3600-43200 seconds, the range IAM accepts for a role).
+  default: 3600
+- name: LogRetentionDays
+  type: int
+  required: false
+  description: Days to keep log objects in the bucket before they expire (0 = keep forever).
+  default: 365
+- name: QueueVisibilityTimeoutSeconds
+  type: int
+  required: false
+  description: Visibility timeout of the notification queue(s); longer than Abstract takes to process one object.
+  default: 900
+- name: DlqMaxReceiveCount
+  type: int
+  required: false
+  description: Receives before a notification moves to the dead-letter queue. 5 surfaces a permanent failure within
+    minutes.
+  default: 5
+- name: FirewallArn
+  type: string
+  required: true
+  description: 'ARN of your existing Network Firewall in this Region. It must have no logging configuration yet. Find
+    it with: aws network-firewall list-firewalls'
+  find_it: aws network-firewall list-firewalls
+- name: LogPrefix
+  type: string
+  required: false
+  description: Top-level key prefix for the logs. Each log type goes under <LogPrefix>/<type>. No leading or trailing
+    slash.
+  default: network-firewall
+- name: EnableFlowLogs
+  type: string
+  required: false
+  description: Send flow logs (every flow the stateful engine sees; by far the larger volume).
+  default: 'true'
+  allowed:
+  - 'true'
+  - 'false'
+- name: EnableTlsLogs
+  type: string
+  required: false
+  description: Send TLS logs. Only a firewall with a TLS inspection configuration writes them.
+  default: 'false'
+  allowed:
+  - 'true'
+  - 'false'
+outputs:
+- AwsRegion
+- BucketNameOut
+- RoleArn
+- AlertQueueUrl
+- AlertQueueArn
+- AlertDeadLetterQueueUrl
+- FlowQueueUrl
+- FlowQueueArn
+- FlowDeadLetterQueueUrl
+- TlsQueueUrl
+- TlsQueueArn
+- TlsDeadLetterQueueUrl
+abstract:
+  integration: aws_s3_sqs_source
+verify:
+- check: The stack outputs carry the values each Abstract configuration needs
+  command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
+  healthy: RoleArn, BucketNameOut, AwsRegion and one queue URL and ARN per log type are present.
+- check: The firewall logs to the bucket
+  command: aws network-firewall describe-logging-configuration --firewall-arn <firewall-arn>
+  healthy: One S3 destination per log type you turned on, each with the bucket and its <LogPrefix>/<type> prefix.
+- check: Log files are arriving under each type's path
+  command: aws s3 ls s3://<bucket>/<LogPrefix>/alert/ --recursive | tail -3
+  healthy: .log.gz files appear within about 5 minutes of traffic (Network Firewall publishes every 5 minutes).
+- check: Nothing is failing into a dead-letter queue
+  command: aws sqs get-queue-attributes --queue-url <dead-letter-queue-url> --attribute-names ApproximateNumberOfMessagesVisible
+  healthy: Zero messages on each.
+cost: S3 storage and one SQS message per 5-minute log file per type; flow logs are the bulk of the volume, and Network
+  Firewall also charges for log delivery.
+when_to_use: You run AWS Network Firewall and want its alert (and flow or TLS) logs in Abstract.
+when_not_to_use: The firewall already logs to a bucket you keep; add queues for that bucket with aws-source-existing-bucket-queues
+  instead.
+live_test: static

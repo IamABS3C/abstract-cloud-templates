@@ -1,0 +1,423 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - GuardDuty findings to Abstract. Creates the customer managed KMS
+  key GuardDuty's S3 export requires, a hardened findings bucket, a publishing
+  destination on your existing detector, the SQS queue the bucket notifies and the
+  role Abstract assumes to read them. Not yet deployed by Abstract; canary pending.
+
+Metadata:
+  # Where each setting comes from. AWS documentation wins over the Launchpad data
+  # where they disagree (recorded in the comment beside the setting).
+  Sources:
+    - https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_exportfindings.html
+      # The key policy grants guardduty.amazonaws.com kms:GenerateDataKey ONLY, conditioned on
+      # aws:SourceAccount and aws:SourceArn (the detector). The Launchpad says GenerateDataKey*
+      # plus Decrypt; AWS documents the narrower grant, so that is what is granted.
+      # The bucket policy is AWS's: GetBucketLocation and PutObject for GuardDuty, deny an
+      # upload that is not aws:kms or not under this key, deny non-HTTPS.
+      # Objects are UUID.jsonl.gz; AWS describes the folder as AWSLogs/<acct>/GuardDuty/<region>,
+      # so the notification filters on the .jsonl.gz suffix and not on a guessed prefix.
+      # Updated findings are exported every 6 hours by default (set 15 minutes on the detector).
+    - https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-guardduty-publishingdestination.html
+    - https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html
+      # The root statement lets IAM policies in this account (the Abstract role's kms:Decrypt)
+      # use the key; without it no IAM grant works and the key cannot be administered.
+    - https://docs.aws.amazon.com/AmazonS3/latest/userguide/ways-to-add-notification-config-to-bucket.html
+    - tools/launchpad/data/scenarios.json guardduty-s3-export; integration-truth.json default.guardduty
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Naming" }
+        Parameters: [NamePrefix]
+      - Label: { default: "Abstract identity (provided by Abstract)" }
+        Parameters: [AbstractPrincipalArn, ExternalId]
+      - Label: { default: "GuardDuty" }
+        Parameters: [DetectorId, CreatePublishingDestination, GuardDutyServicePrincipal]
+      - Label: { default: "Bucket and queue" }
+        Parameters: [LogRetentionDays, QueueVisibilityTimeoutSeconds, DlqMaxReceiveCount]
+      - Label: { default: "Hardening (optional)" }
+        Parameters: [PermissionsBoundaryArn, MaxSessionDurationSeconds]
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract
+    Description: Prefix for created resource names. Lowercase, because it is part of the bucket name.
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,18}[a-z0-9]$"
+    ConstraintDescription: Lowercase letters, digits and hyphens, 3-20 chars.
+
+  AbstractPrincipalArn:
+    Type: String
+    Default: ""
+    Description: >-
+      The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare
+      12-digit account id (expanded to arn:aws:iam::<acct>:root).
+    AllowedPattern: "^$|^[0-9]{12}$|^arn:aws[a-z-]*:iam::[0-9]{12}:(root|(role|user)/.+)$"
+    ConstraintDescription: Provide a 12-digit account id or a valid IAM ARN.
+
+  ExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: "External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the integration in the Abstract console, once, and give the same value to whoever deploys the role."
+    MinLength: 0
+    MaxLength: 1224
+
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    Description: "Optional IAM permissions-boundary policy ARN attached to every role the stack creates. Find it with: aws iam list-policies --scope Local --query Policies[].Arn"
+    AllowedPattern: "^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$"
+
+  MaxSessionDurationSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 43200
+    Description: Maximum duration of Abstract's assumed session (3600-43200 seconds, the range IAM accepts for a role).
+
+  LogRetentionDays:
+    Type: Number
+    Default: 365
+    MinValue: 0
+    MaxValue: 3650
+    Description: Days to keep log objects in the bucket before they expire (0 = keep forever).
+
+  QueueVisibilityTimeoutSeconds:
+    Type: Number
+    Default: 900
+    MinValue: 30
+    MaxValue: 43200
+    Description: Visibility timeout of the notification queue(s); longer than Abstract takes to process one object.
+
+  DlqMaxReceiveCount:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 1000
+    Description: Receives before a notification moves to the dead-letter queue. 5 surfaces a permanent failure within minutes.
+
+  DetectorId:
+    Type: String
+    Description: "The ID of your existing GuardDuty detector in this Region. Find it with: aws guardduty list-detectors"
+    AllowedPattern: "^$|^[a-z0-9]{32}$"
+    ConstraintDescription: A 32-character detector ID.
+
+  CreatePublishingDestination:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      true points the detector's findings export at this bucket. Set false when the
+      detector already exports somewhere you cannot change (a detector has one S3
+      destination), then point it here yourself.
+
+  GuardDutyServicePrincipal:
+    Type: String
+    Default: guardduty.amazonaws.com
+    Description: >-
+      The GuardDuty service principal. In an opt-in Region AWS documents the Regional
+      form, for example guardduty.me-south-1.amazonaws.com.
+    AllowedPattern: "^guardduty(\\.[a-z0-9-]+)?\\.amazonaws\\.com$"
+
+Rules:
+  RequireIdentity:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AbstractPrincipalArn, ""]]
+        AssertDescription: AbstractPrincipalArn is required (provided by Abstract).
+      - Assert: !Not [!Equals [!Ref ExternalId, ""]]
+        AssertDescription: ExternalId is required (provided by Abstract).
+  RequireDetector:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref DetectorId, ""]]
+        AssertDescription: DetectorId is required.
+
+Conditions:
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  ExpireLogs: !Not [!Equals [!Ref LogRetentionDays, 0]]
+  # An ARN contains ":" so Split returns "arn" as element 0; a bare account id has no ":".
+  PrincipalIsBareAccount: !Equals
+    - !Select [0, !Split [":", !Ref AbstractPrincipalArn]]
+    - !Ref AbstractPrincipalArn
+  MakeDestination: !Equals [!Ref CreatePublishingDestination, "true"]
+
+Resources:
+  FindingsKey:
+    Type: AWS::KMS::Key
+    # Retained: deleting the stack must not schedule the key for deletion, or every finding
+    # already in the retained bucket becomes unreadable.
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: Encrypts GuardDuty findings exported for Abstract Security
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableIamPoliciesInThisAccount
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: kms:*
+            Resource: "*"
+          - Sid: AllowGuardDutyKey
+            Effect: Allow
+            Principal:
+              Service: !Ref GuardDutyServicePrincipal
+            Action: kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:guardduty:${AWS::Region}:${AWS::AccountId}:detector/${DetectorId}"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  FindingsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${NamePrefix}-guardduty-findings"
+      TargetKeyId: !Ref FindingsKey
+
+  LogBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    DependsOn: [FindingsQueuePolicy]
+    Properties:
+      BucketName: !Sub "${NamePrefix}-guardduty-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: expire-current
+            Status: !If [ExpireLogs, Enabled, Disabled]
+            ExpirationInDays: !If [ExpireLogs, !Ref LogRetentionDays, 3650]
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt FindingsQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .jsonl.gz
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: Source, Value: GuardDuty }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+  LogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LogBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt LogBucket.Arn, !Sub "${LogBucket.Arn}/*"]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: AllowGuardDutyGetBucketLocation
+            Effect: Allow
+            Principal:
+              Service: !Ref GuardDutyServicePrincipal
+            Action: s3:GetBucketLocation
+            Resource: !GetAtt LogBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:guardduty:${AWS::Region}:${AWS::AccountId}:detector/${DetectorId}"
+          - Sid: AllowGuardDutyPutObject
+            Effect: Allow
+            Principal:
+              Service: !Ref GuardDutyServicePrincipal
+            Action: s3:PutObject
+            Resource: !Sub "${LogBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:guardduty:${AWS::Region}:${AWS::AccountId}:detector/${DetectorId}"
+          - Sid: DenyUnencryptedObjectUploads
+            Effect: Deny
+            Principal:
+              Service: !Ref GuardDutyServicePrincipal
+            Action: s3:PutObject
+            Resource: !Sub "${LogBucket.Arn}/*"
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: aws:kms
+          - Sid: DenyIncorrectEncryptionHeader
+            Effect: Deny
+            Principal:
+              Service: !Ref GuardDutyServicePrincipal
+            Action: s3:PutObject
+            Resource: !Sub "${LogBucket.Arn}/*"
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !GetAtt FindingsKey.Arn
+
+  FindingsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-guardduty-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  FindingsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-guardduty-queue"
+      VisibilityTimeout: !Ref QueueVisibilityTimeoutSeconds
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FindingsDeadLetterQueue.Arn
+        maxReceiveCount: !Ref DlqMaxReceiveCount
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+
+  FindingsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref FindingsQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource: !GetAtt FindingsQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: AllowS3Notify
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt FindingsQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:s3:::${NamePrefix}-guardduty-${AWS::AccountId}-${AWS::Region}"
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  PublishingDestination:
+    Type: AWS::GuardDuty::PublishingDestination
+    Condition: MakeDestination
+    DependsOn: [LogBucketPolicy]
+    Properties:
+      DetectorId: !Ref DetectorId
+      DestinationType: S3
+      DestinationProperties:
+        DestinationArn: !GetAtt LogBucket.Arn
+        KmsKeyArn: !GetAtt FindingsKey.Arn
+
+  AbstractIngestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-guardduty-role"
+      Description: Role assumed by Abstract Security to read log objects and consume their notifications.
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - PrincipalIsBareAccount
+                - !Sub "arn:${AWS::Partition}:iam::${AbstractPrincipalArn}:root"
+                - !Ref AbstractPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: read-s3-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListLogBucket
+                Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketLocation]
+                Resource: !GetAtt LogBucket.Arn
+              - Sid: ReadLogObjects
+                Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !Sub "${LogBucket.Arn}/*"
+        - PolicyName: consume-sqs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConsumeQueue
+                Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:ChangeMessageVisibility
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                Resource:
+                  - !GetAtt FindingsQueue.Arn
+        - PolicyName: kms-decrypt-findings
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DecryptFindings
+                Effect: Allow
+                Action: [kms:Decrypt, kms:DescribeKey]
+                Resource: !GetAtt FindingsKey.Arn
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+Outputs:
+  AwsRegion:
+    Description: The Region -> the Abstract integration's region field.
+    Value: !Ref AWS::Region
+  BucketNameOut:
+    Description: Log bucket -> the Abstract integration's S3 bucket field.
+    Value: !Ref LogBucket
+  RoleArn:
+    Description: Role ARN -> the Abstract integration's Assume Role ARN.
+    Value: !GetAtt AbstractIngestRole.Arn
+
+  SqsQueueUrl:
+    Description: Findings queue URL -> the Abstract integration's SQS queue URL.
+    Value: !Ref FindingsQueue
+  SqsQueueArn:
+    Description: Findings queue ARN -> the Abstract integration's SQS queue ARN.
+    Value: !GetAtt FindingsQueue.Arn
+  SqsDeadLetterQueueUrl:
+    Description: Findings dead-letter queue URL; watch it with aws-monitoring-sqs-dead-letter-alarms.
+    Value: !Ref FindingsDeadLetterQueue
+  KmsKeyArnOut:
+    Description: The key GuardDuty encrypts findings with; it is retained when the stack is deleted.
+    Value: !GetAtt FindingsKey.Arn

@@ -56,6 +56,9 @@ on that bucket.
   then drops the event. That is why each template verifies the path with a test file.
 - **Archived files cannot be read.** A lifecycle rule that moves files to Glacier or Deep Archive before
   Abstract reads them breaks ingestion, often months after it started working.
+- **A second Region needs its own name prefix.** IAM role names are global to an account, and each
+  stack names its role from `NamePrefix` and the source. Deploying the same source in a second Region
+  with the same prefix fails on the role. Use a different `NamePrefix` per Region.
 - **Duplicates are possible.** S3 delivers each event at least once, so an occasional duplicate is normal
   in every routing option.
 

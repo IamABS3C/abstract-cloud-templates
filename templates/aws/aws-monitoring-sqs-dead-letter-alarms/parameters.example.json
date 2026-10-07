@@ -1,0 +1,22 @@
+[
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "abstract"
+  },
+  {
+    "ParameterKey": "DeadLetterQueueNames",
+    "ParameterValue": "<DeadLetterQueueNames>"
+  },
+  {
+    "ParameterKey": "AlarmThreshold",
+    "ParameterValue": "0"
+  },
+  {
+    "ParameterKey": "PeriodSeconds",
+    "ParameterValue": "300"
+  },
+  {
+    "ParameterKey": "AlarmEmail",
+    "ParameterValue": ""
+  }
+]

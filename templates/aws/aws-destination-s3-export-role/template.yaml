@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - Write role for the S3 Export destination (role family
+  s3_export_role). Abstract assumes the role with an External ID and writes
+  normalized events into one existing bucket, under one prefix. No read of your
+  objects. Not yet deployed by Abstract; canary pending.
+
+Metadata:
+  # Where each permission comes from. The Launchpad's _cfn_s3_export renders a READ
+  # role (GetObject, no PutObject) for this family; Abstract's own S3 Export
+  # documentation and the s3-export-destination scenario both describe a WRITE.
+  # The write is what the destination does, so the documentation wins.
+  Sources:
+    - Abstract docs, integrations/destination-integrations/s3-export (s3:ListBucket, s3:GetBucketLocation, s3:PutObject; kms:GenerateDataKey and kms:Decrypt with a KMS key or multipart uploads)
+    - https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html
+      # multipart parts are written with s3:PutObject; s3:AbortMultipartUpload lets the
+      # writer clean up an upload it abandons instead of leaving billed parts behind.
+    - https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html
+      # a write under SSE-KMS needs kms:GenerateDataKey; a multipart write also needs kms:Decrypt.
+    - https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html
+      # BucketOwnerEnforced makes the bucket owner own every object Abstract writes.
+    - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_third-party.html
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Naming" }
+        Parameters: [NamePrefix]
+      - Label: { default: "Abstract identity (provided by Abstract)" }
+        Parameters: [AbstractPrincipalArn, ExternalId]
+      - Label: { default: "Where Abstract may write" }
+        Parameters: [BucketName, ExportPrefix, KmsKeyArn]
+      - Label: { default: "Hardening (optional)" }
+        Parameters: [PermissionsBoundaryArn, MaxSessionDurationSeconds]
+    ParameterLabels:
+      AbstractPrincipalArn: { default: "Abstract principal ARN or 12-digit account ID" }
+      ExternalId: { default: "External ID (shared secret from Abstract)" }
+      BucketName: { default: "Destination S3 bucket name" }
+      ExportPrefix: { default: "Key prefix Abstract writes under (optional)" }
+      KmsKeyArn: { default: "KMS key ARN protecting the bucket (optional)" }
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract-s3-export
+    Description: Prefix for the created IAM role name.
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$"
+    ConstraintDescription: Lowercase letters, digits and hyphens, 3-42 chars.
+
+  AbstractPrincipalArn:
+    Type: String
+    Default: ""
+    Description: >-
+      The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare
+      12-digit account id (expanded to arn:aws:iam::<acct>:root).
+    AllowedPattern: "^$|^[0-9]{12}$|^arn:aws[a-z-]*:iam::[0-9]{12}:(root|(role|user)/.+)$"
+    ConstraintDescription: Provide a 12-digit account id or a valid IAM ARN.
+
+  ExternalId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: "External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the S3 Export integration in the Abstract console, once, and give the same value to whoever deploys the role."
+    MinLength: 0
+    MaxLength: 1224
+
+  BucketName:
+    Type: String
+    Description: "Name of the existing S3 bucket Abstract writes to. One bucket per stack. Find it with: aws s3 ls"
+    AllowedPattern: "^$|^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+
+  ExportPrefix:
+    Type: String
+    Default: ""
+    Description: >-
+      Key prefix the write grant is scoped to, matching the Path Format you set in the
+      integration (e.g. abstract/exports/). Empty means the whole bucket. A prefix must
+      end with '/', because S3 prefixes are string matches: 'exports' would also grant
+      'exports-other/'.
+    AllowedPattern: "^$|^[^/].*/$"
+    ConstraintDescription: Empty, or a prefix that does not start with '/' and ends with '/'.
+
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional. The KMS key ARN when the bucket's default encryption is SSE-KMS with a
+      customer managed key. The role then gets kms:GenerateDataKey and kms:Decrypt on it;
+      the key policy must also allow this account's IAM policies to grant them.
+    AllowedPattern: "^$|^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/.+$"
+
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ""
+    Description: "Optional IAM permissions-boundary policy ARN to attach to the role. Find it with: aws iam list-policies --scope Local --query Policies[].Arn"
+    AllowedPattern: "^$|^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$"
+
+  MaxSessionDurationSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 43200
+    Description: Maximum duration of an assumed session (3600-43200 seconds, the range IAM accepts for a role).
+
+Rules:
+  RequireIdentity:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AbstractPrincipalArn, ""]]
+        AssertDescription: AbstractPrincipalArn is required (provided by Abstract).
+      - Assert: !Not [!Equals [!Ref ExternalId, ""]]
+        AssertDescription: ExternalId is required (provided by Abstract).
+  RequireBucket:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref BucketName, ""]]
+        AssertDescription: BucketName is required.
+
+Conditions:
+  HasKms: !Not [!Equals [!Ref KmsKeyArn, ""]]
+  HasBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, ""]]
+  PrincipalIsBareAccount: !Equals
+    - !Select [0, !Split [":", !Ref AbstractPrincipalArn]]
+    - !Ref AbstractPrincipalArn
+
+Resources:
+  AbstractExportRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-role"
+      Description: Role assumed by Abstract Security to write exported events into one S3 bucket and prefix.
+      MaxSessionDuration: !Ref MaxSessionDurationSeconds
+      PermissionsBoundary: !If [HasBoundary, !Ref PermissionsBoundaryArn, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - PrincipalIsBareAccount
+                - !Sub "arn:${AWS::Partition}:iam::${AbstractPrincipalArn}:root"
+                - !Ref AbstractPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: write-s3-export
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: LocateTheBucket
+                Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketLocation]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${BucketName}"
+              - Sid: WriteUnderThePrefix
+                Effect: Allow
+                Action: [s3:PutObject, s3:AbortMultipartUpload]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${BucketName}/${ExportPrefix}*"
+        - !If
+          - HasKms
+          - PolicyName: kms-encrypt-export
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Sid: EncryptWithCmk
+                  Effect: Allow
+                  Action: [kms:GenerateDataKey, kms:Decrypt]
+                  Resource: !Ref KmsKeyArn
+          - !Ref "AWS::NoValue"
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+Outputs:
+  RoleArn:
+    Description: Paste this Role ARN into the Abstract S3 Export integration (Role ARN).
+    Value: !GetAtt AbstractExportRole.Arn
+  BucketNameOut:
+    Description: The bucket Abstract writes to (S3 Bucket Name in the integration).
+    Value: !Ref BucketName
+  AwsRegion:
+    Description: The Region this stack ran in; set the integration's AWS Region to the bucket's Region.
+    Value: !Ref AWS::Region

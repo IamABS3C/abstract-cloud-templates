@@ -48,6 +48,7 @@ Object count drives the S3 request, SQS and KMS charges more than byte volume. K
 
 | Name | Type | Required | Description | Find it |
 |---|---|---|---|---|
+| `NamePrefix` | string | no | Prefix for every child stack's resource names, 2 to 11 characters so every bucket name stays within S3's 63-character limit in every Region. IAM role names are global to the account, so a second Region, or a second copy in the same Region, needs a different prefix. Keep "abstract" for an existing stack. |  |
 | `TemplateBaseUrl` | string | no | Base https URL where the child templates are hosted, no trailing slash. The default is Abstract's public copy of the published templates, which Launch Stack uses; deploy.sh uploads your own copy instead. The master appends /&lt;template-id&gt;.yaml, e.g. /aws-source-cloudtrail-s3-sqs.yaml. |  |
 | `AuthMode` | string | no | AssumeRole (recommended) creates a cross-account role Abstract assumes with an External ID; AccessKey creates an IAM user and access key. |  |
 | `AbstractPrincipalArn` | string | no | The principal Abstract provides: a full IAM ARN or a bare 12-digit account ID. Required for AssumeRole. | `Abstract console: the AWS integration's role step shows the principal and the External ID` |

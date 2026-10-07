@@ -1,0 +1,34 @@
+[
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "abstract-s3-export"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "BucketName",
+    "ParameterValue": "<BucketName>"
+  },
+  {
+    "ParameterKey": "ExportPrefix",
+    "ParameterValue": "abstract/exports/"
+  },
+  {
+    "ParameterKey": "KmsKeyArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "PermissionsBoundaryArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "MaxSessionDurationSeconds",
+    "ParameterValue": "3600"
+  }
+]

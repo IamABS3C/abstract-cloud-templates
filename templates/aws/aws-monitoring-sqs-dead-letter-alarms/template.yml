@@ -1,0 +1,84 @@
+id: aws-monitoring-sqs-dead-letter-alarms
+title: 'Dead-letter queue alarms: email when Abstract cannot read'
+cloud: aws
+role: monitoring
+scope: account
+summary: Creates a CloudWatch alarm on each of up to ten existing SQS dead-letter queues and one SNS topic they publish
+  to, with an optional email subscription, so a message Abstract could not process is seen within minutes. It creates
+  no queue and changes none. Deployed in a test account on 2026-10-07. A message on the dead-letter queue put the alarm in ALARM.
+formats:
+- cloudformation
+- script
+permissions:
+- role: cloudwatch:PutMetricAlarm, sns:CreateTopic, sns:Subscribe
+  where: The target AWS account and Region
+  why: 'Deployer: the template creates the alarms, the topic and the optional email subscription.'
+creates:
+- 'An SNS topic <NamePrefix>-dlq-alarms, with SNS''s default settings: CloudWatch cannot publish to a topic encrypted
+  with the AWS managed key, and the alarm messages carry no log data'
+- An optional email subscription to that topic (AlarmEmail), which AWS confirms by email
+- 'One CloudWatch alarm per queue name, <NamePrefix>-<queue>-not-empty, on ApproximateNumberOfMessagesVisible (Maximum
+  over PeriodSeconds, greater than AlarmThreshold, missing data treated as not breaching)'
+never_touches:
+- 'The queues: the alarms only read their metrics; no redrive policy, queue policy or message is changed'
+- Any Abstract integration or IAM role
+prerequisites:
+- AWS CLI v2, authenticated to the account and Region of the queues, and jq for deploy.sh
+- Dead-letter queues that already exist and are attached to your Abstract notification queues by a redrive policy
+  (every source template here creates one); this template does not attach a dead-letter queue to a queue that has none
+- 'An alarm on a queue name that does not exist never fires, because a missing metric counts as not breaching: check
+  each name with the first verify step'
+parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for the alarm and topic names.
+  default: abstract
+- name: DeadLetterQueueNames
+  type: array
+  required: true
+  description: Names (not URLs or ARNs) of up to ten existing dead-letter queues in this account and Region, comma
+    separated, e.g. abstract-CloudTrail-dlq,abstract-VPCFlow-dlq. Names beyond the tenth get no alarm, so deploy.sh refuses more than ten.
+  find_it: aws sqs list-queues --queue-name-prefix abstract
+- name: AlarmThreshold
+  type: int
+  required: false
+  description: The alarm fires when a queue holds MORE than this many visible messages. 0 fires on the first one.
+  default: 0
+- name: PeriodSeconds
+  type: int
+  required: false
+  description: How often each queue's depth is evaluated. SQS publishes these metrics every minute at most.
+  default: 300
+  allowed:
+  - 60
+  - 300
+  - 900
+  - 3600
+- name: AlarmEmail
+  type: string
+  required: false
+  description: Optional email address subscribed to the alarm topic. AWS sends a confirmation email that must be
+    accepted.
+  default: ''
+outputs:
+- AlarmTopicArn
+- WatchedQueues
+verify:
+- check: Every watched queue name is real and publishes metrics
+  command: aws cloudwatch list-metrics --namespace AWS/SQS --metric-name ApproximateNumberOfMessagesVisible --dimensions
+    Name=QueueName,Value=<queue-name>
+  healthy: One metric is listed for each name in WatchedQueues.
+- check: The alarms exist and are not in alarm
+  command: aws cloudwatch describe-alarms --alarm-name-prefix <NamePrefix>- --query 'MetricAlarms[].[AlarmName,StateValue]'
+    --output table
+  healthy: One alarm per queue, each OK (or INSUFFICIENT_DATA for a queue that has never held a message).
+- check: The email subscription is confirmed
+  command: aws sns list-subscriptions-by-topic --topic-arn <AlarmTopicArn>
+  healthy: The email endpoint shows a subscription ARN, not PendingConfirmation.
+when_to_use: Your Abstract queues have dead-letter queues and nobody would notice a message landing in one; do this
+  for every source before go-live.
+when_not_to_use: The queue was created by a source template here with EnableDlqAlarm=true; it already has this alarm.
+cleanup_note: Deleting the stack removes the alarms, the topic and its subscriptions; the queues and their messages
+  are untouched.
+live_test: canary

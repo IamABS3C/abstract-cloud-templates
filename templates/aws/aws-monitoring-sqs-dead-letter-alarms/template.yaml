@@ -1,0 +1,362 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Abstract Security - CloudWatch alarms on up to ten existing SQS dead-letter queues,
+  published to one SNS topic with an optional email subscription. A message in a
+  dead-letter queue means an object Abstract could not process (a 403 on GetObject, a
+  poison object); the alarm makes that visible within minutes. Creates no queue and
+  changes none. Not yet deployed by Abstract; canary pending.
+
+Metadata:
+  # Where each setting comes from. AWS documentation wins over the Launchpad data
+  # where they disagree.
+  Sources:
+    - https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-available-cloudwatch-metrics.html
+      # ApproximateNumberOfMessagesVisible, namespace AWS/SQS, dimension QueueName.
+    - https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html
+    - https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Alarms.html
+      # TreatMissingData notBreaching: a DLQ that has never held a message publishes no data.
+    - https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Notify_Users_Alarm_Changes.html
+      # An alarm cannot publish to a topic encrypted with the AWS managed key alias/aws/sns,
+      # so the topic is left with SNS's default settings; alarm messages carry no log data.
+    - tools/launchpad/launchpad.py _dlq_resources (Maximum, 300 s, 1 period, > 0, notBreaching)
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Naming" }
+        Parameters: [NamePrefix]
+      - Label: { default: "Queues to watch" }
+        Parameters: [DeadLetterQueueNames, AlarmThreshold, PeriodSeconds]
+      - Label: { default: "Who hears about it" }
+        Parameters: [AlarmEmail]
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: abstract
+    Description: Prefix for the alarm and topic names.
+    AllowedPattern: "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,40}$"
+    ConstraintDescription: Letters, digits, hyphens and underscores, up to 41 characters.
+
+  DeadLetterQueueNames:
+    Type: CommaDelimitedList
+    Description: >-
+      Names (not URLs or ARNs) of up to ten existing dead-letter queues in this account
+      and Region, comma separated, e.g. abstract-CloudTrail-dlq,abstract-VPCFlow-dlq.
+      Names beyond the tenth get no alarm (deploy.sh refuses more than ten). Find them with: aws sqs list-queues --queue-name-prefix abstract
+
+  AlarmThreshold:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    Description: The alarm fires when a queue holds MORE than this many visible messages. 0 fires on the first one.
+
+  PeriodSeconds:
+    Type: Number
+    Default: 300
+    AllowedValues: [60, 300, 900, 3600]
+    Description: How often each queue's depth is evaluated. SQS publishes these metrics every minute at most.
+
+  AlarmEmail:
+    Type: String
+    Default: ""
+    Description: Optional email address subscribed to the alarm topic. AWS sends a confirmation email that must be accepted.
+    AllowedPattern: "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    ConstraintDescription: Leave empty or give one email address.
+
+Rules:
+  RequireQueues:
+    Assertions:
+      # Rules allow only rule functions (no Fn::Join), so an empty entry is refused instead.
+      - Assert: !Not [!Contains [!Ref DeadLetterQueueNames, ""]]
+        AssertDescription: DeadLetterQueueNames needs one or more queue names and no empty entries.
+
+Conditions:
+  # A CommaDelimitedList has no length function without a transform, so the list is
+  # padded with ten empty entries and each slot is on when its entry is not empty.
+  HasEmail: !Not [!Equals [!Ref AlarmEmail, ""]]
+  Watch1: !Not [!Equals [!Select [0, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+  Watch2: !Not [!Equals [!Select [1, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+  Watch3: !Not [!Equals [!Select [2, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+  Watch4: !Not [!Equals [!Select [3, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+  Watch5: !Not [!Equals [!Select [4, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+  Watch6: !Not [!Equals [!Select [5, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+  Watch7: !Not [!Equals [!Select [6, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+  Watch8: !Not [!Equals [!Select [7, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+  Watch9: !Not [!Equals [!Select [8, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+  Watch10: !Not [!Equals [!Select [9, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]], ""]]
+
+Resources:
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${NamePrefix}-dlq-alarms"
+      DisplayName: Abstract dead-letter queue alarms
+      Tags:
+        - { Key: Purpose, Value: AbstractSecurity }
+        - { Key: ManagedBy, Value: CloudFormation }
+
+  AlarmEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmail
+    Properties:
+      TopicArn: !Ref AlarmTopic
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
+
+  DlqNotEmptyAlarm1:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch1
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [0, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [0, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+  DlqNotEmptyAlarm2:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch2
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [1, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [1, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+  DlqNotEmptyAlarm3:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch3
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [2, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [2, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+  DlqNotEmptyAlarm4:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch4
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [3, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [3, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+  DlqNotEmptyAlarm5:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch5
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [4, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [4, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+  DlqNotEmptyAlarm6:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch6
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [5, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [5, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+  DlqNotEmptyAlarm7:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch7
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [6, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [6, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+  DlqNotEmptyAlarm8:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch8
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [7, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [7, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+  DlqNotEmptyAlarm9:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch9
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [8, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [8, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+  DlqNotEmptyAlarm10:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Watch10
+    Properties:
+      AlarmName: !Sub
+        - "${NamePrefix}-${Q}-not-empty"
+        - Q: !Select [9, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      AlarmDescription: >-
+        A message reached this dead-letter queue: Abstract could not process an object
+        (often AccessDenied on GetObject or KMS, or a poison object). Investigate before
+        the queue's retention period expires.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select [9, !Split [",", !Join [",", [!Join [",", !Ref DeadLetterQueueNames], ",,,,,,,,,"]]]]
+      Statistic: Maximum
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+      OKActions: [!Ref AlarmTopic]
+
+Outputs:
+  AlarmTopicArn:
+    Description: The SNS topic every dead-letter alarm publishes to. Subscribe a pager, chat webhook or ticketing integration here.
+    Value: !Ref AlarmTopic
+  WatchedQueues:
+    Description: The queue names you passed. Only the first ten have an alarm; deploy.sh refuses more than ten, and a second stack covers the rest.
+    Value: !Join [",", !Ref DeadLetterQueueNames]

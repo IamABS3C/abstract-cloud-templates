@@ -1,0 +1,35 @@
+{
+ "frame": {
+  "title": "EKS control-plane logs reach Abstract through Firehose",
+  "subtitle": "A subscription filter sends the cluster's log group to Firehose, which decodes it into plain lines in a new bucket that notifies a queue",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 150,
+  "integration_y": 547,
+  "abstract_sublabel": "polls the queue, reads NDJSON\nparses EKS audit to ACS"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "EKS",
+   "nodes": [
+    {"id": "lg", "label": "EKS log group", "sublabel": "/aws/eks/CLUSTER/cluster;\nlogging turned on by you", "icon": "aws:eks", "x": 60, "y": 110, "existing": true},
+    {"id": "sub", "label": "Subscription filter", "sublabel": "FilterPattern, empty\nby default", "icon": "aws:cloudwatch", "x": 330, "y": 110, "builds": ["AWS::Logs::SubscriptionFilter"]},
+    {"id": "fh", "label": "Firehose stream", "sublabel": "decompress, extract lines,\nnewline per record", "icon": "aws:kinesis_data_firehose", "x": 600, "y": 110, "builds": ["AWS::KinesisFirehose::DeliveryStream"]},
+    {"id": "bucket", "label": "Bucket", "sublabel": "eks/CLUSTER/", "icon": "aws:s3", "x": 870, "y": 110, "builds": ["AWS::S3::Bucket"]},
+    {"id": "queue", "label": "SQS queue + DLQ", "sublabel": "new objects under eks/", "icon": "aws:sqs", "x": 870, "y": 330, "builds": ["AWS::SQS::Queue"]},
+    {"id": "svcroles", "label": "Service roles", "sublabel": "Logs to Firehose,\nFirehose to S3", "icon": "aws:role", "x": 330, "y": 540, "builds": ["LogsToFirehoseRole", "FirehoseDeliveryRole"]},
+    {"id": "role", "label": "IAM role", "sublabel": "GetObject under eks/,\nconsume the queue", "icon": "aws:role", "x": 600, "y": 540, "builds": ["AbstractIngestRole"]}
+   ],
+   "edges": [
+    {"from": "lg", "to": "sub", "label": "log events"},
+    {"from": "sub", "to": "fh", "label": "gzip batches"},
+    {"from": "fh", "to": "bucket", "label": "plain lines"},
+    {"from": "bucket", "to": "queue", "label": "ObjectCreated", "exit": [1, 0.85], "entry": [1, 0.3]},
+    {"from": "bucket", "to": "abstract", "label": "GetObject", "entry": [0, 0.3], "label_x": -0.3},
+    {"from": "queue", "to": "abstract", "label": "poll", "exit": [1, 0.7], "entry": [0, 0.7], "label_x": -0.4},
+    {"from": "abs-integration", "to": "role", "label": "AssumeRole + External ID", "tone": "amber", "dashed": true, "exit": [0, 0.5], "entry": [1, 0.5]}
+   ]
+  }
+ ]
+}

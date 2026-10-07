@@ -1,0 +1,32 @@
+{
+ "frame": {
+  "title": "AWS Config history reaches Abstract through a new bucket",
+  "subtitle": "AWS Config delivers history files to the bucket, which notifies a queue Abstract polls; the delivery channel is opt-in",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 150,
+  "integration_y": 547,
+  "abstract_sublabel": "polls the queue, reads the files\njson_key configurationItems"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "AWS Config",
+   "nodes": [
+    {"id": "recorder", "label": "AWS Config recorder", "sublabel": "records your resources", "icon": "aws:config", "x": 60, "y": 110, "existing": true},
+    {"id": "channel", "label": "Delivery channel", "sublabel": "optional: CreateDeliveryChannel,\nor repoint yours", "icon": "aws:config", "x": 330, "y": 110, "builds": ["AWS::Config::DeliveryChannel"]},
+    {"id": "bucket", "label": "Config bucket", "sublabel": "AWSLogs/ACCOUNT/Config/", "icon": "aws:s3", "x": 600, "y": 110, "builds": ["AWS::S3::Bucket"]},
+    {"id": "queue", "label": "SQS queue + DLQ", "sublabel": "each .json.gz history file", "icon": "aws:sqs", "x": 870, "y": 330, "builds": ["AWS::SQS::Queue"]},
+    {"id": "role", "label": "IAM role", "sublabel": "GetObject under the Config path,\nconsume the queue", "icon": "aws:role", "x": 600, "y": 540, "builds": ["AbstractIngestRole"]}
+   ],
+   "edges": [
+    {"from": "recorder", "to": "channel", "label": "history"},
+    {"from": "channel", "to": "bucket", "label": "every 6 h", "tone": "muted", "dashed": true},
+    {"from": "bucket", "to": "queue", "label": "ObjectCreated", "exit": [1, 0.85], "entry": [0, 0.5]},
+    {"from": "bucket", "to": "abstract", "label": "GetObject", "entry": [0, 0.3], "label_x": -0.5},
+    {"from": "queue", "to": "abstract", "label": "poll", "entry": [0, 0.7], "label_x": -0.4},
+    {"from": "abs-integration", "to": "role", "label": "AssumeRole + External ID", "tone": "amber", "dashed": true, "exit": [0, 0.5], "entry": [1, 0.5]}
+   ]
+  }
+ ]
+}

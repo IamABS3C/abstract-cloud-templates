@@ -1,0 +1,164 @@
+{
+ "frame": {
+  "title": "Security Hub findings reach Abstract through EventBridge and Firehose",
+  "subtitle": "An EventBridge rule hands each finding to Firehose, which writes them one per line to a new bucket that notifies a queue",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 150,
+  "integration_y": 547,
+  "abstract_sublabel": "polls the queue, reads NDJSON\nparses ASFF or OCSF to ACS"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Security Hub",
+   "nodes": [
+    {
+     "id": "hub",
+     "label": "Security Hub",
+     "sublabel": "finding events,\nsource aws.securityhub",
+     "icon": "aws:security_hub",
+     "x": 60,
+     "y": 110,
+     "existing": true
+    },
+    {
+     "id": "rule",
+     "label": "EventBridge rule",
+     "sublabel": "one detail-type:\nCSPM (ASFF) or V2 (OCSF)",
+     "icon": "aws:eventbridge",
+     "x": 330,
+     "y": 110,
+     "builds": [
+      "AWS::Events::Rule"
+     ]
+    },
+    {
+     "id": "fh",
+     "label": "Firehose stream",
+     "sublabel": "uncompressed,\none finding per line",
+     "icon": "aws:kinesis_data_firehose",
+     "x": 600,
+     "y": 110,
+     "builds": [
+      "AWS::KinesisFirehose::DeliveryStream"
+     ]
+    },
+    {
+     "id": "bucket",
+     "label": "Bucket",
+     "sublabel": "securityhub/",
+     "icon": "aws:s3",
+     "x": 870,
+     "y": 110,
+     "builds": [
+      "AWS::S3::Bucket"
+     ]
+    },
+    {
+     "id": "queue",
+     "label": "SQS queue + DLQ",
+     "sublabel": "new objects under securityhub/",
+     "icon": "aws:sqs",
+     "x": 870,
+     "y": 330,
+     "builds": [
+      "AWS::SQS::Queue"
+     ]
+    },
+    {
+     "id": "svcroles",
+     "label": "Service roles",
+     "sublabel": "EventBridge to Firehose,\nFirehose to S3",
+     "icon": "aws:role",
+     "x": 330,
+     "y": 540,
+     "builds": [
+      "EventsToFirehoseRole",
+      "FirehoseDeliveryRole"
+     ]
+    },
+    {
+     "id": "role",
+     "label": "IAM role",
+     "sublabel": "GetObject under securityhub/,\nconsume the queue",
+     "icon": "aws:role",
+     "x": 600,
+     "y": 540,
+     "builds": [
+      "AbstractIngestRole"
+     ]
+    }
+   ],
+   "edges": [
+    {
+     "from": "hub",
+     "to": "rule",
+     "label": "findings"
+    },
+    {
+     "from": "rule",
+     "to": "fh",
+     "label": "PutRecord"
+    },
+    {
+     "from": "fh",
+     "to": "bucket",
+     "label": "batched objects"
+    },
+    {
+     "from": "bucket",
+     "to": "queue",
+     "label": "ObjectCreated",
+     "exit": [
+      1,
+      0.85
+     ],
+     "entry": [
+      1,
+      0.3
+     ]
+    },
+    {
+     "from": "bucket",
+     "to": "abstract",
+     "label": "GetObject",
+     "entry": [
+      0,
+      0.3
+     ],
+     "label_x": -0.3
+    },
+    {
+     "from": "queue",
+     "to": "abstract",
+     "label": "poll",
+     "entry": [
+      0,
+      0.7
+     ],
+     "label_x": -0.4,
+     "exit": [
+      1,
+      0.7
+     ]
+    },
+    {
+     "from": "abs-integration",
+     "to": "role",
+     "label": "AssumeRole + External ID",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.5
+     ],
+     "entry": [
+      1,
+      0.5
+     ]
+    }
+   ]
+  }
+ ]
+}

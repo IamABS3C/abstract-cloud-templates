@@ -1,0 +1,148 @@
+id: aws-source-security-hub-findings-firehose
+title: 'Security Hub findings to Abstract: EventBridge and Firehose'
+cloud: aws
+role: source
+scope: account
+summary: Creates an EventBridge rule for Security Hub's finding events, a Firehose delivery stream that writes them
+  one per line to a new hardened bucket, the SQS queue the bucket notifies and the role Abstract assumes to read them.
+  Security Hub has no S3 export of its own. Deployed in a test account on 2026-10-07. A record put to Firehose landed in the bucket and reached the queue in about five minutes, and the role was assumed with its External ID.
+formats:
+- cloudformation
+- script
+permissions:
+- role: Create IAM roles, S3 buckets, SQS queues, Firehose delivery streams and EventBridge rules
+  where: The target AWS account and Region
+  why: 'Deployer: the stack creates the whole path; deploy.sh passes CAPABILITY_NAMED_IAM because it names the role.'
+- role: firehose:PutRecord, firehose:PutRecordBatch
+  where: This stack's delivery stream (a role EventBridge assumes)
+  why: 'EventBridge: hand each finding event to Firehose.'
+- role: s3:PutObject, s3:GetObject, s3:AbortMultipartUpload, s3:GetBucketLocation, s3:ListBucket, s3:ListBucketMultipartUploads
+  where: The bucket, objects only under securityhub/ and firehose-errors/securityhub/ (a role Firehose assumes)
+  why: 'Firehose: write batched findings and its error objects.'
+- role: sts:AssumeRole, conditioned on sts:ExternalId
+  where: <NamePrefix>-securityhub-role
+  why: 'Abstract: only the Abstract principal you supply can assume it, and only with the matching External ID.'
+- role: s3:ListBucket, s3:GetBucketLocation, s3:GetObject
+  where: The bucket, under securityhub/
+  why: 'Abstract: read the objects each notification points at.'
+- role: sqs:ReceiveMessage, sqs:DeleteMessage, sqs:ChangeMessageVisibility, sqs:GetQueueAttributes, sqs:GetQueueUrl
+  where: The findings queue
+  why: 'Abstract: consume the notifications.'
+creates:
+- An EventBridge rule on source aws.securityhub and the one detail-type you choose (FindingsDetailType)
+- 'A Firehose delivery stream (encrypted with an AWS owned key) writing uncompressed NDJSON, one finding per line,
+  under securityhub/, and its failed records under firehose-errors/securityhub/, which the queue never sees'
+- 'A hardened bucket <NamePrefix>-securityhub-<account>-<region>: Block Public Access, ACLs disabled, HTTPS-only
+  policy, versioning, lifecycle expiry, retained on stack delete'
+- An SQS queue and dead-letter queue (SSE-SQS), notified for each new object under securityhub/
+- Two service roles (EventBridge to Firehose, Firehose to S3) and the cross-account role <NamePrefix>-securityhub-role
+  trusted only by the Abstract principal, with the External ID
+never_touches:
+- Security Hub itself, its standards, controls, automation rules and other EventBridge rules
+- Findings in other Regions, unless this Region is your Security Hub aggregation Region
+prerequisites:
+- AWS CLI v2, authenticated to the account and Region, and jq for deploy.sh
+- Security Hub (or Security Hub CSPM) enabled. Deploy in the administrator account's aggregation Region to receive
+  every member account's and linked Region's findings in one stream
+- The Abstract principal ARN (or account ID) and External ID, from the AWS S3 SQS Source integration in the Abstract
+  console
+- 'In Abstract, the AWS S3 SQS Source with dataformat nd and a parser for the shape you chose: ASFF for "Security
+  Hub Findings - Imported", OCSF for "Findings Imported V2". Abstract has no managed Security Hub integration'
+- 'Findings are stateful: Security Hub re-sends a finding each time it changes, so the same finding id arrives more
+  than once by design'
+- If Security Lake already collects Security Hub findings, use aws-source-security-lake instead
+parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for created resource names. Lowercase, because it is part of the bucket name.
+  default: abstract
+- name: AbstractPrincipalArn
+  type: string
+  required: false
+  description: The principal Abstract provides. Accepts a full IAM role/user/root ARN or a bare 12-digit account id
+    (expanded to arn:aws:iam::<acct>:root).
+  default: ''
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+  example: <AbstractPrincipalArn>
+- name: ExternalId
+  type: securestring
+  required: false
+  description: 'External ID provided by Abstract, enforced on sts:AssumeRole. It is PER-TENANT: copy it from the
+    integration in the Abstract console, once, and give the same value to whoever deploys the role.'
+  find_it: 'Abstract console: the AWS integration''s role step shows the principal and the External ID'
+- name: PermissionsBoundaryArn
+  type: string
+  required: false
+  description: 'Optional IAM permissions-boundary policy ARN attached to every role the stack creates. Find it with:
+    aws iam list-policies --scope Local --query Policies[].Arn'
+  default: ''
+  find_it: aws iam list-policies --scope Local --query Policies[].Arn
+- name: MaxSessionDurationSeconds
+  type: int
+  required: false
+  description: Maximum duration of Abstract's assumed session (3600-43200 seconds, the range IAM accepts for a role).
+  default: 3600
+- name: LogRetentionDays
+  type: int
+  required: false
+  description: Days to keep log objects in the bucket before they expire (0 = keep forever).
+  default: 365
+- name: QueueVisibilityTimeoutSeconds
+  type: int
+  required: false
+  description: Visibility timeout of the notification queue(s); longer than Abstract takes to process one object.
+  default: 900
+- name: DlqMaxReceiveCount
+  type: int
+  required: false
+  description: Receives before a notification moves to the dead-letter queue. 5 surfaces a permanent failure within
+    minutes.
+  default: 5
+- name: BufferIntervalSeconds
+  type: int
+  required: false
+  description: Firehose writes an object at least this often (60-900 s). Longer means fewer, larger objects.
+  default: 300
+- name: BufferSizeMB
+  type: int
+  required: false
+  description: Firehose writes an object when this much data is buffered (1-128 MB), whichever comes first.
+  default: 64
+- name: FindingsDetailType
+  type: string
+  required: false
+  description: Which finding events to collect. "Security Hub Findings - Imported" is Security Hub CSPM (ASFF). "Findings
+    Imported V2" is Security Hub (OCSF). One shape per stack, so one parser per Abstract configuration; deploy twice
+    for both.
+  default: Security Hub Findings - Imported
+  allowed:
+  - Security Hub Findings - Imported
+  - Findings Imported V2
+outputs:
+- AwsRegion
+- BucketNameOut
+- RoleArn
+- SqsQueueUrl
+- SqsQueueArn
+- SqsDeadLetterQueueUrl
+- DeliveryStreamName
+abstract:
+  integration: aws_s3_sqs_source
+verify:
+- check: The stack outputs carry the values the Abstract integration needs
+  command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
+  healthy: RoleArn, SqsQueueUrl, SqsQueueArn, BucketNameOut and AwsRegion are present.
+- check: The rule is matching findings
+  command: aws cloudwatch get-metric-statistics --namespace AWS/Events --metric-name MatchedEvents --dimensions Name=RuleName,Value=<NamePrefix>-securityhub-findings
+    --start-time <one-hour-ago> --end-time <now> --period 300 --statistics Sum
+  healthy: A non-zero sum once Security Hub imports or updates a finding.
+- check: Findings objects are arriving, and no error objects
+  command: aws s3 ls s3://<bucket>/ --recursive | tail -5
+  healthy: Objects under securityhub/ after the buffer interval; nothing under firehose-errors/.
+cost: Firehose ingestion is billed per record rounded up to 5 KB, so small findings cost more than their size suggests;
+  plus S3 storage and one SQS message per object.
+when_to_use: You want Security Hub findings in Abstract and do not run Security Lake.
+when_not_to_use: Security Lake is enabled (one subscriber covers Security Hub there), or you only need GuardDuty findings
+  (aws-source-guardduty-findings-s3-sqs reads them at the source).
+live_test: canary

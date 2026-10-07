@@ -562,9 +562,16 @@ Resources:
     Properties:
       AliasName: !Sub alias/${NamePrefix}-CloudTrail
       TargetKeyId: !Ref AbstractKmsKey
+  NotificationDestinationsReady:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    Condition: CreateBucket
+    Metadata:
+      QueuePolicy: !If [CreateQueue, !Ref NotificationQueuePolicy, '']
+      TopicPolicy: !Ref NotificationTopicPolicy
   LogBucket:
     Type: AWS::S3::Bucket
     Condition: CreateBucket
+    DependsOn: [NotificationDestinationsReady]
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Metadata:

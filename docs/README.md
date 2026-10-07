@@ -41,6 +41,9 @@ go deeper on what spans templates: architecture, permissions and troubleshooting
 | [Deploy from Cloud Shell](gcp/DEPLOY-CLOUD-SHELL.md) | You deploy with the Open in Cloud Shell buttons |
 | [Deploy with Infrastructure Manager](gcp/DEPLOY-INFRA-MANAGER.md) | You deploy through Google's managed Terraform service |
 | [Scripts](gcp/SCRIPTS.md) | You use the guided setup and helper scripts |
+| [The data flow](gcp/DATAFLOW.md) | You want to know how each log source reaches Abstract, hop by hop |
+| [Troubleshooting](gcp/TROUBLESHOOTING.md) | The feed is quiet, short or stopped |
+| [Identity logs](gcp/IDENTITY.md) | You need sign-in, impersonation or federation events |
 | [Abstract integration](gcp/ABSTRACT-INTEGRATION.md) | You connect the subscription to Abstract |
 | [Google Workspace](gcp/WORKSPACE.md) | You onboard Workspace audit logs |
 | [VPC Service Controls](gcp/VPC-SC.md) | Your projects sit inside a service perimeter |

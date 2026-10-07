@@ -1,0 +1,32 @@
+{
+ "frame": {
+  "title": "Network Firewall logs reach Abstract, one queue per log type",
+  "subtitle": "Your firewall logs to a new bucket under three prefixes; each prefix notifies its own queue and Abstract configuration",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 150,
+  "integration_y": 547,
+  "abstract_sublabel": "one configuration per log type\nalert, flow and TLS parsers"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Network Firewall",
+   "nodes": [
+    {"id": "fw", "label": "Network Firewall", "sublabel": "your firewall;\nits logging is turned on", "icon": "aws:networking_and_content_delivery", "x": 60, "y": 110, "existing": true},
+    {"id": "logcfg", "label": "Logging configuration", "sublabel": "alert always;\nflow and TLS by choice", "icon": "aws:cloudwatch", "x": 330, "y": 110, "builds": ["AWS::NetworkFirewall::LoggingConfiguration"]},
+    {"id": "bucket", "label": "Log bucket", "sublabel": "prefixes alert/, flow/, tls/", "icon": "aws:s3", "x": 600, "y": 110, "builds": ["AWS::S3::Bucket"]},
+    {"id": "queues", "label": "Three SQS queues + DLQs", "sublabel": "alert, flow, TLS:\neach .log.gz to its own queue", "icon": "aws:sqs", "x": 870, "y": 330, "builds": ["AlertQueue", "FlowQueue", "TlsQueue"]},
+    {"id": "role", "label": "IAM role", "sublabel": "GetObject under the prefix,\nconsume all three queues", "icon": "aws:role", "x": 600, "y": 540, "builds": ["AbstractIngestRole"]}
+   ],
+   "edges": [
+    {"from": "fw", "to": "logcfg", "label": "logs"},
+    {"from": "logcfg", "to": "bucket", "label": "every 5 min"},
+    {"from": "bucket", "to": "queues", "label": "ObjectCreated, by prefix", "exit": [1, 0.85], "entry": [0, 0.5]},
+    {"from": "bucket", "to": "abstract", "label": "GetObject", "entry": [0, 0.3], "label_x": -0.5},
+    {"from": "queues", "to": "abstract", "label": "poll", "entry": [0, 0.7], "label_x": -0.4},
+    {"from": "abs-integration", "to": "role", "label": "AssumeRole + External ID", "tone": "amber", "dashed": true, "exit": [0, 0.5], "entry": [1, 0.5]}
+   ]
+  }
+ ]
+}

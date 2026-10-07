@@ -648,9 +648,20 @@ Resources:
       TargetKeyId: !Ref AbstractKmsKey
 
   # ---- S3 log bucket ------------------------------------------------
+  # S3 checks every notification destination when it creates the bucket, so the queue and topic
+  # policies that let it publish must exist first. A wait handle carries the dependency, because a
+  # DependsOn cannot name a resource whose condition may be false.
+  NotificationDestinationsReady:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    Condition: CreateBucket
+    Metadata:
+      QueuePolicy: !If [CreateQueue, !Ref NotificationQueuePolicy, ""]
+      TopicPolicy: !If [UseSns, !Ref NotificationTopicPolicy, ""]
+
   LogBucket:
     Type: AWS::S3::Bucket
     Condition: CreateBucket
+    DependsOn: [NotificationDestinationsReady]
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     # W1030 is suppressed on this resource alone, for one site: KMSMasterKeyID below takes
@@ -833,7 +844,17 @@ Resources:
               Action: "sqs:SendMessage"
               Resource: !GetAtt NotificationQueue.Arn
               Condition:
-                ArnLike: { "aws:SourceArn": !GetAtt LogBucket.Arn }
+                # The bucket's ARN is built from its name, not read with GetAtt: S3 checks this policy
+                # while it creates the bucket, so the policy must not wait for the bucket.
+                ArnLike:
+                  "aws:SourceArn": !Sub
+                    - "arn:${AWS::Partition}:s3:::${Bucket}"
+                    - Bucket: !If
+                        - AutoBucketName
+                        - !Sub
+                          - "${NamePrefix}-${slug}-${AWS::AccountId}-${AWS::Region}"
+                          - slug: !FindInMap [SourceConfig, !Ref SourceType, BucketSlug]
+                        - !Ref BucketName
                 StringEquals: { "aws:SourceAccount": !Ref "AWS::AccountId" }
             - !Ref "AWS::NoValue"
           - !If
@@ -876,7 +897,15 @@ Resources:
               Action: "sns:Publish"
               Resource: !Ref NotificationTopic
               Condition:
-                ArnLike: { "aws:SourceArn": !GetAtt LogBucket.Arn }
+                ArnLike:
+                  "aws:SourceArn": !Sub
+                    - "arn:${AWS::Partition}:s3:::${Bucket}"
+                    - Bucket: !If
+                        - AutoBucketName
+                        - !Sub
+                          - "${NamePrefix}-${slug}-${AWS::AccountId}-${AWS::Region}"
+                          - slug: !FindInMap [SourceConfig, !Ref SourceType, BucketSlug]
+                        - !Ref BucketName
                 StringEquals: { "aws:SourceAccount": !Ref "AWS::AccountId" }
             - !Ref "AWS::NoValue"
           - !If

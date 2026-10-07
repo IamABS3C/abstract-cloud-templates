@@ -1,0 +1,22 @@
+[
+  {
+    "ParameterKey": "NamePrefix",
+    "ParameterValue": "abstract-cw-metrics"
+  },
+  {
+    "ParameterKey": "AbstractPrincipalArn",
+    "ParameterValue": "<AbstractPrincipalArn>"
+  },
+  {
+    "ParameterKey": "ExternalId",
+    "ParameterValue": "<ExternalId>"
+  },
+  {
+    "ParameterKey": "PermissionsBoundaryArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "MaxSessionDurationSeconds",
+    "ParameterValue": "3600"
+  }
+]

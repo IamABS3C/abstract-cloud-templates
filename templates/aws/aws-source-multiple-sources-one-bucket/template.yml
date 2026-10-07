@@ -65,6 +65,13 @@ prerequisites:
 - deploy.sh uploads the child templates from the sibling folders to s3://<template-bucket>/<prefix>/<template-id>.yaml
   before it deploys; CloudFormation refuses any TemplateURL that is not on S3
 parameters:
+- name: NamePrefix
+  type: string
+  required: false
+  description: Prefix for every child stack's resource names, 2 to 11 characters so every bucket name stays within
+    S3's 63-character limit in every Region. IAM role names are global to the account, so a second
+    Region, or a second copy in the same Region, needs a different prefix. Keep "abstract" for an existing stack.
+  default: abstract
 - name: TemplateBaseUrl
   type: string
   required: false

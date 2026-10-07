@@ -4,7 +4,7 @@
 
 Azure cannot send its logs straight to a third party, so every Azure log source goes through an Event Hub in your subscription: Azure writes to the hub, and Abstract reads from it with a listen-only key. You deploy the hub first, point your sources at it, then add one Azure Event Hub integration in Abstract per hub. Sending events the other way, from Abstract into Microsoft Sentinel or an Event Hub of yours, is a separate setup further down the same questions.
 
-Answer the questions below. Each answer leads to the next question or to one plan: the steps in order, from checking what you have to cleaning it all up.
+Answer the questions below. Each answer leads to the next question or to one plan: the steps in order, from checking what you have to cleaning it all up. The same questions are in the [onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure), which gives each plan a link you can share.
 
 ## What do you want to set up?
 
@@ -42,6 +42,8 @@ Answer the questions below. Each answer leads to the next question or to one pla
 **Fits when:** Several subscriptions, or an estate that will grow.
 
 **Why this way:** One Policy assignment at a management group covers every subscription in it, including new ones, and puts a setting back if someone removes it.
+
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=0.0). To send someone this plan, share this link.
 
 **Not chosen:** The one-subscription template: it covers exactly one subscription, and nothing extends it to new ones.
 
@@ -128,6 +130,8 @@ Answer the questions below. Each answer leads to the next question or to one pla
 
 **Why this way:** The smallest change that proves the whole path. Move to the Policy plan when the pilot is done.
 
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=0.1). To send someone this plan, share this link.
+
 **Not chosen:** The Policy plan: it needs rights on a management group you may not have for a pilot.
 
 1. **Check first.** Cloud admin, in Azure Cloud Shell (Bash).
@@ -211,6 +215,8 @@ Answer the questions below. Each answer leads to the next question or to one pla
 
 **Why this way:** One tenant-level setting covers every sign-in and audit event in the tenant.
 
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=0.2). To send someone this plan, share this link.
+
 1. **Check first.** Cloud admin, in Azure Cloud Shell (Bash).
 
    Take stock first. These commands are read-only: who you are signed in as, your management groups and subscriptions, the diagnostic settings and Event Hub namespaces you already have, and whether Entra ID already streams its logs somewhere.
@@ -281,6 +287,8 @@ Answer the questions below. Each answer leads to the next question or to one pla
 
 **Why this way:** No privileged identity is involved. The template builds the ingestion stack and gives your app the one role it needs.
 
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=1.0). To send someone this plan, share this link.
+
 **Not chosen:** The template-created app: needs either the Graph Bicep extension or a privileged managed identity.
 
 1. **Check first.** Cloud admin, in Azure Cloud Shell (Bash).
@@ -336,6 +344,8 @@ Answer the questions below. Each answer leads to the next question or to one pla
 
 **Why this way:** The app is created as you, through Microsoft Graph, so no standing privileged identity has to exist first.
 
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=1.1). To send someone this plan, share this link.
+
 **Not chosen:** Portal deployment: the Graph Bicep extension works only from the Azure CLI or PowerShell.
 
 1. **Check first.** Cloud admin, in Azure Cloud Shell (Bash).
@@ -386,6 +396,8 @@ Answer the questions below. Each answer leads to the next question or to one pla
 **Fits when:** Portal-only teams and labs.
 
 **Why this way:** A deployment script creates the app and its secret, so the whole setup runs from the portal wizard.
+
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=1.2). To send someone this plan, share this link.
 
 **Not chosen:** Production: it needs a privileged managed identity that outlives the deploy.
 
@@ -440,6 +452,8 @@ Answer the questions below. Each answer leads to the next question or to one pla
 
 **Why this way:** A namespace and one hub with a send-only key, so Abstract can write and nothing else.
 
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=2). To send someone this plan, share this link.
+
 1. **Check first.** Cloud admin, in Azure Cloud Shell (Bash).
 
    Take stock first. These commands are read-only: who you are signed in as, your management groups and subscriptions, the diagnostic settings and Event Hub namespaces you already have, and whether Entra ID already streams its logs somewhere.
@@ -485,6 +499,8 @@ Answer the questions below. Each answer leads to the next question or to one pla
 
 **Why this way:** One Logic App with one pre-consented identity creates the app registration when a subscription is created or tagged, so there is one identity to audit.
 
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=3.0). To send someone this plan, share this link.
+
 **Not chosen:** The Policy variant: it runs a privileged script inside every subscription.
 
 1. **Check first.** Cloud admin, in Azure Cloud Shell (Bash).
@@ -525,6 +541,8 @@ Answer the questions below. Each answer leads to the next question or to one pla
 **Fits when:** Abstract reads the Microsoft Graph or Microsoft 365 APIs, and governance requires every control to arrive by Azure Policy.
 
 **Why this way:** Policy cannot create Entra objects, so the assignment runs a deployment script as a pre-consented identity in each subscription.
+
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=3.1). To send someone this plan, share this link.
 
 **Not chosen:** The Logic App: preferred, but not delivered through Policy.
 

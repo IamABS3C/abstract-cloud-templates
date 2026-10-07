@@ -1,0 +1,27 @@
+{
+ "frame": {
+  "title": "CloudWatch metrics reach Abstract through a read-only role",
+  "subtitle": "No bucket or queue: Abstract reads metrics by API with the one role the template builds",
+  "cloud_label": "Your AWS account",
+  "height": 700,
+  "abstract_y": 150,
+  "integration_y": 547,
+  "abstract_sublabel": "reads metrics by API\nkeeps them beside your logs"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Metrics role",
+   "nodes": [
+    {"id": "cw", "label": "CloudWatch metrics", "sublabel": "every namespace in the Region", "icon": "aws:cloudwatch", "x": 330, "y": 110, "existing": true},
+    {"id": "rds", "label": "RDS instances", "sublabel": "described to name\ntheir dimensions", "icon": "aws:rds", "x": 330, "y": 330, "existing": true},
+    {"id": "role", "label": "IAM role", "sublabel": "GetMetricStatistics, ListMetrics,\nrds:DescribeDBInstances", "icon": "aws:role", "x": 600, "y": 540, "builds": ["AWS::IAM::Role"]}
+   ],
+   "edges": [
+    {"from": "abs-integration", "to": "role", "label": "AssumeRole + External ID", "tone": "amber", "dashed": true, "exit": [0, 0.5], "entry": [1, 0.5]},
+    {"from": "cw", "to": "abstract", "label": "metric data", "entry": [0, 0.3], "label_x": -0.5},
+    {"from": "rds", "to": "abstract", "label": "instance names", "tone": "muted", "entry": [0, 0.7], "label_x": -0.4}
+   ]
+  }
+ ]
+}

@@ -4,7 +4,7 @@
 
 You end up with one log sink that copies your Google Cloud audit logs to a Pub/Sub topic in a logging project, a subscription Abstract reads, and a service account that can read only that subscription. Everything runs from Cloud Shell with the guided setup script: it shows what it will do, asks before changing anything, and checks the result. Each step names the Terraform template that does the same thing, for teams that need infrastructure as code.
 
-Answer the questions below. Each answer leads to the next question or to one plan: the steps in order, from checking what you have to cleaning it all up.
+Answer the questions below. Each answer leads to the next question or to one plan: the steps in order, from checking what you have to cleaning it all up. The same questions are in the [onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/gcp), which gives each plan a link you can share.
 
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/IamABS3C/abstract-cloud-templates&cloudshell_git_branch=main&cloudshell_workspace=tools/gcp-guided-setup&cloudshell_tutorial=WALKTHROUGH.md)
 
@@ -26,6 +26,8 @@ The sink's scope decides what is covered. Projects created later inside the scop
 **Fits when:** You want every project covered, including ones created later.
 
 **Why this way:** One aggregated sink at the organization covers everything by containment, so nothing needs repeating when projects are added.
+
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/gcp?a=0). To send someone this plan, share this link.
 
 **Not chosen:** A folder or project sink: it would miss projects outside it.
 
@@ -214,6 +216,8 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 **Why this way:** A folder sink covers every project in the folder, including ones created later, without organization-wide rights.
 
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/gcp?a=1). To send someone this plan, share this link.
+
 **Not chosen:** The organization sink: you asked for one folder.
 
 1. **Check first.** Cloud admin, in Cloud Shell.
@@ -400,6 +404,8 @@ The sink's scope decides what is covered. Projects created later inside the scop
 **Fits when:** You want to try Abstract on one project before covering more.
 
 **Why this way:** The smallest change that proves the whole path. Move to the organization plan when the pilot is done.
+
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/gcp?a=2). To send someone this plan, share this link.
 
 **Not chosen:** The organization sink: it needs organization rights you may not have for a pilot.
 
