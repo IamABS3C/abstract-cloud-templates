@@ -1,5 +1,5 @@
 id: azure-destination-event-hub
-title: Event Hub destination
+title: 'Abstract to your Event Hub: namespace and hub'
 cloud: azure
 role: destination
 scope: resource-group

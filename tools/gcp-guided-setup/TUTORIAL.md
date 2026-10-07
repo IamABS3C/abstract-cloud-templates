@@ -3,7 +3,7 @@
 # Readiness assessment — start here
 
 <!-- guided-step -->
-> **This is step 2 of the guided setup (What you can change).** The guided setup does it for you and checks it: from the repository root run `./abstract-gcp-setup.sh --step 2`, or follow `tools/gcp-guided-setup/WALKTHROUGH.md`. This page is the Terraform way to do the same step.
+> **This is step 2 of the guided setup (What you can change).** The guided setup does it for you and checks it: from the repository root run `./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2`, or follow `tools/gcp-guided-setup/WALKTHROUGH.md`. This page is the Terraform way to do the same step.
 <!-- /guided-step -->
 
 <walkthrough-tutorial-duration duration="5"></walkthrough-tutorial-duration>

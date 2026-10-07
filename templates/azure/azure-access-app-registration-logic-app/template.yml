@@ -1,5 +1,5 @@
 id: azure-access-app-registration-logic-app
-title: App registrations, by Logic App
+title: 'Abstract access to new subscriptions: app registrations by Logic App'
 cloud: azure
 role: access
 scope: resource-group

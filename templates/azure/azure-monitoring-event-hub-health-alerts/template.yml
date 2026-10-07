@@ -1,5 +1,5 @@
 id: azure-monitoring-event-hub-health-alerts
-title: Pipeline health alerts
+title: Azure alerts when the Abstract feed stalls
 cloud: azure
 role: monitoring
 scope: resource-group

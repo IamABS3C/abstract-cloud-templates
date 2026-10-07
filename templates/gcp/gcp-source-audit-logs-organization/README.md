@@ -1,4 +1,4 @@
-# Audit logs, whole organization
+# All Google Cloud audit logs to Abstract: organization sink
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ One aggregated Cloud Logging sink at organization scope routes audit and platfor
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
 
-![How Audit logs, whole organization fits together](diagram.png)
+![How All Google Cloud audit logs to Abstract: organization sink fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Every GCP engagement, from a single project up to a multi-folder organization.
 
 **Not for:** Logs already sitting as objects in a bucket, Google Workspace sign-ins, and Security Command Center findings, which each have their own path.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

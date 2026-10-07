@@ -1,4 +1,4 @@
-# One source, every account
+# One AWS source in every account: organization StackSet
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A wrapper around CloudFormation StackSets, service-managed for AWS Organizations
 
 **Cloud:** aws · **Role:** source · **Scope:** organization
 
-![How One source, every account fits together](diagram.png)
+![How One AWS source in every account: organization StackSet fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ The same S3 and SQS source should exist in every account of an organizational un
 
 **Not for:** For organization-wide CloudTrail, where a single organization trail (CtIsOrganizationTrail=true with CtOrganizationId) in the management account is preferred over per-account trails.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

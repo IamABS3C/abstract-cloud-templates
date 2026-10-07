@@ -1,4 +1,4 @@
-# Logging project
+# Google Cloud first step: logging project and APIs
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Optional: enables the APIs the pipeline needs on an existing project, or creates
 
 **Cloud:** gcp · **Role:** foundation · **Scope:** project
 
-![How Logging project fits together](diagram.png)
+![How Google Cloud first step: logging project and APIs fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Greenfield, or when the only candidate is a workload project.
 
 **Not for:** When a security or logging project already exists; point gcp-source-audit-logs-organization at it instead.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

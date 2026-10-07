@@ -1,5 +1,5 @@
 id: gcp-source-billing-account-logs
-title: Billing account audit logs
+title: 'Billing account audit logs to Abstract: billing sink'
 cloud: gcp
 role: source
 scope: billing-account

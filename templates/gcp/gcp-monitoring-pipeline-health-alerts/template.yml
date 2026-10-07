@@ -1,5 +1,5 @@
 id: gcp-monitoring-pipeline-health-alerts
-title: Pipeline health alerts
+title: Google Cloud alerts when the Abstract feed stalls
 cloud: gcp
 role: monitoring
 scope: project

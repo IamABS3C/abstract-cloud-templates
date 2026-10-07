@@ -1,4 +1,4 @@
-# Asset and IAM changes
+# Asset and IAM changes to Abstract: asset feed
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Cloud Asset Inventory publishes to Pub/Sub through its own feed, which no log si
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
 
-![How Asset and IAM changes fits together](diagram.png)
+![How Asset and IAM changes to Abstract: asset feed fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Alongside gcp-source-audit-logs-organization, for policy diffs and asset inventory.
 
 **Not for:** As a replacement for the audit-log sink; the two answer different questions. Configure it as a separate source in Abstract.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

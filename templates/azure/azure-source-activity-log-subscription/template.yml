@@ -1,5 +1,5 @@
 id: azure-source-activity-log-subscription
-title: Activity Log, one subscription
+title: 'Activity Log to Abstract: one subscription'
 cloud: azure
 role: source
 scope: subscription

@@ -1,4 +1,4 @@
-# Event Hub destination
+# Abstract to your Event Hub: namespace and hub
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,9 +6,11 @@ Provisions the Azure side of the Abstract Azure EventHub Destination: an Event H
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
-![How Event Hub destination fits together](diagram.png)
+![How Abstract to your Event Hub: namespace and hub fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

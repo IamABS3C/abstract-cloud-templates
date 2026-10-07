@@ -4,8 +4,8 @@ Everything needed before the first deployment: which scope, whether to create a 
 billing, quota, and every permission — for both the gcloud/Cloud Shell path and
 Infrastructure Manager.
 
-**Run [`tools/gcp-guided-setup/preflight.sh`](../../tools/gcp-guided-setup/preflight.sh) first.** It answers most of this
-against the real environment instead of in the abstract.
+**To set up, follow [the setup guide](GUIDE.md).** This page is the background behind its steps.
+The guided setup's steps 1 and 2 check most of what follows against your real environment.
 
 ---
 
@@ -230,13 +230,14 @@ services that generate nothing.
 ## 7. Order of operations
 
 ```
-1. preflight.sh                     read-only; resolves most of the above
-2. gcp-foundation-logging-project        (optional)   create the project, enable APIs
-3. gcp-foundation-data-access-audit-logs     (optional)   switch 1 — only if you want Data Access
-4. gcp-source-audit-logs-organization                  the pipeline
-5. gcp-monitoring-pipeline-health-alerts                    alerting. Do NOT defer this
-6. wait 5 minutes                   the sink is not live when Terraform returns
-7. verify with a FRESH event        see the tutorial
+1. audit-gcp-estate.sh, then --step 1 and 2   read-only: what exists, and every permission
+2. --step 3   logging project                 create or pick it, enable APIs
+3. --step 4   the pipeline                    topic, subscription, sink, publisher grant
+4. --step 5   Abstract's access               service account and key
+5. --step 6   Data Access (optional)          both switches
+6. --step 8   health alerts                   do NOT defer this
+7. --step 9   verify with a FRESH event       wait 5 minutes: the sink is not live at once
+8. --step 10  connect Abstract
 ```
 
 Audit config before the pipeline, so the logs exist by the time the filter looks for them.

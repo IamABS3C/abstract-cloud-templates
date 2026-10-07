@@ -1,4 +1,4 @@
-# Read role, existing bucket
+# Existing S3 logs to Abstract: read-only access role
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Creates only the least-privilege IAM role Abstract assumes, with an External ID,
 
 **Cloud:** aws · **Role:** access · **Scope:** account
 
-![How Read role, existing bucket fits together](diagram.png)
+![How Existing S3 logs to Abstract: read-only access role fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -14,7 +14,7 @@ Editable source: [diagram.drawio](diagram.drawio)
 
 Logs already land in a bucket that notifies a queue, and Abstract only needs a role to read them.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

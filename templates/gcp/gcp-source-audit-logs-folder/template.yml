@@ -1,5 +1,5 @@
 id: gcp-source-audit-logs-folder
-title: Audit logs, one folder
+title: 'One folder''s audit logs to Abstract: folder sink'
 cloud: gcp
 role: source
 scope: folder

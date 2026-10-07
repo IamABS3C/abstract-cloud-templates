@@ -1,5 +1,5 @@
 id: azure-access-key-vault-secrets-reader
-title: Key Vault secrets reader
+title: 'Read access to a Key Vault: one role assignment'
 cloud: azure
 role: access
 scope: resource-group

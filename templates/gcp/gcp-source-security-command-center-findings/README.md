@@ -1,4 +1,4 @@
-# Security Command Center findings
+# Security Command Center findings to Abstract: notification feed
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Security Command Center does not flow through the Log Router; it publishes to Pu
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
 
-![How Security Command Center findings fits together](diagram.png)
+![How Security Command Center findings to Abstract: notification feed fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Security Command Center Premium or Enterprise is on and its findings should reach Abstract.
 
 **Not for:** As a way to collect audit logs; configure findings as a separate source in Abstract, because their shape differs.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

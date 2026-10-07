@@ -1,4 +1,4 @@
-# Audit logs, one folder
+# One folder's audit logs to Abstract: folder sink
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ The same aggregated sink one ring in: every project in a folder and its sub-fold
 
 **Cloud:** gcp · **Role:** source · **Scope:** folder
 
-![How Audit logs, one folder fits together](diagram.png)
+![How One folder's audit logs to Abstract: folder sink fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Organization-scope logging.configWriter is not yet available.
 
 **Not for:** Once organization scope is available: move to gcp-source-audit-logs-organization rather than adding more folder sinks.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

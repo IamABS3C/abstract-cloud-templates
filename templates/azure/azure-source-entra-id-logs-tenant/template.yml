@@ -1,5 +1,5 @@
 id: azure-source-entra-id-logs-tenant
-title: Entra ID logs
+title: Entra ID sign-in and audit logs to Abstract
 cloud: azure
 role: source
 scope: tenant

@@ -1,5 +1,5 @@
 id: aws-access-read-role-existing-bucket-and-queue
-title: Read role, existing bucket
+title: 'Existing S3 logs to Abstract: read-only access role'
 cloud: aws
 role: access
 scope: account

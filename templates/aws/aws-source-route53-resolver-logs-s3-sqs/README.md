@@ -1,4 +1,4 @@
-# Route 53 Resolver query logs
+# Route 53 DNS logs to Abstract: new bucket and queue
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Creates a Route 53 Resolver query-logging configuration for a list of VPCs, its 
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How Route 53 Resolver query logs fits together](diagram.png)
+![How Route 53 DNS logs to Abstract: new bucket and queue fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ You want DNS query logs from your VPCs in Abstract.
 
 **Not for:** Query logs already land in a bucket: use the read role for an existing bucket and queue.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

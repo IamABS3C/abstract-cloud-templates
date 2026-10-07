@@ -1,5 +1,5 @@
 id: aws-source-vpc-flow-logs-s3-sqs
-title: VPC Flow Logs
+title: 'VPC Flow Logs to Abstract: new bucket and queue'
 cloud: aws
 role: source
 scope: account

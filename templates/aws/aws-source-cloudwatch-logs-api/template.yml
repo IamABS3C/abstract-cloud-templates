@@ -1,5 +1,5 @@
 id: aws-source-cloudwatch-logs-api
-title: CloudWatch Logs by API
+title: 'CloudWatch Logs to Abstract: direct API read'
 cloud: aws
 role: source
 scope: account

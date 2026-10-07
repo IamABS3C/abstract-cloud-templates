@@ -1,5 +1,5 @@
 id: gcp-source-security-command-center-findings
-title: Security Command Center findings
+title: 'Security Command Center findings to Abstract: notification feed'
 cloud: gcp
 role: source
 scope: organization

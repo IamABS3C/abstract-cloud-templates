@@ -1,4 +1,4 @@
-# Event Hub source
+# Azure first step: Event Hub that receives all logs
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Azure Monitor cannot send diagnostic data directly to a third party, so every Az
 
 **Cloud:** azure · **Role:** foundation · **Scope:** resource-group
 
-![How Event Hub source fits together](diagram.png)
+![How Azure first step: Event Hub that receives all logs fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Any time Azure telemetry needs to reach Abstract: Activity Log, Entra ID sign-in and audit logs, Defender XDR streaming, or resource logs.
 
 **Not for:** Microsoft Graph API and Microsoft 365 unified-audit collection, which are API-pull integrations behind an Entra app registration and need no hub.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

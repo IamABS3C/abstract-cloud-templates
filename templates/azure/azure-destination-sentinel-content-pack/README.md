@@ -1,4 +1,4 @@
-# Sentinel content pack
+# Sentinel content for Abstract data: rules and workbooks
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A self-contained approximation of the Abstract Microsoft Sentinel solution that 
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
-![How Sentinel content pack fits together](diagram.png)
+![How Sentinel content for Abstract data: rules and workbooks fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 A lab or private install of the Abstract Sentinel content.
 
 **Not for:** An official Content Hub or marketplace listing, which needs Microsoft's packaging and validation tooling run against the source.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

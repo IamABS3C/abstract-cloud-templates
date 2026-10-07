@@ -1,5 +1,5 @@
 id: azure-destination-sentinel-content-pack
-title: Sentinel content pack
+title: 'Sentinel content for Abstract data: rules and workbooks'
 cloud: azure
 role: destination
 scope: resource-group

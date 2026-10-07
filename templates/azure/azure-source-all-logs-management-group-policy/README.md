@@ -1,4 +1,4 @@
-# Azure logs, every subscription
+# All Azure logs to Abstract: every subscription by Policy
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Assign once at a management group and every subscription in it, today's and ever
 
 **Cloud:** azure · **Role:** source · **Scope:** management-group
 
-![How Azure logs, every subscription fits together](diagram.png)
+![How All Azure logs to Abstract: every subscription by Policy fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Any estate with more than about three subscriptions, or any estate that will grow.
 
 **Not for:** A genuine single-subscription estate or short pilot (use the Activity Log template), and Entra ID identity logs, which are tenant-scope.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

@@ -1,4 +1,4 @@
-# S3 server access logs
+# S3 access logs to Abstract: new bucket and queue
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Creates the hardened destination bucket for S3 server access logging, the SQS qu
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How S3 server access logs fits together](diagram.png)
+![How S3 access logs to Abstract: new bucket and queue fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ You want S3 server access logs for one or more buckets in Abstract.
 
 **Not for:** Access logs already land in a bucket: use the read role for an existing bucket and queue.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

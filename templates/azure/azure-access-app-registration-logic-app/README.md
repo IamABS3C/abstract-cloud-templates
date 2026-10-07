@@ -1,4 +1,4 @@
-# App registrations, by Logic App
+# Abstract access to new subscriptions: app registrations by Logic App
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ The recommended path for per-subscription app registrations: one Logic App in on
 
 **Cloud:** azure · **Role:** access · **Scope:** resource-group
 
-![How App registrations, by Logic App fits together](diagram.png)
+![How Abstract access to new subscriptions: app registrations by Logic App fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Per-subscription app registrations for Microsoft Graph or Microsoft 365 collection, unless governance mandates Azure Policy.
 
 **Not for:** Event Hub collection, which needs no app registration.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

@@ -1,4 +1,4 @@
-# Kinesis data stream
+# Kinesis stream to Abstract: direct stream read
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Kinesis is an API-poll source: Abstract reads records directly from a stream. Th
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How Kinesis data stream fits together](diagram.png)
+![How Kinesis stream to Abstract: direct stream read fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -14,7 +14,7 @@ Editable source: [diagram.drawio](diagram.drawio)
 
 Records already flow into a Kinesis data stream (or should), and Abstract should read the stream directly.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

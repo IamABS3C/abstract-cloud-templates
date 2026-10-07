@@ -15,19 +15,6 @@ This sets up a **dedicated Cloud Logging sink on your GCP Cloud Billing Account*
 * The `roles/pubsub.publisher` binding for the sink's writer identity — **the step that is skipped most often, and the number-one cause of a healthy-looking sink that delivers nothing**
 * A service account for Abstract with `roles/pubsub.subscriber` on the subscription only
 
-## Sign in first
-
-Cloud Shell opened this repository in a **temporary** session: Google gives repositories it does not own none of your credentials, and deletes the session's files when it ends.
-
-Sign in, then give Terraform the same sign-in:
-
-```bash
-gcloud auth login
-gcloud auth application-default login
-```
-
-<walkthrough-info-message>**Keep the Terraform state outside this session.** Copy `backend.tf.example` to `backend.tf` and set its bucket before `terraform apply`, or the state is deleted when the session ends.</walkthrough-info-message>
-
 ## Before you start
 
 <walkthrough-project-setup></walkthrough-project-setup>
@@ -38,55 +25,72 @@ You need three things. **The first is usually the blocker, and it is rarely tech
 2. `roles/pubsub.admin` on the logging project.
 3. Your billing account ID: `gcloud billing accounts list`
 
+If the list is empty you do not have access to any billing accounts. Stop here and request access from your billing administrator.
+
 <walkthrough-info-message>Use a **dedicated logging or security project**, not a workload project. Pub/Sub publish quota is consumed in the destination project, and a security pipeline living inside a workload project can be read or broken by that workload's owner.</walkthrough-info-message>
 
-## Step 1 — Set your variables
+<!-- abstract:signin -->
+## Sign in first
 
-List available billing accounts:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
 
 ```bash
-gcloud billing accounts list
+gcloud auth login
+gcloud auth application-default login
+```
+<!-- /abstract:signin -->
+
+<!-- abstract:check -->
+## Check first
+
+Read-only: nothing changes. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Steps 1 and 2 of the guided setup record your scope and check every permission the deploy needs.
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/audit-gcp-estate.sh
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
 ```
 
-Set the billing account ID and destination logging project. Pick the billing account explicitly: an organization often has several, and taking the first one listed can export the wrong account.
+If a permission row is red, find the person who holds that role before you go on.
+
+The guided setup saves your answers (organization, scope, logging project, topic, subscription). Load them for the commands on this page:
+
+```bash
+source ~/.abstract-gcp-setup.env
+```
+<!-- /abstract:check -->
+
+## Choose the billing account
+
+Pick the billing account explicitly: an organization often has several, and taking the first one listed can export the wrong account.
 
 ```bash
 gcloud billing accounts list --filter=open=true --format='table(name.basename():label=ID,displayName)'
-export BILLING_ACCOUNT_ID=""   # paste one ID from the list above
-: "${BILLING_ACCOUNT_ID:?set BILLING_ACCOUNT_ID to one ID from the list above}"
-gcloud billing accounts describe "$BILLING_ACCOUNT_ID" --format='value(displayName,open)'
-export LOG_PROJECT=<walkthrough-project-id/>
-echo "Billing Account: $BILLING_ACCOUNT_ID"
-echo "Log project    : $LOG_PROJECT"
 ```
 
-If the list is empty you do not have access to any billing accounts. Stop here and request access from your billing administrator.
+Set the ID you chose (the format is `XXXXXX-XXXXXX-XXXXXX`). The commands below use it:
 
-## Step 2 — Check what is already true (Permissions preflight)
+```bash
+BILLING_ACCOUNT_ID=XXXXXX-XXXXXX-XXXXXX
+```
 
-Read-only. Nothing changes.
-
-Inspect the IAM policy on the billing account:
+Check the permissions on it. The check that matters is **`roles/logging.configWriter` on the BILLING ACCOUNT**. If you lack this role, a Billing Account Administrator must grant it:
 
 ```bash
 gcloud billing accounts get-iam-policy "$BILLING_ACCOUNT_ID"
-```
-
-The check that matters is **`roles/logging.configWriter` on the BILLING ACCOUNT**. It is the blocking prerequisite and is rarely held by whoever owns the project. If you lack this role, a Billing Account Administrator must grant it:
-
-```bash
 gcloud billing accounts add-iam-policy-binding "$BILLING_ACCOUNT_ID" \
   --member="user:$(gcloud config get-value account)" \
   --role="roles/logging.configWriter"
 ```
 
-<walkthrough-info-message>**Verify Logging Project APIs:** Ensure required APIs are enabled in your logging project before applying:</walkthrough-info-message>
+Ensure the required APIs are enabled in your logging project:
 
 ```bash
 gcloud services enable pubsub.googleapis.com logging.googleapis.com --project="$LOG_PROJECT"
 ```
 
-## Step 3 — Inspect the configuration and filter
+## Inspect the configuration and filter
 
 Cloud Billing writes Admin Activity audit logs (IAM policy changes, project billing links and unlinks, account create, close, reopen, rename and move) and Data Access audit logs, and no System Event logs ([Cloud Billing audit logging](https://docs.cloud.google.com/billing/docs/audit-logging)). This deployment routes Admin Activity (`admin_activity`).
 
@@ -95,34 +99,15 @@ Read the filter before applying: routing is evaluated at write time and there is
 <walkthrough-info-message>**Routing is evaluated at write time and there is no backfill.**
 A filter that was too narrow leaves a permanent hole you cannot fill later. The default configuration routes all Admin Activity audit logs from the billing account.</walkthrough-info-message>
 
-## Step 4 — Deploy
+<!-- abstract:deploy -->
+## Deploy
 
-```bash
-cat > terraform.tfvars <<EOF
-billing_account_id = "$BILLING_ACCOUNT_ID"
-log_project        = "$LOG_PROJECT"
-EOF
-terraform init && terraform plan
-```
+This piece is not part of the guided setup script. Deploy it with Terraform: follow [Deploy with Terraform](#deploy-with-terraform) at the end of this page, then come back here to verify.
+<!-- /abstract:deploy -->
 
-You are already in `templates/gcp/gcp-source-billing-account-logs` — Cloud Shell opened you here.
+## Verify
 
-When the plan looks right, apply the changes:
-
-```bash
-terraform apply
-```
-
-Inspect output identities:
-
-```bash
-terraform output -raw sink_writer_identity
-terraform output -raw topic_id
-```
-
-## Step 5 — Wait before you verify
-
-<walkthrough-info-message>**A sink is not live the instant Terraform returns.** Routing is
+<walkthrough-info-message>**A sink is not live the instant the deploy finishes.** Routing is
 evaluated at WRITE TIME, so events written during the first couple of minutes after the
 sink is created are simply never routed — and no later change recovers
 them.</walkthrough-info-message>
@@ -137,9 +122,16 @@ Measured against a live GCP environment:
 
 **This is the single most likely reason you conclude a working pipeline is broken.** You apply, immediately check for events, see nothing, and start pulling the deployment apart. Give it **five minutes**, then check for new events.
 
-## Step 6 — Verify, cloud side first
+### Verify, cloud side first
 
 Check the cloud before you check Abstract. Each step isolates one layer, so a failure localizes instead of becoming a debate.
+
+Inspect output identities:
+
+```bash
+terraform output -raw sink_writer_identity
+terraform output -raw topic_id
+```
 
 ```bash
 # 1. The billing sink exists and points to Pub/Sub
@@ -178,7 +170,7 @@ gcloud pubsub subscriptions delete "$PROBE" --project="$LOG_PROJECT" --quiet
 
 <walkthrough-info-message>GCP has a **first-class health signal for its own main failure mode**. A sink whose writer identity lacks `pubsub.publisher` produces `exports/error_count`, a `sink_error` log entry, **and a daily `[ACTION REQUIRED]` email**.</walkthrough-info-message>
 
-## Step 7 — Connect Abstract
+## Connect Abstract
 
 Retrieve the onboarding output:
 
@@ -206,6 +198,53 @@ chmod 600 ~/abstract-keys/abstract-billing-key.json
 <walkthrough-conclusion-trophy></walkthrough-conclusion-trophy>
 
 Your Cloud Billing Account now exports audit logs to Abstract Security via Pub/Sub.
+
+<!-- abstract:cleanup -->
+## Clean up
+
+Delete the integration in Abstract first, if this piece feeds one. Then, with the same `backend.tf`:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-billing-account-logs"
+terraform destroy
+```
+<!-- /abstract:cleanup -->
+
+<!-- abstract:terraform -->
+## Deploy with Terraform
+
+Run every command in this template's folder.
+
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-billing-account-logs"
+source ~/.abstract-gcp-setup.env 2>/dev/null   # the guided setup's saved answers, if you ran it
+echo "Logging project: ${LOG_PROJECT:?not set: run export LOG_PROJECT=<your-logging-project-id> first}"
+export STATE_PROJECT="${STATE_PROJECT:-$LOG_PROJECT}" STATE_BUCKET="$LOG_PROJECT-abstract-tfstate"
+gcloud storage buckets describe "gs://$STATE_BUCKET" >/dev/null 2>&1 || \
+  gcloud storage buckets create "gs://$STATE_BUCKET" --project="$STATE_PROJECT" --location=US --uniform-bucket-level-access
+gcloud storage buckets update "gs://$STATE_BUCKET" --versioning
+sed "s/acme-abstract-tfstate/$STATE_BUCKET/" backend.tf.example > backend.tf
+```
+
+**2. Fill in your values.** Every value is explained in the file and in this template's README:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+cloudshell edit terraform.tfvars
+```
+
+**3. Preview, then apply exactly what you previewed:**
+
+```bash
+terraform init
+terraform plan -out=abstract.tfplan
+terraform apply abstract.tfplan
+```
+
+**To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
+<!-- /abstract:terraform -->
 
 ---
 

@@ -2,10 +2,6 @@
 
 # Enable Data Access audit logs
 
-<!-- guided-step -->
-> **This is step 6 of the guided setup (Data Access logs).** The guided setup does it for you and checks it: from the repository root run `./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6`, or follow `tools/gcp-guided-setup/WALKTHROUGH.md`. This page is the Terraform way to do the same step.
-<!-- /guided-step -->
-
 <walkthrough-tutorial-duration duration="10"></walkthrough-tutorial-duration>
 
 **Admin Activity is always on and cannot be disabled.** There is nothing to enable and
@@ -19,28 +15,46 @@ sink.
 pipeline. A `terraform destroy` of a collector must never be able to strip an
 organization's audit logging.</walkthrough-info-message>
 
+## Before you start
+
+You need **Organization Admin** — `resourcemanager.organizations.setIamPolicy`.
+
+**Inheritance is one-way.** A project can add Data Access logging but cannot disable what
+the organization enabled — so scope deliberately at the org rather than blanket-enabling.
+
+<!-- abstract:signin -->
 ## Sign in first
 
-Cloud Shell opened this repository in a **temporary** session: Google gives repositories it does not own none of your credentials, and deletes the session's files when it ends.
-
-Sign in, then give Terraform the same sign-in:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
 
 ```bash
 gcloud auth login
 gcloud auth application-default login
 ```
+<!-- /abstract:signin -->
 
-<walkthrough-info-message>**Keep the Terraform state outside this session.** Copy `backend.tf.example` to `backend.tf` and set its bucket before `terraform apply`, or the state is deleted when the session ends.</walkthrough-info-message>
+<!-- abstract:check -->
+## Check first
 
-## Step 1 — See what is already enabled
+Read-only: nothing changes. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Steps 1 and 2 of the guided setup record your scope and check every permission the deploy needs.
 
 ```bash
-../../../tools/gcp-guided-setup/preflight.sh --project YOUR_PROJECT --org-id YOUR_ORG_ID
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/audit-gcp-estate.sh
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
 ```
 
-Look at the **Data Access audit logging** section.
+If a permission row is red, find the person who holds that role before you go on.
 
-## Step 2 — Decide the scope of DATA_READ
+The guided setup saves your answers (organization, scope, logging project, topic, subscription). Load them for the commands on this page:
+
+```bash
+source ~/.abstract-gcp-setup.env
+```
+<!-- /abstract:check -->
+
+## Decide the scope of DATA_READ
 
 This is the cost decision for the whole engagement.
 
@@ -51,23 +65,80 @@ BigQuery `DATA_READ` on a BigQuery-heavy estate can move total volume by one to 
 of magnitude — and it is also where the exfiltration signal lives. **Scope it, don't refuse
 it.**
 
-## Step 3 — Apply
+Set `scope = "organization"` and `log_types` (for example `["ADMIN_READ", "DATA_WRITE"]`)
+in terraform.tfvars.
+
+<!-- abstract:deploy -->
+## Deploy
+
+Run step 6 of the guided setup. It needs the log pipeline from steps 3 to 5; run those first. Each step prints its commands, asks before it changes anything, and checks the result. Run it again at any time: it only adds what is missing.
 
 ```bash
-cat > terraform.tfvars <<EOF
-scope     = "organization"
-org_id    = "YOUR_ORG_ID"
-log_types = ["ADMIN_READ", "DATA_WRITE"]
-EOF
-terraform init && terraform plan
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6
 ```
 
-You need **Organization Admin** — `resourcemanager.organizations.setIamPolicy`.
+Your team requires infrastructure as code? Use [Terraform instead](#terraform-instead) at the end of this page. Use one or the other, not both.
+<!-- /abstract:deploy -->
+
+## Verify
+
+Until Data Access is on, a sink filter referencing `data_access` matches **nothing**, with
+no error.
 
 <walkthrough-conclusion-trophy></walkthrough-conclusion-trophy>
 
-**Inheritance is one-way.** A project can add Data Access logging but cannot disable what
-the organization enabled — so scope deliberately at the org rather than blanket-enabling.
+<!-- abstract:cleanup -->
+## Clean up
+
+Delete the integration in Abstract first, so it stops reading. The clean-up needs the answers file the guided setup saved; in a new Cloud Shell session, upload the copy you downloaded at the end of the setup. Then list what the clean-up would remove, and remove it:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove --confirm
+```
+
+It removes only what the guided setup recorded creating, and never the logging project. Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself. If you deployed with Terraform instead, run `terraform destroy` in this folder with the same `backend.tf`.
+
+terraform destroy turns Data Access audit logging OFF for every service this template manages, including any setting that existed before you applied it, because the audit config is authoritative for those services. Admin Activity logs are always on and are not affected.
+<!-- /abstract:cleanup -->
+
+<!-- abstract:terraform -->
+## Terraform instead
+
+Run every command in this template's folder.
+
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-foundation-data-access-audit-logs"
+source ~/.abstract-gcp-setup.env 2>/dev/null   # the guided setup's saved answers, if you ran it
+echo "Logging project: ${LOG_PROJECT:?not set: run export LOG_PROJECT=<your-logging-project-id> first}"
+export STATE_PROJECT="${STATE_PROJECT:-$LOG_PROJECT}" STATE_BUCKET="$LOG_PROJECT-abstract-tfstate"
+gcloud storage buckets describe "gs://$STATE_BUCKET" >/dev/null 2>&1 || \
+  gcloud storage buckets create "gs://$STATE_BUCKET" --project="$STATE_PROJECT" --location=US --uniform-bucket-level-access
+gcloud storage buckets update "gs://$STATE_BUCKET" --versioning
+sed "s/acme-abstract-tfstate/$STATE_BUCKET/" backend.tf.example > backend.tf
+```
+
+**2. Fill in your values.** Every value is explained in the file and in this template's README:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+cloudshell edit terraform.tfvars
+```
+
+**3. Preview, then apply exactly what you previewed:**
+
+```bash
+terraform init
+terraform plan -out=abstract.tfplan
+terraform apply abstract.tfplan
+```
+
+**To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
+<!-- /abstract:terraform -->
 
 ---
 

@@ -1,4 +1,4 @@
-# Pipeline health alerts
+# Google Cloud alerts when the Abstract feed stalls
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A stalled consumer, a missing IAM grant and a deleted sink all look the same fro
 
 **Cloud:** gcp · **Role:** monitoring · **Scope:** project
 
-![How Pipeline health alerts fits together](diagram.png)
+![How Google Cloud alerts when the Abstract feed stalls fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Alongside gcp-source-audit-logs-organization, not later.
 
 **Not for:** As a replacement for checking the feed in Abstract; these watch the Google side only.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

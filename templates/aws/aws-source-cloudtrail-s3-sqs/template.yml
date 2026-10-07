@@ -1,5 +1,5 @@
 id: aws-source-cloudtrail-s3-sqs
-title: CloudTrail logs
+title: 'CloudTrail to Abstract: new trail, bucket and queue'
 cloud: aws
 role: source
 scope: account

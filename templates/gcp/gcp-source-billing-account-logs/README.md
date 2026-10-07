@@ -1,4 +1,4 @@
-# Billing account audit logs
+# Billing account audit logs to Abstract: billing sink
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A Cloud Logging sink on the billing account, which sits outside the organization
 
 **Cloud:** gcp · **Role:** source · **Scope:** billing-account
 
-![How Billing account audit logs fits together](diagram.png)
+![How Billing account audit logs to Abstract: billing sink fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Detecting billing-account takeover, project link changes and billing IAM changes.
 
 **Not for:** Cost or usage data: that is the Cloud Billing export to BigQuery, not a log sink.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

@@ -1,5 +1,5 @@
 id: azure-destination-sentinel
-title: Sentinel destination
+title: 'Abstract to Microsoft Sentinel: with your app registration'
 cloud: azure
 role: destination
 scope: resource-group

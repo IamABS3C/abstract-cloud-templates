@@ -1,5 +1,5 @@
 id: gcp-source-network-threat-logs
-title: Network threat logs
+title: 'Firewall, DNS and IDS logs to Abstract: filtered sink'
 cloud: gcp
 role: source
 scope: organization

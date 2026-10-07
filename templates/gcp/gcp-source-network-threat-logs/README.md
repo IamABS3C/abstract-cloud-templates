@@ -1,4 +1,4 @@
-# Network threat logs
+# Firewall, DNS and IDS logs to Abstract: filtered sink
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Routes firewall rule, Cloud DNS query, load balancer (Cloud Armor) and Cloud IDS
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
 
-![How Network threat logs fits together](diagram.png)
+![How Firewall, DNS and IDS logs to Abstract: filtered sink fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Network detections need firewall, DNS, Cloud Armor or Cloud IDS logs, and a parser for them is being built.
 
 **Not for:** Expecting these logs to be searchable in Abstract today: the managed parser does not store them.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

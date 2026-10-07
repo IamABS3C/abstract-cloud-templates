@@ -1,4 +1,4 @@
-# Entra ID logs
+# Entra ID sign-in and audit logs to Abstract
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Entra ID activity logs are a single tenant-level diagnostic setting on the micro
 
 **Cloud:** azure · **Role:** source · **Scope:** tenant
 
-![How Entra ID logs fits together](diagram.png)
+![How Entra ID sign-in and audit logs to Abstract fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Always, and early: sign-in and audit logs carry the identity detections customers care about.
 
 **Not for:** Microsoft Graph API or Microsoft 365 unified-audit collection, which are API-pull integrations behind an app registration and use no Event Hub.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

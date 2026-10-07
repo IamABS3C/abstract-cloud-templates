@@ -1,5 +1,5 @@
 id: gcp-source-cloud-storage-bucket-logs
-title: Logs in a Cloud Storage bucket
+title: 'Cloud Storage bucket logs to Abstract: object notifications'
 cloud: gcp
 role: source
 scope: project

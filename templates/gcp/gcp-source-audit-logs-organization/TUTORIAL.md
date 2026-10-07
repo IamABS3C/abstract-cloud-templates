@@ -2,10 +2,6 @@
 
 # Export GCP audit logs to Abstract Security
 
-<!-- guided-step -->
-> **This is step 4 of the guided setup (Log pipeline).** The guided setup does it for you and checks it: from the repository root run `./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4`, or follow `tools/gcp-guided-setup/WALKTHROUGH.md`. This page is the Terraform way to do the same step.
-<!-- /guided-step -->
-
 <walkthrough-tutorial-duration duration="15"></walkthrough-tutorial-duration>
 
 This sets up **one aggregated log sink at organization scope**. It covers every project
@@ -23,19 +19,6 @@ There is nothing to repeat per project, and nothing to re-run when a project is 
   delivers nothing**
 * A service account for Abstract with `roles/pubsub.subscriber` on the subscription only
 
-## Sign in first
-
-Cloud Shell opened this repository in a **temporary** session: Google gives repositories it does not own none of your credentials, and deletes the session's files when it ends.
-
-Sign in, then give Terraform the same sign-in:
-
-```bash
-gcloud auth login
-gcloud auth application-default login
-```
-
-<walkthrough-info-message>**Keep the Terraform state outside this session.** Copy `backend.tf.example` to `backend.tf` and set its bucket before `terraform apply`, or the state is deleted when the session ends.</walkthrough-info-message>
-
 ## Before you start
 
 <walkthrough-project-setup></walkthrough-project-setup>
@@ -47,74 +30,75 @@ You need three things. **The first is usually the blocker, and it is rarely tech
 2. `roles/pubsub.admin` on the logging project.
 3. Your organization ID: `gcloud organizations list`
 
+If you are not in an organization, an aggregated sink is not available. Stop here and talk
+to whoever owns the GCP hierarchy.
+
 <walkthrough-info-message>Use a **dedicated logging or security project**, not a workload
 project. Pub/Sub publish quota is consumed in the destination project, and a security
 pipeline living inside a workload project can be read or broken by that workload's
 owner.</walkthrough-info-message>
 
-## Step 1 — Set your variables
+<!-- abstract:signin -->
+## Sign in first
+
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
 
 ```bash
-export ORG_ID=$(gcloud organizations list --format='value(ID)' --limit=1)
-export LOG_PROJECT=<walkthrough-project-id/>
-echo "Organization: $ORG_ID"
-echo "Log project : $LOG_PROJECT"
+gcloud auth login
+gcloud auth application-default login
 ```
+<!-- /abstract:signin -->
 
-If `ORG_ID` is empty you are not in an organization, and an aggregated sink is not
-available. Stop here and talk to whoever owns the GCP hierarchy.
+<!-- abstract:check -->
+## Check first
 
-## Step 2 — Check what is already true
-
-Read-only. Nothing changes.
+Read-only: nothing changes. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Steps 1 and 2 of the guided setup record your scope and check every permission the deploy needs.
 
 ```bash
-../../../tools/gcp-guided-setup/preflight.sh --project "$LOG_PROJECT" --org-id "$ORG_ID"
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/audit-gcp-estate.sh
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
 ```
 
-The check that matters is **`roles/logging.configWriter` at the ORGANIZATION**. It is the
-blocking prerequisite and it is rarely held by whoever owns the project. If that line is
-red, stop and find the person who holds it.
+If a permission row is red, find the person who holds that role before you go on.
 
-## Step 3 — See exactly what will happen
-
-The script is **dry-run by default**. It prints every command it would run and changes
-nothing:
+The guided setup saves your answers (organization, scope, logging project, topic, subscription). Load them for the commands on this page:
 
 ```bash
-../../../tools/gcp-guided-setup/deploy-abstract-gcp.sh --scope organization --scope-id "$ORG_ID" --log-project "$LOG_PROJECT"
+source ~/.abstract-gcp-setup.env
 ```
+<!-- /abstract:check -->
 
-Read the filter it assembles. That filter decides both your coverage and your bill.
+## Decide the filter
+
+Read the filter the deploy assembles. That filter decides both your coverage and your bill.
 
 <walkthrough-info-message>**Routing is evaluated at write time and there is no backfill.**
 A filter that was too narrow leaves a permanent hole you cannot fill later. One that was
 too wide costs money you can stop spending. Start broad, measure for 7 days, then
 tighten.</walkthrough-info-message>
 
-## Step 4 — Deploy
+<!-- abstract:deploy -->
+## Deploy
 
-Once the dry run looks right, add `--confirm`:
-
-```bash
-../../../tools/gcp-guided-setup/deploy-abstract-gcp.sh --scope organization --scope-id "$ORG_ID" --log-project "$LOG_PROJECT" --confirm
-```
-
-### Or with Terraform
+Run steps 3, 4 and 5 of the guided setup: the logging project, then the pipeline, then the account Abstract reads with. Step 9 then sends a test event end to end, and step 10 prints the values to enter in Abstract. Each step prints its commands, asks before it changes anything, and checks the result. Run it again at any time: it only adds what is missing.
 
 ```bash
-cat > terraform.tfvars <<EOF
-org_id      = "$ORG_ID"
-log_project = "$LOG_PROJECT"
-EOF
-terraform init && terraform plan
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 3
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 5
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 9
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 10
 ```
 
-You are already in `templates/gcp/gcp-source-audit-logs-organization` — the button put you here.
+Your team requires infrastructure as code? Use [Terraform instead](#terraform-instead) at the end of this page. Use one or the other, not both.
+<!-- /abstract:deploy -->
 
-## Step 5 — Wait before you verify
+## Verify
 
-<walkthrough-info-message>**A sink is not live the instant Terraform returns.** Routing is
+<walkthrough-info-message>**A sink is not live the instant the deploy finishes.** Routing is
 evaluated at WRITE TIME, so events written during the first couple of minutes after the
 sink is created are simply never routed — and no later change recovers
 them.</walkthrough-info-message>
@@ -135,7 +119,7 @@ for the one you fired at t+0, because it was never routed and never will be.
 Microsoft-style "allow 90 minutes" is the conservative published figure. In practice
 steady-state delivery here was around a minute.
 
-## Step 6 — Verify, cloud side first
+### Verify, cloud side first
 
 Check the cloud before you check Abstract. Each step isolates one layer, so a failure
 localises instead of becoming a debate.
@@ -184,7 +168,7 @@ for its own main failure mode**. A sink whose writer identity lacks `pubsub.publ
 produces `exports/error_count`, a `sink_error` log entry, **and a daily `[ACTION
 REQUIRED]` email**.</walkthrough-info-message>
 
-## Step 7 — Connect Abstract
+## Connect Abstract
 
 You need two values, plus a key:
 
@@ -208,6 +192,56 @@ from now on is covered the moment it exists**.
 **One thing this did not do:** Data Access audit logs are off by default and must be
 enabled separately in **IAM & Admin → Audit Logs** at the organization. Until then, a
 filter referencing `data_access` matches nothing — which looks exactly like a broken sink.
+
+<!-- abstract:cleanup -->
+## Clean up
+
+Delete the integration in Abstract first, so it stops reading. The clean-up needs the answers file the guided setup saved; in a new Cloud Shell session, upload the copy you downloaded at the end of the setup. Then list what the clean-up would remove, and remove it:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove --confirm
+```
+
+It removes only what the guided setup recorded creating, and never the logging project. Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself. If you deployed with Terraform instead, run `terraform destroy` in this folder with the same `backend.tf`.
+<!-- /abstract:cleanup -->
+
+<!-- abstract:terraform -->
+## Terraform instead
+
+Run every command in this template's folder.
+
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-audit-logs-organization"
+source ~/.abstract-gcp-setup.env 2>/dev/null   # the guided setup's saved answers, if you ran it
+echo "Logging project: ${LOG_PROJECT:?not set: run export LOG_PROJECT=<your-logging-project-id> first}"
+export STATE_PROJECT="${STATE_PROJECT:-$LOG_PROJECT}" STATE_BUCKET="$LOG_PROJECT-abstract-tfstate"
+gcloud storage buckets describe "gs://$STATE_BUCKET" >/dev/null 2>&1 || \
+  gcloud storage buckets create "gs://$STATE_BUCKET" --project="$STATE_PROJECT" --location=US --uniform-bucket-level-access
+gcloud storage buckets update "gs://$STATE_BUCKET" --versioning
+sed "s/acme-abstract-tfstate/$STATE_BUCKET/" backend.tf.example > backend.tf
+```
+
+**2. Fill in your values.** Every value is explained in the file and in this template's README:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+cloudshell edit terraform.tfvars
+```
+
+**3. Preview, then apply exactly what you previewed:**
+
+```bash
+terraform init
+terraform plan -out=abstract.tfplan
+terraform apply abstract.tfplan
+```
+
+**To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
+<!-- /abstract:terraform -->
 
 ---
 

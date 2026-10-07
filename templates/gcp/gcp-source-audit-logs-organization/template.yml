@@ -1,5 +1,5 @@
 id: gcp-source-audit-logs-organization
-title: Audit logs, whole organization
+title: 'All Google Cloud audit logs to Abstract: organization sink'
 cloud: gcp
 role: source
 scope: organization

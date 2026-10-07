@@ -1,4 +1,4 @@
-# App registrations, by policy
+# Abstract access to every subscription: app registrations by Policy
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Azure Policy cannot create Entra objects, so this policy deploys a deployment sc
 
 **Cloud:** azure · **Role:** access · **Scope:** management-group
 
-![How App registrations, by policy fits together](diagram.png)
+![How Abstract access to every subscription: app registrations by Policy fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Only when governance mandates that every control arrive through Azure Policy.
 
 **Not for:** Event Hub collection, which needs no app registration; and most estates, where the event-driven automation path keeps the privileged identity in one place.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

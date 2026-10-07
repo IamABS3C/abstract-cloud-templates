@@ -1,5 +1,5 @@
 id: aws-source-multiple-sources-one-bucket
-title: Several sources, one stack
+title: Several AWS sources to Abstract in one deploy
 cloud: aws
 role: source
 scope: account

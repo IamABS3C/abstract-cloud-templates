@@ -1,4 +1,4 @@
-# Queues for an existing bucket
+# Shared S3 bucket to Abstract: one queue per source
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A Terraform or OpenTofu module for a security bucket that holds several log sour
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How Queues for an existing bucket fits together](diagram.png)
+![How Shared S3 bucket to Abstract: one queue per source fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ One security bucket holds several sources under different prefixes, and each sou
 
 **Not for:** When the plan is to point two Abstract configurations at one queue: SQS is a competing-consumer service, so they split the stream at random with no error.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

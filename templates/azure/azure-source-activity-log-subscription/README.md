@@ -1,4 +1,4 @@
-# Activity Log, one subscription
+# Activity Log to Abstract: one subscription
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ The pilot path: streams one subscription's Activity Log, every ARM create, updat
 
 **Cloud:** azure · **Role:** source · **Scope:** subscription
 
-![How Activity Log, one subscription fits together](diagram.png)
+![How Activity Log to Abstract: one subscription fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 A single-subscription estate, a pilot, or a proof before committing to estate-wide governance, including when management-group rights are not yet granted.
 
 **Not for:** Any estate you intend to cover fully: this covers exactly one subscription and nothing extends it to new ones. Use the management-group policy instead of deploying it many times.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

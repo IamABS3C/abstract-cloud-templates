@@ -1,5 +1,5 @@
 id: azure-destination-sentinel-app-by-script
-title: Sentinel destination, app by script
+title: 'Abstract to Sentinel: app registration created by script'
 cloud: azure
 role: destination
 scope: resource-group

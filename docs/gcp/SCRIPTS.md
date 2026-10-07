@@ -1,11 +1,13 @@
 # The scripts
 
-Two, with different jobs. **Run `preflight.sh` first, every time.**
+The guided setup is the one way to deploy without Terraform. Two read-only helpers sit beside it.
+[The setup guide](GUIDE.md) says when each one runs.
 
 | Script | Writes anything? | Job |
 |---|---|---|
-| `tools/gcp-guided-setup/preflight.sh` | **No — read-only** | Tell you what is already true before you build |
-| `tools/gcp-guided-setup/deploy-abstract-gcp.sh` | Only with `--confirm` | Deploy without Terraform |
+| `tools/gcp-guided-setup/abstract-gcp-setup.sh` | Only after you answer `y` | The guided setup: every step in order, a check mode, and a clean-up mode |
+| `tools/gcp-guided-setup/audit-gcp-estate.sh` | **No, read-only** | List your organization, folders, projects, existing sinks and topics |
+| `tools/gcp-guided-setup/preflight.sh` | **No, read-only** | Detail for one project: permissions at scope, APIs, Data Access state, existing sinks |
 
 ---
 
@@ -103,48 +105,49 @@ That is how the blocker path and both Data Access states were verified.
 
 ---
 
-# deploy-abstract-gcp.sh
+# abstract-gcp-setup.sh
 
-For a customer with **no IaC practice at all**. It runs the same nine `gcloud` commands the
-Terraform module encodes, printing each one before it runs.
-
-**Dry-run by default.** Without `--confirm` it prints what it would do and changes nothing.
+Walks through every piece in order and checks each one. Nothing changes without a `y`, every
+command is printed before it runs, and your answers are kept in `~/.abstract-gcp-setup.env`, so
+you can stop and resume.
 
 ```bash
-# Safe. Shows every command and the assembled filter.
-./tools/gcp-guided-setup/deploy-abstract-gcp.sh \
-  --scope organization --scope-id 123456789012 \
-  --log-project acme-security-logging
-
-# Same command, actually creates things.
-./tools/gcp-guided-setup/deploy-abstract-gcp.sh \
-  --scope organization --scope-id 123456789012 \
-  --log-project acme-security-logging --confirm
+./tools/gcp-guided-setup/abstract-gcp-setup.sh              # every step, asking before each change
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4     # one step
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --check      # check everything, change nothing
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove     # list what clean-up would delete
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove --confirm
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove --project <logging-project-id>  # no answers file: list by name
 ```
 
-## Options
+A Cloud Shell session opened from the templates button is temporary, so download the answers
+file (`cloudshell download ~/.abstract-gcp-setup.env`) when the setup finishes. The clean-up
+needs it to know what the setup made.
 
-| Flag | Meaning |
+| Step | What it does |
 |---|---|
-| `--scope <organization\|folder>` | **Required.** Only these two cover projects created later — the script refuses `project` |
-| `--scope-id <id>` | **Required.** Organization or folder ID |
-| `--log-project <id>` | **Required.** Dedicated logging project. Not a workload project |
-| `--data-access` | Include Data Access audit logs. **Off by default** |
-| `--data-access-services a,b` | Restrict Data Access. Default: BigQuery + Cloud Storage |
-| `--platform-logs a,b` | Extra platform log IDs, e.g. `compute.googleapis.com%2Ffirewall` |
-| `--retention-days N` | Pub/Sub retention, 1–31. Default 7 — **this is your entire recovery window** |
-| `--topic` / `--subscription` / `--sink` / `--service-account` | Override generated names |
-| `--rotate-key` | Mint a new service-account key even if one exists. GCP caps user-managed keys at 10 per account, and nothing here deletes old ones |
-| `--confirm` | Actually create things |
+| 1 | Sign-in, organization and scope (organization, folder or project) |
+| 2 | Checks, live, every role the later steps need |
+| 3 | Creates or picks the logging project, links billing, turns on the APIs |
+| 4 | Topic, subscription, sink, and the sink's permission to publish |
+| 5 | The service account Abstract reads with, and its key |
+| 6 | Data Access audit logs (optional): both switches |
+| 7 | Google Workspace reader (optional) |
+| 8 | Health alerts (optional) |
+| 9 | A fresh test event, end to end, on a probe subscription of its own |
+| 10 | The exact values to enter in Abstract |
 
-## When to prefer Terraform instead
+**Clean-up removes only what the setup created.** It records each thing it creates, so
+`--remove` deletes the sink, topic, subscription, service accounts, alerts and key files it
+made, and lists anything that existed before for you to decide on. Without the answers file it
+lists what carries the setup's names and deletes nothing. It never deletes the logging
+project. Without `--confirm` it only prints the list.
 
-The script is a one-shot. It cannot tell you what **changed**, cannot reconcile drift, and
-cannot remove what it created. If the customer has any IaC practice at all, use
-`templates/gcp/gcp-source-audit-logs-organization` — you get a plan, a state file, and a way to change the
-filter later without guessing what is currently deployed.
+## When to use Terraform instead
 
-Use the script when the alternative is a human pasting commands from a PDF.
+If your team keeps infrastructure as code, use the Terraform appendix in each template's
+tutorial. It creates a state bucket first, then runs `init`, `plan`, `apply`, and `destroy` to
+clean up. It creates the same resources. Use one or the other for a given setup, not both.
 
 ---
 
@@ -178,9 +181,9 @@ Never pull from `abstract-audit-logs-sub`: Abstract reads that subscription, and
 # Which to use
 
 ```
-Always:            preflight.sh
-Guided, no install: the Cloud Shell button          → docs/DEPLOY-CLOUD-SHELL.md
-Own CI and state:   terraform in templates/gcp/<template-id>/
-Google holds state: Infrastructure Manager          → docs/DEPLOY-INFRA-MANAGER.md
-No IaC practice:    deploy-abstract-gcp.sh
+Always first:        audit-gcp-estate.sh, then abstract-gcp-setup.sh --step 1 and --step 2
+Deploy:              abstract-gcp-setup.sh (or the Terraform appendix, if you keep IaC)
+Detail on a project: preflight.sh
+Later, any time:     abstract-gcp-setup.sh --check
+To remove it:        abstract-gcp-setup.sh --state <answers-file> --remove, then add --confirm
 ```

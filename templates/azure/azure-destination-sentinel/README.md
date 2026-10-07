@@ -1,4 +1,4 @@
-# Sentinel destination
+# Abstract to Microsoft Sentinel: with your app registration
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Prepares Azure for the Abstract Azure Sentinel Destination: a Data Collection En
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
-![How Sentinel destination fits together](diagram.png)
+![How Abstract to Microsoft Sentinel: with your app registration fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Production, when you create the Entra app registration yourself.
 
 **Not for:** When the template should create the app registration for you; use the Graph variant.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

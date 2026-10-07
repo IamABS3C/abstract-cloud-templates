@@ -1,5 +1,5 @@
 id: gcp-source-audit-logs-project
-title: Audit logs, one project
+title: 'One project''s audit logs to Abstract: project sink'
 cloud: gcp
 role: source
 scope: project

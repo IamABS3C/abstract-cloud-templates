@@ -1,4 +1,4 @@
-# Sentinel destination, app by Graph
+# Abstract to Sentinel: app registration created by Graph
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Creates the Entra app registration and service principal as the person deploying
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
-![How Sentinel destination, app by Graph fits together](diagram.png)
+![How Abstract to Sentinel: app registration created by Graph fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Production, when the template should create the app registration and no pre-existing privileged identity is acceptable.
 
 **Not for:** Portal-only deployments; Microsoft Graph Bicep is documented only for Azure CLI and PowerShell.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

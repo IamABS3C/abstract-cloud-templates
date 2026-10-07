@@ -1,5 +1,5 @@
 id: aws-source-generic-s3-sqs
-title: Any logs in an S3 bucket
+title: 'Any S3 logs to Abstract: new bucket and queue'
 cloud: aws
 role: source
 scope: account

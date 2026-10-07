@@ -1,4 +1,4 @@
-# Several sources, one stack
+# Several AWS sources to Abstract in one deploy
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A master stack nests the per-source child templates, so one deploy provisions an
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How Several sources, one stack fits together](diagram.png)
+![How Several AWS sources to Abstract in one deploy fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ Several AWS sources in the same account and region, where the shared identity an
 
 **Not for:** When the child templates cannot be hosted at an https S3 URL; the master only references its children through TemplateBaseUrl.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

@@ -1,7 +1,7 @@
 # Generated from templates/aws/_snippets/s3-log-source.yaml with SourceType=S3AccessLogs by `python -m tools.templates generate`. Do not edit: edit the source and run generate.
 # YAML comments do not survive generation: the source's comments, including the reason for each cfn-lint suppression, are in the source.
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Abstract Security - S3 server access logs. Creates the hardened destination bucket for S3 server access logging, the SQS queue S3 notifies, and the cross-account role Abstract assumes to read them.
+Description: 'Abstract Security - S3 access logs to Abstract: new bucket and queue. Creates the hardened destination bucket for S3 server access logging, the SQS queue S3 notifies, and the cross-account role Abstract assumes to read them.'
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:

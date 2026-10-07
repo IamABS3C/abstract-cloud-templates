@@ -1,4 +1,4 @@
-# Google Workspace logs
+# Google Workspace audit logs to Abstract: Reports API
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A separate pipeline: Abstract's Google Workspace integration reads Workspace aud
 
 **Cloud:** gcp · **Role:** source · **Scope:** project
 
-![How Google Workspace logs fits together](diagram.png)
+![How Google Workspace audit logs to Abstract: Reports API fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Who signed in to Google Workspace: the identity group covers login, SAML, token, user accounts and context-aware access.
 
 **Not for:** Collecting Workspace logs through a Cloud Logging sink; this template is the Reports API path only.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

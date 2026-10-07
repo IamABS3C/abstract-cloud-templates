@@ -1,5 +1,5 @@
 id: aws-source-s3-sqs-organization-stackset
-title: One source, every account
+title: 'One AWS source in every account: organization StackSet'
 cloud: aws
 role: source
 scope: organization

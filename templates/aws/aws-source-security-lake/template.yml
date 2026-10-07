@@ -1,5 +1,5 @@
 id: aws-source-security-lake
-title: Security Lake subscriber
+title: 'Security Lake to Abstract: subscriber and SQS notification'
 cloud: aws
 role: source
 scope: account

@@ -1,4 +1,4 @@
-# Log delivery lookup helper
+# AWS helper: look up resources and switch on logging
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A Lambda-backed custom resource that does at deploy time what plain CloudFormati
 
 **Cloud:** aws · **Role:** foundation · **Scope:** account
 
-![How Log delivery lookup helper fits together](diagram.png)
+![How AWS helper: look up resources and switch on logging fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -14,7 +14,7 @@ Editable source: [diagram.drawio](diagram.drawio)
 
 A deploy needs a value CloudFormation cannot look up by name (a KMS alias, a queue name, a web ACL name), or needs S3 access logging or load balancer access logs switched on.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

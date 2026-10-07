@@ -1,5 +1,5 @@
 id: gcp-foundation-logging-project
-title: Logging project
+title: 'Google Cloud first step: logging project and APIs'
 cloud: gcp
 role: foundation
 scope: project
@@ -20,6 +20,7 @@ permissions:
 creates:
 - The required APIs enabled on the logging project
 - Optionally, a new logging project with deletion_policy PREVENT (create_project=true)
+cleanup_note: 'terraform destroy never deletes the logging project: a project it created has deletion_policy PREVENT, and the APIs stay on (disable_on_destroy = false). Delete the project yourself in the console only when nothing else uses it; Google keeps it recoverable for 30 days.'
 never_touches:
 - 'An existing project''s IAM policy and resources: with create_project = false it only enables APIs'
 - Enabled APIs on destroy (disable_on_destroy = false)

@@ -16,23 +16,6 @@ All four streams route into a single Pub/Sub topic and pull subscription in your
 > [!WARNING]
 > **These logs reach the Pub/Sub topic; Abstract's managed GCP parser does not yet store them.** The managed GCP Pub/Sub parser keeps only Cloud Audit Log records, and firewall, DNS, Cloud Armor and Cloud IDS logs are not audit logs. There is no parser for them yet. Do not rely on them for detection until a parser ships.
 
-## Sign in first
-
-Cloud Shell opened this repository in a **temporary** session: Google gives repositories it does not own none of your credentials, and deletes the session's files when it ends.
-
-Sign in, then give Terraform the same sign-in:
-
-```bash
-gcloud auth login
-gcloud auth application-default login
-```
-
-<walkthrough-info-message>**Keep Terraform state outside this temporary session.** Copy `backend.tf.example` to `backend.tf` and configure a Cloud Storage bucket before `terraform apply`, or your state will be deleted when the Cloud Shell session terminates.</walkthrough-info-message>
-
-```bash
-cp backend.tf.example backend.tf
-```
-
 ## Before you start
 
 <walkthrough-project-setup></walkthrough-project-setup>
@@ -43,21 +26,41 @@ You need the following permissions:
 2. **`roles/pubsub.admin`** on the logging project: To manage the Pub/Sub topic and subscription.
 3. **`roles/iam.serviceAccountAdmin`** on the logging project: To create the Abstract subscriber identity.
 
-Set your environment variables:
-
-```bash
-export LOG_PROJECT=<walkthrough-project-id/>
-# Pick the organization explicitly: taking the first one listed can bind the sink to the wrong one.
-gcloud organizations list --format='table(ID,displayName)'
-export ORG_ID=""   # paste one ID from the list above
-: "${ORG_ID:?set ORG_ID to one ID from the list above}"
-echo "Logging Project: $LOG_PROJECT"
-echo "Organization ID: $ORG_ID"
-```
-
 <walkthrough-info-message>Always use a **dedicated logging project** rather than a workload project. Workload owners should not possess access to read or modify security pipelines, and Pub/Sub quota is consumed in this project.</walkthrough-info-message>
 
-## Step 1 — Verify Cloud Armor Logging
+<!-- abstract:signin -->
+## Sign in first
+
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
+
+```bash
+gcloud auth login
+gcloud auth application-default login
+```
+<!-- /abstract:signin -->
+
+<!-- abstract:check -->
+## Check first
+
+Read-only: nothing changes. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Steps 1 and 2 of the guided setup record your scope and check every permission the deploy needs.
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/audit-gcp-estate.sh
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
+```
+
+If a permission row is red, find the person who holds that role before you go on.
+
+The guided setup saves your answers (organization, scope, logging project, topic, subscription). Load them for the commands on this page:
+
+```bash
+source ~/.abstract-gcp-setup.env
+```
+<!-- /abstract:check -->
+
+## Verify Cloud Armor Logging
 
 Cloud Armor security policy evaluations (WAF block decisions, OWASP rule matches, rate limits) are recorded inside **Application Load Balancer request logs**: `http_load_balancer` for the global external load balancer, `http_external_regional_lb_rule` for regional external and `internal_http_lb_rule` for internal ones. This deployment routes all three.
 
@@ -87,7 +90,7 @@ gcloud compute backend-services update BACKEND_SERVICE_NAME \
   --logging-sample-rate=1.0
 ```
 
-## Step 2 — Verify Cloud IDS Endpoints
+## Verify Cloud IDS Endpoints
 
 > [!NOTE]
 > **Cloud IDS costs money on its own.** It is billed per endpoint-hour plus per GB of traffic inspected, and it needs Packet Mirroring. These templates do not create the IDS endpoint or the mirroring policy; they only route the threat logs an existing endpoint writes.
@@ -124,7 +127,7 @@ gcloud compute packet-mirrorings create ids-packet-mirroring \
 
 When threat signatures match, logs are automatically written to `logName:"ids.googleapis.com%2Fthreat"`.
 
-## Step 3 — Verify Cloud DNS Query Logging
+## Verify Cloud DNS Query Logging
 
 DNS query logging captures lookups from VMs and containers, delivering high-signal detection for C2 beaconing, DGA domains, and DNS tunneling exfiltration.
 
@@ -147,7 +150,7 @@ gcloud dns policies create log-vpc-dns-queries \
 
 Once applied, all queries originating within that VPC are emitted to `logName:"dns.googleapis.com%2Fdns_queries"`.
 
-## Step 4 — Verify Firewall Rule Logging
+## Verify Firewall Rule Logging
 
 Firewall rule logging must be enabled on individual VPC firewall rules or within Network Firewall Policies.
 
@@ -167,38 +170,29 @@ gcloud compute firewall-rules update FIREWALL_RULE_NAME \
 
 Matched connections will be emitted to `logName:"compute.googleapis.com%2Ffirewall"`.
 
-## Step 5 — Configure Variables
+## Choose the log categories
 
-Initialize your `terraform.tfvars` file:
+Set these in terraform.tfvars:
 
-```bash
-cat > terraform.tfvars <<EOF
-sink_scope              = "organization"
-org_id                  = "$ORG_ID"
-log_project             = "$LOG_PROJECT"
-log_categories          = ["firewall", "dns_queries", "load_balancer", "load_balancer_regional_internal"]
-platform_log_filters    = ["ids.googleapis.com%2Fthreat"]
-EOF
+```hcl
+sink_scope           = "organization"
+log_categories       = ["firewall", "dns_queries", "load_balancer", "load_balancer_regional_internal"]
+platform_log_filters = ["ids.googleapis.com%2Fthreat"]
 ```
 
-<walkthrough-info-message>`dns_queries`, `load_balancer` and `load_balancer_regional_internal` (Cloud Armor) are high-volume streams, so the first plan stops on purpose. Measure a baseline first; then add `acknowledge_high_volume = true` to `terraform.tfvars`, or pass `terraform plan -var acknowledge_high_volume=true`.</walkthrough-info-message>
+<walkthrough-info-message>`dns_queries`, `load_balancer` and `load_balancer_regional_internal` (Cloud Armor) are high-volume streams, so the first deploy stops on purpose. Measure a baseline first; then add `acknowledge_high_volume = true` to `terraform.tfvars`.</walkthrough-info-message>
 
-## Step 6 — Plan and Apply
+Read the `effective_filter` before you apply. It binds all four telemetry streams into one aggregated Cloud Logging sink.
 
-Initialize the Terraform working directory and inspect the execution plan:
+<!-- abstract:deploy -->
+## Deploy
 
-```bash
-terraform init
-terraform plan
-```
+This piece is not part of the guided setup script. Deploy it with Terraform: follow [Deploy with Terraform](#deploy-with-terraform) at the end of this page, then come back here to verify.
+<!-- /abstract:deploy -->
 
-Review the `effective_filter` displayed in the plan. It binds all four telemetry streams into one aggregated Cloud Logging sink.
+## Verify
 
-Apply the configuration:
-
-```bash
-terraform apply
-```
+<walkthrough-info-message>**Log sinks evaluate routing at write time.** Google Cloud takes 2 to 3 minutes to propagate a new aggregated sink across the fleet. Events emitted in the first minutes before propagation finishes will not be captured.</walkthrough-info-message>
 
 Inspect output parameters:
 
@@ -207,18 +201,12 @@ terraform output -raw sink_writer_identity
 terraform output -raw topic_id
 ```
 
-## Step 7 — Wait Before You Verify
-
-<walkthrough-info-message>**Log sinks evaluate routing at write time.** Google Cloud takes 2 to 3 minutes to propagate a new aggregated sink across the fleet. Events emitted in the first minutes before propagation finishes will not be captured.</walkthrough-info-message>
-
 Wait 3 minutes before testing:
 
 ```bash
 echo "Waiting for Log Router sink propagation..."
 sleep 180
 ```
-
-## Step 8 — Verify the Pipeline & Troubleshooting
 
 ### 1. Check the Log Sink and Aggregation
 
@@ -277,7 +265,7 @@ gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=5 --a
 gcloud pubsub subscriptions delete "$PROBE" --project="$LOG_PROJECT" --quiet
 ```
 
-## Step 9 — Connect to Abstract Security
+## Connect to Abstract Security
 
 Extract the integration parameters:
 
@@ -312,6 +300,53 @@ In the Abstract Security Platform:
 <walkthrough-conclusion-trophy></walkthrough-conclusion-trophy>
 
 The pipeline delivers Cloud Armor, Cloud IDS, DNS and firewall logs to the `abstract-network-threats` topic. Abstract's managed GCP parser does not yet store these logs, so do not rely on them for detection until a parser ships.
+
+<!-- abstract:cleanup -->
+## Clean up
+
+Delete the integration in Abstract first, if this piece feeds one. Then, with the same `backend.tf`:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-network-threat-logs"
+terraform destroy
+```
+<!-- /abstract:cleanup -->
+
+<!-- abstract:terraform -->
+## Deploy with Terraform
+
+Run every command in this template's folder.
+
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-network-threat-logs"
+source ~/.abstract-gcp-setup.env 2>/dev/null   # the guided setup's saved answers, if you ran it
+echo "Logging project: ${LOG_PROJECT:?not set: run export LOG_PROJECT=<your-logging-project-id> first}"
+export STATE_PROJECT="${STATE_PROJECT:-$LOG_PROJECT}" STATE_BUCKET="$LOG_PROJECT-abstract-tfstate"
+gcloud storage buckets describe "gs://$STATE_BUCKET" >/dev/null 2>&1 || \
+  gcloud storage buckets create "gs://$STATE_BUCKET" --project="$STATE_PROJECT" --location=US --uniform-bucket-level-access
+gcloud storage buckets update "gs://$STATE_BUCKET" --versioning
+sed "s/acme-abstract-tfstate/$STATE_BUCKET/" backend.tf.example > backend.tf
+```
+
+**2. Fill in your values.** Every value is explained in the file and in this template's README:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+cloudshell edit terraform.tfvars
+```
+
+**3. Preview, then apply exactly what you previewed:**
+
+```bash
+terraform init
+terraform plan -out=abstract.tfplan
+terraform apply abstract.tfplan
+```
+
+**To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
+<!-- /abstract:terraform -->
 
 ---
 

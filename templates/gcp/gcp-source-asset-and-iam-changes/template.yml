@@ -1,5 +1,5 @@
 id: gcp-source-asset-and-iam-changes
-title: Asset and IAM changes
+title: 'Asset and IAM changes to Abstract: asset feed'
 cloud: gcp
 role: source
 scope: organization

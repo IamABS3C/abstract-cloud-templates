@@ -1,5 +1,5 @@
 id: aws-source-cloudfront-logs-s3-sqs
-title: CloudFront logs
+title: 'CloudFront logs to Abstract: new bucket and queue'
 cloud: aws
 role: source
 scope: account

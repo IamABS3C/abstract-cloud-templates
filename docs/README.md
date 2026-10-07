@@ -1,13 +1,20 @@
 # Guides
 
-Each template's own README covers what it creates, what it needs and how to deploy it. These guides
-cover what spans templates: choosing one, architecture, permissions and troubleshooting.
+**Start with the setup guide for your cloud.** A few questions lead to one plan: every step in order,
+who does it and where, from checking what you already have to cleaning it all up.
+
+- [Set up AWS](aws/GUIDE.md)
+- [Set up Microsoft Azure](azure/GUIDE.md)
+- [Set up Google Cloud](gcp/GUIDE.md)
+
+Each template's own README covers what it creates, what it needs and how to deploy it. The pages below
+go deeper on what spans templates: architecture, permissions and troubleshooting.
 
 ## AWS
 
 | Guide | Read it when |
 |---|---|
-| [Choose your AWS template](aws/CHOOSE.md) | You are not sure which template fits your logs |
+| [The options explained](aws/OPTIONS.md) | You want to know why S3 → SQS, SNS fan-out or EventBridge, and what surprises people |
 | [Sources and parameters](aws/SOURCES.md) | You want guidance per log source, or every parameter of every template |
 | [Architecture](aws/ARCHITECTURE.md) | You want the S3 and SQS design, and why |
 | [Deployment](aws/DEPLOYMENT.md) | You deploy by script, by StackSet or with your own template copies |

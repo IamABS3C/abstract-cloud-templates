@@ -21,30 +21,50 @@ Three different API paths to the same IAM binding produce three different audit 
 the natural feed for an asset and identity model, because it carries inventory rather than
 only events.
 
+## Before you start
+
+You need `roles/cloudasset.owner` at the organization.
+
+<!-- abstract:signin -->
 ## Sign in first
 
-Cloud Shell opened this repository in a **temporary** session: Google gives repositories it does not own none of your credentials, and deletes the session's files when it ends.
-
-Sign in, then give Terraform the same sign-in:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
 
 ```bash
 gcloud auth login
 gcloud auth application-default login
 ```
+<!-- /abstract:signin -->
 
-<walkthrough-info-message>**Keep the Terraform state outside this session.** Copy `backend.tf.example` to `backend.tf` and set its bucket before `terraform apply`, or the state is deleted when the session ends.</walkthrough-info-message>
+<!-- abstract:check -->
+## Check first
 
-## Step 1 — Reuse Abstract's identity
-
-If `gcp-source-audit-logs-organization` used a GCS backend, read it rather than retyping it:
+Read-only: nothing changes. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Steps 1 and 2 of the guided setup record your scope and check every permission the deploy needs.
 
 ```bash
-cat > terraform.tfvars <<EOF
-org_id              = "YOUR_ORG_ID"
-log_project         = "YOUR_LOG_PROJECT"
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/audit-gcp-estate.sh
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
+```
+
+If a permission row is red, find the person who holds that role before you go on.
+
+The guided setup saves your answers (organization, scope, logging project, topic, subscription). Load them for the commands on this page:
+
+```bash
+source ~/.abstract-gcp-setup.env
+```
+<!-- /abstract:check -->
+
+## Reuse Abstract's identity
+
+If `gcp-source-audit-logs-organization` used a GCS backend, read it rather than retyping it.
+Set these in terraform.tfvars:
+
+```hcl
 remote_state_bucket = "acme-abstract-tfstate"
 remote_state_prefix = "01-organization"  # its state key keeps the original folder name
-EOF
 ```
 
 No shared backend? Paste it instead — and know you now own keeping it in sync:
@@ -53,7 +73,7 @@ No shared backend? Paste it instead — and know you now own keeping it in sync:
 cd ../gcp-source-audit-logs-organization && terraform output -json abstract_onboarding | jq -r .service_account_email
 ```
 
-## Step 2 — Choose the content type
+## Choose the content type
 
 `IAM_POLICY` is the default and the highest security value.
 
@@ -65,7 +85,7 @@ cd ../gcp-source-audit-logs-organization && terraform output -json abstract_onbo
 | `ACCESS_POLICY` | **VPC Service Controls and Access Context Manager changes** |
 | `OS_INVENTORY` | Installed packages and patches, where the Ops Agent runs |
 
-## Step 3 — Scope the asset types
+## Scope the asset types
 
 The default is a security-first set: projects, folders, service accounts, **service-account
 keys**, buckets and firewalls.
@@ -74,15 +94,15 @@ keys**, buckets and firewalls.
 organization. On a large estate that is a very large stream with a low signal ratio — the
 module refuses it without `acknowledge_all_asset_types`.</walkthrough-info-message>
 
-## Step 4 — Plan, then apply
+<!-- abstract:deploy -->
+## Deploy
 
-```bash
-terraform init && terraform plan
-```
+This piece is not part of the guided setup script. Deploy it with Terraform: follow [Deploy with Terraform](#deploy-with-terraform) at the end of this page, then come back here to verify.
+<!-- /abstract:deploy -->
 
-You need `roles/cloudasset.owner` at the organization.
+## Verify
 
-## Step 5 — If nothing arrives
+If nothing arrives:
 
 ```bash
 terraform output cai_service_agent
@@ -97,6 +117,53 @@ output is where to look if it ever gets removed.
 
 Asset changes arrive on their **own** topic and subscription. Configure them as a separate
 source in Abstract — the shape is nothing like an audit log.
+
+<!-- abstract:cleanup -->
+## Clean up
+
+Delete the integration in Abstract first, if this piece feeds one. Then, with the same `backend.tf`:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-asset-and-iam-changes"
+terraform destroy
+```
+<!-- /abstract:cleanup -->
+
+<!-- abstract:terraform -->
+## Deploy with Terraform
+
+Run every command in this template's folder.
+
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-asset-and-iam-changes"
+source ~/.abstract-gcp-setup.env 2>/dev/null   # the guided setup's saved answers, if you ran it
+echo "Logging project: ${LOG_PROJECT:?not set: run export LOG_PROJECT=<your-logging-project-id> first}"
+export STATE_PROJECT="${STATE_PROJECT:-$LOG_PROJECT}" STATE_BUCKET="$LOG_PROJECT-abstract-tfstate"
+gcloud storage buckets describe "gs://$STATE_BUCKET" >/dev/null 2>&1 || \
+  gcloud storage buckets create "gs://$STATE_BUCKET" --project="$STATE_PROJECT" --location=US --uniform-bucket-level-access
+gcloud storage buckets update "gs://$STATE_BUCKET" --versioning
+sed "s/acme-abstract-tfstate/$STATE_BUCKET/" backend.tf.example > backend.tf
+```
+
+**2. Fill in your values.** Every value is explained in the file and in this template's README:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+cloudshell edit terraform.tfvars
+```
+
+**3. Preview, then apply exactly what you previewed:**
+
+```bash
+terraform init
+terraform plan -out=abstract.tfplan
+terraform apply abstract.tfplan
+```
+
+**To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
+<!-- /abstract:terraform -->
 
 ---
 

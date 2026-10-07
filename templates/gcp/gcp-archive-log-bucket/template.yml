@@ -1,5 +1,5 @@
 id: gcp-archive-log-bucket
-title: Log archive bucket
+title: 'Archive Google Cloud logs to Cloud Storage: second sink'
 cloud: gcp
 role: archive
 scope: organization

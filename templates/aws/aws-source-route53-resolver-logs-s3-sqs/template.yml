@@ -1,5 +1,5 @@
 id: aws-source-route53-resolver-logs-s3-sqs
-title: Route 53 Resolver query logs
+title: 'Route 53 DNS logs to Abstract: new bucket and queue'
 cloud: aws
 role: source
 scope: account

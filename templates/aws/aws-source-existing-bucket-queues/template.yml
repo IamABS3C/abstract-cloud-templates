@@ -1,5 +1,5 @@
 id: aws-source-existing-bucket-queues
-title: Queues for an existing bucket
+title: 'Shared S3 bucket to Abstract: one queue per source'
 cloud: aws
 role: source
 scope: account

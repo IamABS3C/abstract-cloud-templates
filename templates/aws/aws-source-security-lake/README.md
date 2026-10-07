@@ -1,4 +1,4 @@
-# Security Lake subscriber
+# Security Lake to Abstract: subscriber and SQS notification
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Registers Abstract as a Security Lake subscriber with S3 data access and an SQS 
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How Security Lake subscriber fits together](diagram.png)
+![How Security Lake to Abstract: subscriber and SQS notification fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -14,7 +14,7 @@ Editable source: [diagram.drawio](diagram.drawio)
 
 WAF or other logs are centralised in Security Lake rather than in a per-service S3 bucket.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

@@ -1,4 +1,4 @@
-# Logs in a Cloud Storage bucket
+# Cloud Storage bucket logs to Abstract: object notifications
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ For logs that are already objects in a bucket, such as a vendor export or an arc
 
 **Cloud:** gcp · **Role:** source · **Scope:** project
 
-![How Logs in a Cloud Storage bucket fits together](diagram.png)
+![How Cloud Storage bucket logs to Abstract: object notifications fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 A vendor or internal system writes log files to a bucket and cannot stream, or an archive needs backfilling.
 
 **Not for:** Anything that is already a Cloud Logging entry; use the organization sink instead.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

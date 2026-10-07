@@ -1,4 +1,4 @@
-# Audit logs, one project
+# One project's audit logs to Abstract: project sink
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A project-scope sink that proves the whole pipeline end to end before organizati
 
 **Cloud:** gcp · **Role:** source · **Scope:** project
 
-![How Audit logs, one project fits together](diagram.png)
+![How One project's audit logs to Abstract: project sink fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Proving the pipeline before asking for organization-scope IAM.
 
 **Not for:** As a per-project pattern: deploy gcp-source-audit-logs-organization and delete this sink once the pilot is proven.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

@@ -1,4 +1,4 @@
-# Log archive bucket
+# Archive Google Cloud logs to Cloud Storage: second sink
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ A second organization sink writing to a Cloud Storage bucket for evidence and ba
 
 **Cloud:** gcp · **Role:** archive · **Scope:** organization
 
-![How Log archive bucket fits together](diagram.png)
+![How Archive Google Cloud logs to Cloud Storage: second sink fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Evidence retention and backfill alongside the Pub/Sub stream.
 
 **Not for:** Anything you alert on; keep Pub/Sub for detection.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

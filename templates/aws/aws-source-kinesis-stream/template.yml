@@ -1,5 +1,5 @@
 id: aws-source-kinesis-stream
-title: Kinesis data stream
+title: 'Kinesis stream to Abstract: direct stream read'
 cloud: aws
 role: source
 scope: account

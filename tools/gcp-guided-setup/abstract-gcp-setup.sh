@@ -19,6 +19,8 @@
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh              guided: every step, asks before each change
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6     one step
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --check      verify everything, change nothing
+#    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove     list what clean-up would delete; --remove --confirm deletes it
+#    ... --remove --project <id>                                 no saved answers: list what carries the setup's names
 #
 #  Nothing changes without a "y". Every command is printed before it runs. Answers are
 #  kept in ~/.abstract-gcp-setup.env so you can stop and resume. No secret is printed;
@@ -37,10 +39,13 @@ SA="abstract-pubsub-reader"; WS_SA="abstract-workspace-reader"; RETENTION_DAYS=7
 DA_SERVICES="bigquery.googleapis.com,storage.googleapis.com,cloudkms.googleapis.com"; DA_TYPES="ADMIN_READ,DATA_WRITE"
 DATA_ACCESS=no; WORKSPACE=no; ALERTS=no
 ORG_ID=""; SCOPE=""; SCOPE_ID=""; LOG_PROJECT=""; BILLING=""; WS_ADMIN=""; ALERT_EMAIL=""
+ALERT_POLICIES=""; ALERT_CHANNELS=""; FIND_PROJECT=""   # the alerts step 8 made, recorded by name
 # Keys go outside any checkout, in a folder only you can read, so they cannot be committed by accident.
 KEY_DIR="${ABSTRACT_KEY_DIR:-$HOME/abstract-keys}"
 KEY_FILE="$KEY_DIR/abstract-pubsub-key.json"; WS_KEY_FILE="$KEY_DIR/abstract-workspace-key.json"
 SINK_CREATED_AT=0
+# Set to 1 only when THIS script creates the piece, so --remove never deletes something it found.
+TOPIC_CREATED=0; SUB_CREATED=0; SA_CREATED=0; WS_SA_CREATED=0
 # shellcheck disable=SC1090
 [[ -f "$STATE" ]] && source "$STATE"
 
@@ -52,7 +57,7 @@ pass()  { printf '  %s✓%s %s\n' "$G" "$O" "$*"; PASSES=$((PASSES+1)); }
 warn()  { printf '  %s!%s %s\n' "$Y" "$O" "$*"; WARNS=$((WARNS+1)); }
 bad()   { printf '  %s✗%s %s\n' "$R" "$O" "$*"; FAILS=$((FAILS+1)); }
 PASSES=0; WARNS=0; FAILS=0
-CHECK_ONLY=false; ONLY_STEP=""
+CHECK_ONLY=false; ONLY_STEP=""; REMOVE=false; CONFIRM=false
 
 save() {
   $CHECK_ONLY && return 0
@@ -60,7 +65,8 @@ save() {
   # %q escapes every value, so an answer containing shell syntax is stored as text, never run.
   { echo "# Abstract GCP guided setup — your answers. Safe to delete; nothing secret is kept here."
     local v; for v in ORG_ID SCOPE SCOPE_ID LOG_PROJECT BILLING TOPIC SUB SINK SA RETENTION_DAYS DATA_ACCESS DA_SERVICES DA_TYPES \
-      WORKSPACE WS_SA WS_ADMIN ALERTS ALERT_EMAIL SINK_CREATED_AT; do printf '%s=%q\n' "$v" "${!v}"; done; } > "$STATE"
+      WORKSPACE WS_SA WS_ADMIN ALERTS ALERT_EMAIL SINK_CREATED_AT TOPIC_CREATED SUB_CREATED SA_CREATED WS_SA_CREATED \
+      ALERT_POLICIES ALERT_CHANNELS; do printf '%s=%q\n' "$v" "${!v}"; done; } > "$STATE"
 }
 
 # Ask with a default. In --check mode nothing is asked.
@@ -222,7 +228,7 @@ step4() {
   [[ -n "$LOG_PROJECT" && -n "$SCOPE" ]] || { bad "finish steps 1 and 3 first"; return; }
 
   if gcloud pubsub topics describe "$TOPIC" --project="$LOG_PROJECT" >/dev/null 2>&1; then pass "topic $TOPIC"
-  else warn "topic $TOPIC does not exist"; run gcloud pubsub topics create "$TOPIC" --project="$LOG_PROJECT" && pass "topic created"; fi
+  else warn "topic $TOPIC does not exist"; run gcloud pubsub topics create "$TOPIC" --project="$LOG_PROJECT" && { pass "topic created"; TOPIC_CREATED=1; save; }; fi
 
   if gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT" >/dev/null 2>&1; then
     local ttl on; ttl=$(gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT" --format='value(expirationPolicy.ttl)')
@@ -234,7 +240,7 @@ step4() {
     warn "subscription $SUB does not exist"
     why "--expiration-period=never matters: by default an idle subscription is deleted after 31 days."
     run gcloud pubsub subscriptions create "$SUB" --topic="$TOPIC" --project="$LOG_PROJECT" \
-      --ack-deadline=60 --message-retention-duration="${RETENTION_DAYS}d" --expiration-period=never && pass "subscription created"
+      --ack-deadline=60 --message-retention-duration="${RETENTION_DAYS}d" --expiration-period=never && { pass "subscription created"; SUB_CREATED=1; save; }
   fi
 
   local sf; sf=$(scope_flag); local want; want=$(filter)
@@ -243,7 +249,7 @@ step4() {
   # two sinks to one topic deliver every event twice.
   if ! gcloud logging sinks describe "$SINK" "$sf" >/dev/null 2>&1; then
     local other; other=$(gcloud logging sinks list "$sf" --format='value(name,destination)' 2>/dev/null | awk -v d="$dest" '$2==d{print $1; exit}')
-    [[ -n "$other" ]] && { say "  found sink $other already sending to $TOPIC; using it"; SINK="$other"; save; }
+    [[ -n "$other" ]] && { say "  found sink $other already sending to $TOPIC; using it"; SINK="$other"; SINK_CREATED_AT=0; save; }
   fi
   if gcloud logging sinks describe "$SINK" "$sf" >/dev/null 2>&1; then
     local d f ic; d=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(destination)'); f=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(filter)')
@@ -294,7 +300,7 @@ step5() {
   local email="$SA@$LOG_PROJECT.iam.gserviceaccount.com"
   if gcloud iam service-accounts describe "$email" --project="$LOG_PROJECT" >/dev/null 2>&1; then pass "service account $email"
   else warn "service account $email does not exist"
-       run gcloud iam service-accounts create "$SA" --project="$LOG_PROJECT" --display-name="Abstract Security log reader" && pass "service account created"; fi
+       run gcloud iam service-accounts create "$SA" --project="$LOG_PROJECT" --display-name="Abstract Security log reader" && { pass "service account created"; SA_CREATED=1; save; }; fi
 
   if gcloud pubsub subscriptions get-iam-policy "$SUB" --project="$LOG_PROJECT" --format=json 2>/dev/null | grep -q "serviceAccount:$email"; then
     pass "it can read $SUB (roles/pubsub.subscriber on the subscription)"
@@ -401,7 +407,7 @@ step7() {
   local email="$WS_SA@$LOG_PROJECT.iam.gserviceaccount.com"
   if gcloud iam service-accounts describe "$email" --project="$LOG_PROJECT" >/dev/null 2>&1; then pass "service account $email"
   else warn "service account $email does not exist"
-       run gcloud iam service-accounts create "$WS_SA" --project="$LOG_PROJECT" --display-name="Abstract Security Workspace reader" && pass "created"; fi
+       run gcloud iam service-accounts create "$WS_SA" --project="$LOG_PROJECT" --display-name="Abstract Security Workspace reader" && { pass "created"; WS_SA_CREATED=1; save; }; fi
   # A new service account can take a few seconds to become readable.
   local cid="" i
   for i in 1 2 3 4 5 6; do
@@ -492,14 +498,20 @@ step8() {
     local cname; cname=$(curl -s -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" -d "$body" \
       "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/notificationChannels" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("name",""))')
     [[ -n "$cname" ]] || { bad "could not create the email channel for $ALERT_EMAIL; alerts not created, so none are silent. Check that the Monitoring API is on (step 3)."; return; }
-    pass "email channel for $ALERT_EMAIL"; ch="[\"$cname\"]"
+    pass "email channel for $ALERT_EMAIL"; ch="[\"$cname\"]"; ALERT_CHANNELS="$cname"; save
   fi
   python3 -c 'import json,sys;print(json.dumps({"log_project":sys.argv[1],"topic_id":sys.argv[2],"subscription_id":sys.argv[3],"notification_channels":json.loads(sys.argv[4]),"acknowledge_no_channel":sys.argv[4]=="[]"}, indent=2))' \
     "$LOG_PROJECT" "$TOPIC" "$SUB" "$ch" > "$dir/abstract.auto.tfvars.json"
   terraform -chdir="$dir" init -input=false >/dev/null || { bad "terraform init failed in $dir"; return; }
   terraform -chdir="$dir" plan -input=false -out=abstract.tfplan || { bad "terraform plan failed"; return; }
   # The plan above is the preview; approving it here is the only confirmation.
-  run terraform -chdir="$dir" apply -input=false abstract.tfplan && pass "alerts created"
+  local before ok=0; before=$(alert_policy_names)
+  run terraform -chdir="$dir" apply -input=false abstract.tfplan && ok=1
+  # Record what this apply added, even when it failed part-way, and keep what earlier attempts
+  # recorded: clean-up removes exactly these and never someone else's.
+  local added; added=$(comm -13 <(printf '%s\n' "$before" | sort) <(alert_policy_names | sort))
+  ALERT_POLICIES=$(printf '%s\n' $ALERT_POLICIES $added | sort -u | tr '\n' ' '); save
+  (( ok )) && pass "alerts created" || bad "terraform apply failed; the alerts it did create are recorded for clean-up"
 }
 
 # Where the probe must be written: somewhere the sink can see, with an API that is on.
@@ -602,16 +614,109 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Clean up. Removes only what this setup recorded creating, plus the probe subscriptions and the
+# "Abstract log pipeline" alerts, which carry its names. A dry run unless --confirm. It never
+# deletes the logging project, a sink that existed before, or your Data Access audit settings.
+gone() {  # gone <what> <command...>
+  local what="$1"; shift
+  if $CONFIRM; then
+    local out; if out=$("$@" 2>&1); then pass "removed $what"
+    elif grep -qiE 'NOT_FOUND|not found|does not exist' <<<"$out"; then pass "$what was already gone"
+    else bad "could not remove $what: ${out%%$'\n'*}"; fi
+  else printf '  %swould remove%s %s\n%s   $' "$Y" "$O" "$what" "$D"; printf ' %q' "$@"; printf '%s\n' "$O"; fi
+}
+kept()   { printf '  %skept%s    %s\n' "$G" "$O" "$*"; }
+byhand() { printf '  %sby hand%s %s\n' "$Y" "$O" "$*"; WARNS=$((WARNS+1)); }
+api_names() {  # api_names <url> <collection> <display-name prefix>: names of matching monitoring objects
+  curl -s -H "Authorization: Bearer $(token)" "$1" | python3 -c '
+import json, sys
+for o in json.load(sys.stdin).get(sys.argv[1], []):
+    if o.get("displayName", "").startswith(sys.argv[2]): print(o["name"])' "$2" "$3" 2>/dev/null
+}
+# Deletes one Monitoring object by name. Defined as a function so a dry run prints its name, never
+# the bearer token the request carries. 404 counts as done, so a retried clean-up can finish.
+mon_delete() {
+  local code; code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $(token)" \
+    "https://monitoring.googleapis.com/v3/$1${2:+?$2}")
+  [[ "$code" == 200 || "$code" == 404 ]]
+}
+alert_policy_names() { api_names "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/alertPolicies?pageSize=200" alertPolicies "Abstract log pipeline"; }
+alert_channel_names() { api_names "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/notificationChannels?pageSize=200" notificationChannels "Abstract log pipeline"; }
+found() { byhand "found, not recorded: $1. Check it is Abstract's, then: $2"; }
+
+# Without saved answers (a Cloud Shell session opened from the templates button is temporary), look
+# for what the setup makes by its default names, and list it. Nothing found by name is deleted:
+# a name is not proof this setup made it.
+discover_all() {
+  LOG_PROJECT="$FIND_PROJECT"
+  why "No saved answers, so nothing is recorded as made here. Listing what carries the setup's names in $LOG_PROJECT."
+  gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT" >/dev/null 2>&1 \
+    && found "subscription $SUB" "gcloud pubsub subscriptions delete $SUB --project=$LOG_PROJECT"
+  gcloud pubsub topics describe "$TOPIC" --project="$LOG_PROJECT" >/dev/null 2>&1 \
+    && found "topic $TOPIC" "gcloud pubsub topics delete $TOPIC --project=$LOG_PROJECT"
+  local a; for a in "$SA" "$WS_SA"; do
+    gcloud iam service-accounts describe "$a@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT" >/dev/null 2>&1 \
+      && found "service account $a" "gcloud iam service-accounts delete $a@$LOG_PROJECT.iam.gserviceaccount.com --project=$LOG_PROJECT"; done
+  local n; for n in $(gcloud pubsub subscriptions list --project="$LOG_PROJECT" --filter='name:abstract-probe-' --format='value(name.basename())' 2>/dev/null); do
+    found "probe subscription $n" "gcloud pubsub subscriptions delete $n --project=$LOG_PROJECT"; done
+  for n in $(alert_policy_names) $(alert_channel_names); do found "alert $n" "delete it under Monitoring > Alerting in the console"; done
+  byhand "the log sink lives on your organization, folder or project, not here. Find it with: gcloud logging sinks list --organization=<org-id> --filter='destination:$TOPIC' (or --folder / --project)"
+  kept "logging project $LOG_PROJECT: this script never deletes it."
+}
+
+remove_all() {
+  title "x" "Clean up"
+  why "Removes only what this setup created. Nothing is deleted without --confirm."
+  why "Delete the integration in Abstract first, so it stops reading the subscription."
+  if [[ -z "$LOG_PROJECT" ]]; then
+    [[ -n "$FIND_PROJECT" ]] && { discover_all; return; }
+    bad "No saved answers in $STATE, so this session cannot tell what the setup made. Cloud Shell sessions opened from the templates button are temporary. Load the answers file you downloaded with --state <file>, or run again with --project <logging-project-id> to list what carries the setup's names."
+    return
+  fi
+  local sf; sf=$(scope_flag)
+  if (( ${SINK_CREATED_AT:-0} > 0 )); then
+    # shellcheck disable=SC2086
+    gone "log sink $SINK at the $SCOPE $SCOPE_ID" gcloud logging sinks delete "$SINK" $sf --quiet
+  else kept "log sink $SINK: it existed before this setup. Its filter may have been extended; review it."; fi
+  local p; for p in $(gcloud pubsub subscriptions list --project="$LOG_PROJECT" --filter='name:abstract-probe-' --format='value(name.basename())' 2>/dev/null); do
+    gone "probe subscription $p" gcloud pubsub subscriptions delete "$p" --project="$LOG_PROJECT" --quiet; done
+  if [[ "${SUB_CREATED:-0}" == 1 ]]; then gone "subscription $SUB" gcloud pubsub subscriptions delete "$SUB" --project="$LOG_PROJECT" --quiet
+  else byhand "subscription $SUB was not recorded as created here. If it is Abstract's: gcloud pubsub subscriptions delete $SUB --project=$LOG_PROJECT"; fi
+  if [[ "${TOPIC_CREATED:-0}" == 1 ]]; then gone "topic $TOPIC" gcloud pubsub topics delete "$TOPIC" --project="$LOG_PROJECT" --quiet
+  else byhand "topic $TOPIC was not recorded as created here. If it is Abstract's: gcloud pubsub topics delete $TOPIC --project=$LOG_PROJECT"; fi
+  if [[ "${SA_CREATED:-0}" == 1 ]]; then gone "service account $SA (and its keys)" gcloud iam service-accounts delete "$SA@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT" --quiet
+  else byhand "service account $SA was not recorded as created here. If it is Abstract's: gcloud iam service-accounts delete $SA@$LOG_PROJECT.iam.gserviceaccount.com"; fi
+  if [[ "${WS_SA_CREATED:-0}" == 1 ]]; then
+    gone "Workspace service account $WS_SA (and its keys)" gcloud iam service-accounts delete "$WS_SA@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT" --quiet
+    byhand "a Workspace super admin removes its entry under admin.google.com > Security > API controls > Domain-wide delegation"
+  fi
+  local n; for n in $ALERT_POLICIES; do gone "alert policy $n" mon_delete "$n"; done
+  for n in $ALERT_CHANNELS; do gone "alert email channel $n" mon_delete "$n" force=true; done
+  for n in $(alert_policy_names) $(alert_channel_names); do
+    [[ " $ALERT_POLICIES $ALERT_CHANNELS " == *" $n "* ]] || kept "alert $n: not made by this setup (Terraform, or another setup)"; done
+  local f; for f in "$KEY_FILE" "$WS_KEY_FILE"; do [[ -f "$f" ]] && gone "key file $f" rm -f "$f"; done
+  [[ "$DATA_ACCESS" == yes ]] && byhand "Data Access audit settings were changed in step 6. A copy of the earlier settings was saved as abstract-audit-config-backup-*.json where step 6 ran. Restore it with get-iam-policy, edit, then set-iam-policy, keeping the etag."
+  kept "logging project $LOG_PROJECT: this script never deletes it. If you created it only for Abstract: gcloud projects delete $LOG_PROJECT"
+  if $CONFIRM && (( FAILS == 0 )); then mv "$STATE" "$STATE.removed-$(date +%Y%m%d%H%M%S)"; say "  saved answers moved aside; running --remove again lists nothing"
+  elif ! $CONFIRM; then say ""; say "  Nothing was removed. Run again with --remove --confirm to remove the items marked 'would remove'."; fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # shellcheck disable=SC1090  # the state file is chosen at run time
 while [[ $# -gt 0 ]]; do case "$1" in
   --check) CHECK_ONLY=true; shift ;;
+  --remove) REMOVE=true; shift ;;
+  --confirm) CONFIRM=true; shift ;;
   --step) ONLY_STEP="$2"; shift 2 ;;
   --state) STATE="$2"; shift 2; [[ -f "$STATE" ]] && source "$STATE" ;;
-  -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  --project) FIND_PROJECT="$2"; shift 2 ;;
+  -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "unknown option $1 (try --help)"; exit 2 ;; esac; done
 
 need gcloud; need python3; need curl
 printf '%sAbstract Security — Google Cloud guided setup%s%s\n' "$P" "$O" "$($CHECK_ONLY && echo '  (check only: nothing will change)')"
-if [[ -n "$ONLY_STEP" ]]; then "step$ONLY_STEP"; else for s in 1 2 3 4 5 6 7 8 9 10; do "step$s"; done; fi
+if $REMOVE; then remove_all
+elif $CONFIRM; then echo "--confirm only goes with --remove"; exit 2
+elif [[ -n "$ONLY_STEP" ]]; then "step$ONLY_STEP"; else for s in 1 2 3 4 5 6 7 8 9 10; do "step$s"; done; fi
 printf '\n%s%d passed%s · %s%d to look at%s · %s%d to fix%s\n' "$G" "$PASSES" "$O" "$Y" "$WARNS" "$O" "$R" "$FAILS" "$O"
 [[ $FAILS -eq 0 ]]

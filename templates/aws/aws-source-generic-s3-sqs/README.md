@@ -1,4 +1,4 @@
-# Any logs in an S3 bucket
+# Any S3 logs to Abstract: new bucket and queue
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Creates a hardened S3 bucket any log shipper can write to, the SQS queue S3 noti
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How Any logs in an S3 bucket fits together](diagram.png)
+![How Any S3 logs to Abstract: new bucket and queue fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ A custom shipper or a third-party product writes logs to S3 and none of the sour
 
 **Not for:** The source has its own template here (CloudTrail, VPC Flow Logs, WAF, load balancer, CloudFront, Route 53 Resolver, S3 access logs).
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

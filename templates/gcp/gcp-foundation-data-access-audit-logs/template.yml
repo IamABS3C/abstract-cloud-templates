@@ -1,5 +1,5 @@
 id: gcp-foundation-data-access-audit-logs
-title: Data Access audit logging
+title: 'Turn on Data Access audit logs: organization, folder or project'
 cloud: gcp
 role: foundation
 scope: organization
@@ -17,6 +17,7 @@ permissions:
 creates:
 - An IAM audit config at the chosen scope (organization, folder or project) enabling the listed Data Access
   log types
+cleanup_note: 'terraform destroy turns Data Access audit logging OFF for every service this template manages, including any setting that existed before you applied it, because the audit config is authoritative for those services. Admin Activity logs are always on and are not affected.'
 never_touches:
 - 'Admin Activity audit logs: always on, and nothing here can turn them off'
 - 'The log-export pipeline: this is deliberately separate state'

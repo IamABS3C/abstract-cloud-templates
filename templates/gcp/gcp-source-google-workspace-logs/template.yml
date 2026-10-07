@@ -1,5 +1,5 @@
 id: gcp-source-google-workspace-logs
-title: Google Workspace logs
+title: 'Google Workspace audit logs to Abstract: Reports API'
 cloud: gcp
 role: source
 scope: project

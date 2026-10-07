@@ -1,5 +1,5 @@
 id: aws-foundation-log-delivery-helper
-title: Log delivery lookup helper
+title: 'AWS helper: look up resources and switch on logging'
 cloud: aws
 role: foundation
 scope: account

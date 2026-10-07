@@ -1,4 +1,4 @@
-# CloudFront logs
+# CloudFront logs to Abstract: new bucket and queue
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Creates the hardened S3 bucket CloudFront standard logging writes to, the SQS qu
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How CloudFront logs fits together](diagram.png)
+![How CloudFront logs to Abstract: new bucket and queue fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ You want CloudFront standard access logs in Abstract.
 
 **Not for:** Logs already land in a bucket: use the read role for an existing bucket and queue.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

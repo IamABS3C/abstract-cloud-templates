@@ -1,4 +1,4 @@
-# Sentinel destination, app by script
+# Abstract to Sentinel: app registration created by script
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ The portal-wizard variant of the Sentinel destination: a deployment script creat
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
-![How Sentinel destination, app by script fits together](diagram.png)
+![How Abstract to Sentinel: app registration created by script fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Portal-only teams and labs.
 
 **Not for:** Production where a standing privileged identity is unwelcome; the standard or Graph template avoids it.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

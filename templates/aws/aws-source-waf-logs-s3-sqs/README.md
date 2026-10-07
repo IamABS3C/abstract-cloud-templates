@@ -1,4 +1,4 @@
-# WAF logs
+# WAF logs to Abstract: new bucket and queue
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Turns on logging for one WAF web ACL into a hardened S3 bucket, with the SQS que
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How WAF logs fits together](diagram.png)
+![How WAF logs to Abstract: new bucket and queue fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ You want WAF request logs for a web ACL in Abstract.
 
 **Not for:** WAF logs are already centralised in Security Lake: use the Security Lake subscriber instead.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

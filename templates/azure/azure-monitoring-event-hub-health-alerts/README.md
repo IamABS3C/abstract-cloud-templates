@@ -1,4 +1,4 @@
-# Pipeline health alerts
+# Azure alerts when the Abstract feed stalls
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Event Hubs publishes no consumer-lag metric, so when the Abstract consumer stall
 
 **Cloud:** azure · **Role:** monitoring · **Scope:** resource-group
 
-![How Pipeline health alerts fits together](diagram.png)
+![How Azure alerts when the Abstract feed stalls fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Immediately after the Event Hub source, on every deployment.
 
 **Not for:** As a replacement for absence-of-data alerting on the Abstract side, which catches failures after the hub; both layers are needed.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

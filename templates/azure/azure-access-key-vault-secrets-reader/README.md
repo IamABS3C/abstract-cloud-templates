@@ -1,4 +1,4 @@
-# Key Vault secrets reader
+# Read access to a Key Vault: one role assignment
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,9 +6,11 @@ A small helper that grants one role to one principal on an existing Key Vault. T
 
 **Cloud:** azure · **Role:** access · **Scope:** resource-group
 
-![How Key Vault secrets reader fits together](diagram.png)
+![How Read access to a Key Vault: one role assignment fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
 ## Deploy
 

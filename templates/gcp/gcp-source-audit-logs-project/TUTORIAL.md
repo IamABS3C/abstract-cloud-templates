@@ -2,10 +2,6 @@
 
 # Single-project pilot
 
-<!-- guided-step -->
-> **This is step 4 of the guided setup (Log pipeline).** The guided setup does it for you and checks it: from the repository root run `./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4`, or follow `tools/gcp-guided-setup/WALKTHROUGH.md`. This page is the Terraform way to do the same step.
-<!-- /guided-step -->
-
 <walkthrough-tutorial-duration duration="10"></walkthrough-tutorial-duration>
 
 <walkthrough-info-message>**This does not cover future projects.** A project sink has no
@@ -16,44 +12,123 @@ real blocker.</walkthrough-info-message>
 Choosing this directory *is* the acknowledgement — the module normally refuses project
 scope without one.
 
+<!-- abstract:signin -->
 ## Sign in first
 
-Cloud Shell opened this repository in a **temporary** session: Google gives repositories it does not own none of your credentials, and deletes the session's files when it ends.
-
-Sign in, then give Terraform the same sign-in:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
 
 ```bash
 gcloud auth login
 gcloud auth application-default login
 ```
+<!-- /abstract:signin -->
 
-<walkthrough-info-message>**Keep the Terraform state outside this session.** Copy `backend.tf.example` to `backend.tf` and set its bucket before `terraform apply`, or the state is deleted when the session ends.</walkthrough-info-message>
+<!-- abstract:check -->
+## Check first
 
-## Step 1 — Preflight
-
-```bash
-../../../tools/gcp-guided-setup/preflight.sh --project YOUR_PROJECT --scope project
-```
-
-## Step 2 — Plan, then apply
+Read-only: nothing changes. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Steps 1 and 2 of the guided setup record your scope and check every permission the deploy needs.
 
 ```bash
-cat > terraform.tfvars <<EOF
-log_project  = "YOUR_PROJECT"
-sink_project = "YOUR_PROJECT"
-EOF
-terraform init && terraform plan
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/audit-gcp-estate.sh
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
 ```
 
-## Step 3 — Then replace it
+If a permission row is red, find the person who holds that role before you go on.
+
+The guided setup saves your answers (organization, scope, logging project, topic, subscription). Load them for the commands on this page:
+
+```bash
+source ~/.abstract-gcp-setup.env
+```
+<!-- /abstract:check -->
+
+## Choose the project
+
+Set both `log_project` and `sink_project` to the project you are piloting in
+terraform.tfvars.
+
+<!-- abstract:deploy -->
+## Deploy
+
+Run steps 3, 4 and 5 of the guided setup: the logging project, then the pipeline, then the account Abstract reads with. Step 9 then sends a test event end to end, and step 10 prints the values to enter in Abstract. Each step prints its commands, asks before it changes anything, and checks the result. Run it again at any time: it only adds what is missing.
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 3
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 5
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 9
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 10
+```
+
+Your team requires infrastructure as code? Use [Terraform instead](#terraform-instead) at the end of this page. Use one or the other, not both.
+<!-- /abstract:deploy -->
+
+## Verify
+
+Confirm the pilot delivers end to end before you replace it.
 
 <walkthrough-conclusion-trophy></walkthrough-conclusion-trophy>
+
+## Then replace it
 
 Once you have proven the pipeline and obtained `roles/logging.configWriter` at the
 organization, deploy `gcp-source-audit-logs-organization` and **delete this sink**.
 
 **Do not repeat this per project.** Seventy project sinks is exactly the linear toil the
 aggregated sink exists to eliminate — and each one silently decays as projects change.
+
+<!-- abstract:cleanup -->
+## Clean up
+
+Delete the integration in Abstract first, so it stops reading. The clean-up needs the answers file the guided setup saved; in a new Cloud Shell session, upload the copy you downloaded at the end of the setup. Then list what the clean-up would remove, and remove it:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove --confirm
+```
+
+It removes only what the guided setup recorded creating, and never the logging project. Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself. If you deployed with Terraform instead, run `terraform destroy` in this folder with the same `backend.tf`.
+<!-- /abstract:cleanup -->
+
+<!-- abstract:terraform -->
+## Terraform instead
+
+Run every command in this template's folder.
+
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-audit-logs-project"
+source ~/.abstract-gcp-setup.env 2>/dev/null   # the guided setup's saved answers, if you ran it
+echo "Logging project: ${LOG_PROJECT:?not set: run export LOG_PROJECT=<your-logging-project-id> first}"
+export STATE_PROJECT="${STATE_PROJECT:-$LOG_PROJECT}" STATE_BUCKET="$LOG_PROJECT-abstract-tfstate"
+gcloud storage buckets describe "gs://$STATE_BUCKET" >/dev/null 2>&1 || \
+  gcloud storage buckets create "gs://$STATE_BUCKET" --project="$STATE_PROJECT" --location=US --uniform-bucket-level-access
+gcloud storage buckets update "gs://$STATE_BUCKET" --versioning
+sed "s/acme-abstract-tfstate/$STATE_BUCKET/" backend.tf.example > backend.tf
+```
+
+**2. Fill in your values.** Every value is explained in the file and in this template's README:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+cloudshell edit terraform.tfvars
+```
+
+**3. Preview, then apply exactly what you previewed:**
+
+```bash
+terraform init
+terraform plan -out=abstract.tfplan
+terraform apply abstract.tfplan
+```
+
+**To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
+<!-- /abstract:terraform -->
 
 ---
 

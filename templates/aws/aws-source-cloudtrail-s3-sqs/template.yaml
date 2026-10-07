@@ -1,7 +1,7 @@
 # Generated from templates/aws/_snippets/s3-log-source.yaml with SourceType=CloudTrail by `python -m tools.templates generate`. Do not edit: edit the source and run generate.
 # YAML comments do not survive generation: the source's comments, including the reason for each cfn-lint suppression, are in the source.
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Abstract Security - CloudTrail logs. Creates a CloudTrail trail, its hardened S3 bucket, the SNS topic and SQS queue the trail notifies, and the cross-account role Abstract assumes to read them.
+Description: 'Abstract Security - CloudTrail to Abstract: new trail, bucket and queue. Creates a CloudTrail trail, its hardened S3 bucket, the SNS topic and SQS queue the trail notifies, and the cross-account role Abstract assumes to read them.'
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:

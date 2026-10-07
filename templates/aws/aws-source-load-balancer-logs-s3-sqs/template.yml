@@ -1,5 +1,5 @@
 id: aws-source-load-balancer-logs-s3-sqs
-title: Load balancer access logs
+title: 'Load balancer logs to Abstract: new bucket and queue'
 cloud: aws
 role: source
 scope: account

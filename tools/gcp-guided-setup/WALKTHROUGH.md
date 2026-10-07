@@ -6,15 +6,26 @@
 
 One walkthrough that creates and checks everything Abstract needs in Google Cloud, in the order it has to happen. Nothing changes until you say yes, and every step can be re-checked later.
 
-Each step runs one part of the guided script. It prints what it will do, asks before it changes anything, and checks the result. You can stop at any step and come back; your answers are kept.
+Each step runs one part of the guided script. It prints what it will do, asks before it changes anything, and checks the result. You can stop at any step and come back; your answers are kept for this Cloud Shell session. The session is temporary, so step 10 has you download them.
 
 Make the script runnable:
 
 ```bash
-chmod +x tools/gcp-guided-setup/abstract-gcp-setup.sh
+cd "$(git rev-parse --show-toplevel)"
+chmod +x tools/gcp-guided-setup/*.sh
 ```
 
 Click **Start** to begin.
+
+## Check first
+
+**Why.** See what you already have before anything is created. The estate audit is read-only: it lists your organization, folders and projects, every log sink that already exports logs, Pub/Sub topics, and your audit settings.
+
+```bash
+./tools/gcp-guided-setup/audit-gcp-estate.sh
+```
+
+**You should see:** Your organization, and any sinks that already send logs somewhere. If one already sends audit logs to a topic, tell whoever owns it before you add a second.
 
 ## 1. Sign-in and organization
 
@@ -41,8 +52,8 @@ Click **Start** to begin.
 **Permissions it checks:**
 
 - Logs Configuration Writer (roles/logging.configWriter) on the organization, for the log sink. Not included in Organization Admin
-- Organization Admin or Security Admin on the same scope, for Data Access logs (step 6
-- Project Creator + Billing User on the organization and billing account, for a new logging project (step 3
+- Organization Admin or Security Admin on the same scope, for Data Access logs (step 6)
+- Project Creator + Billing User on the organization and billing account, for a new logging project (step 3)
 - Owner, or Pub/Sub Admin + Service Account Admin + Service Account Key Admin + Service Usage Admin on the logging project, for steps 3 to 5
 
 ```bash
@@ -177,7 +188,7 @@ Prefer Terraform? The same piece is `templates/gcp/gcp-monitoring-pipeline-healt
 
 ## 9. Test and verify
 
-**What it does.** Writes a harmless admin event inside your scope and waits for it on the subscription.
+**What it does.** Writes a harmless admin event inside your scope and waits for it on a probe subscription of its own, never on Abstract's.
 
 **Why.** Proves the whole path before Abstract is involved. A new sink needs about 3 minutes before it routes anything.
 
@@ -198,6 +209,31 @@ Prefer Terraform? The same piece is `templates/gcp/gcp-monitoring-pipeline-healt
 ```
 
 **You should see:** Events appear in Abstract under vendor GCP. Re-check any time with: ./tools/gcp-guided-setup/abstract-gcp-setup.sh --check
+
+Then download your answers. This Cloud Shell session is temporary, and the clean-up needs them to know what the setup made. If you ran step 6, download its backup of your earlier audit settings too:
+
+```bash
+cloudshell download ~/.abstract-gcp-setup.env
+ls abstract-audit-config-backup-*.json 2>/dev/null && cloudshell download abstract-audit-config-backup-*.json
+```
+
+## Clean up
+
+To remove the setup later, delete the integration in Abstract first, so it stops reading. In a new session, upload the answers file you downloaded (More, then Upload) and load it with `--state`. Then list what would be removed. Nothing is deleted without --confirm:
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove
+```
+
+Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself.
+
+When the list is right, remove it:
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove --confirm
+```
+
+It removes only what this setup created: the sink, topic and subscription, the service accounts, the health alerts and the key files. It never deletes the logging project. Data Access audit settings, and anything that existed before you started, are listed for you to change by hand.
 
 ## Done
 

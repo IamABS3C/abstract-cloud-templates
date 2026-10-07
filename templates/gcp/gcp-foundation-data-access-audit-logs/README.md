@@ -1,4 +1,4 @@
-# Data Access audit logging
+# Turn on Data Access audit logs: organization, folder or project
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Admin Activity audit logs are always on; Data Access logs are off by default, an
 
 **Cloud:** gcp · **Role:** foundation · **Scope:** organization
 
-![How Data Access audit logging fits together](diagram.png)
+![How Turn on Data Access audit logs: organization, folder or project fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -15,6 +15,8 @@ Editable source: [diagram.drawio](diagram.drawio)
 Data Access signal (BigQuery reads, Cloud Storage object reads, KMS use) is needed, decided per service.
 
 **Not for:** To change Admin Activity logs, which are always on; or before reading the current audit config, because this resource is authoritative per service.
+
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
 ## Deploy
 

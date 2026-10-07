@@ -1,4 +1,4 @@
-# CloudWatch Logs by API
+# CloudWatch Logs to Abstract: direct API read
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ CloudWatch Logs is an API-poll source with no bucket or queue: Abstract reads lo
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How CloudWatch Logs by API fits together](diagram.png)
+![How CloudWatch Logs to Abstract: direct API read fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ Logs live in CloudWatch Logs and Abstract should read them by API, with no bucke
 
 **Not for:** High-volume log groups, where an S3 export or a subscription to Kinesis is cheaper than API polling.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 

@@ -1,5 +1,5 @@
 id: aws-source-s3-access-logs-s3-sqs
-title: S3 server access logs
+title: 'S3 access logs to Abstract: new bucket and queue'
 cloud: aws
 role: source
 scope: account

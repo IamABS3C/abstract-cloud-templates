@@ -1,4 +1,4 @@
-# CloudTrail logs
+# CloudTrail to Abstract: new trail, bucket and queue
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -6,7 +6,7 @@ Creates a CloudTrail trail, its hardened S3 bucket, the SNS topic and SQS queue 
 
 **Cloud:** aws · **Role:** source · **Scope:** account
 
-![How CloudTrail logs fits together](diagram.png)
+![How CloudTrail to Abstract: new trail, bucket and queue fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
@@ -16,7 +16,7 @@ You want the account's (or organization's) API activity in Abstract and no trail
 
 **Not for:** A trail already delivers to a bucket: use the read role for an existing bucket and queue, or BucketMode=UseExisting.
 
-Not sure this is the right one? See [the chooser](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/CHOOSE.md).
+Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/aws/GUIDE.md).
 
 ## Deploy
 
