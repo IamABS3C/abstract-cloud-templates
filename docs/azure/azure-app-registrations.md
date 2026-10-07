@@ -253,7 +253,7 @@ from Key Vault into the Abstract integration within those 30 days.
 
 ## 7. Sentinel destination — the same hardening
 
-[`sentinel-destination-with-app.bicep`](../../templates/azure/azure-destination-sentinel-app-by-script/README.md)
+[the Sentinel destination with an app registration](../../templates/azure/azure-destination-sentinel-app-by-script/README.md)
 already created an app via `deploymentScripts`. Its inline 16-line script had three
 problems, now fixed in
 [`sentinel-app-deploymentscript.sh`](../../templates/azure/_modules/sentinel-app-deploymentscript.sh):
