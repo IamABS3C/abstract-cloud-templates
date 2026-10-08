@@ -43,7 +43,7 @@ gcloud auth application-default login
 <!-- abstract:check -->
 ## Check first
 
-Read-only: nothing changes. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Steps 1 and 2 of the guided setup record your scope and check every permission the deploy needs.
+Read-only: nothing changes. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Script steps 1 and 2 of the guided setup record your scope and check the rights the sink needs; script step 3 checks the logging project, and the organization policy that can block the service-account key.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
@@ -52,7 +52,7 @@ cd "$(git rev-parse --show-toplevel)"
 ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
 ```
 
-If a permission row is red, find the person who holds that role before you go on.
+If a permission row shows ✗, find the person who holds that role before you go on.
 
 The guided setup saves your answers (organization, scope, logging project, topic, subscription). Load them for the commands on this page:
 

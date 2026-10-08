@@ -73,7 +73,7 @@
 //                   centralKeyVaultSubscriptionId=<kv-sub>
 //
 //  Then grant the assignment identity Contributor on the target subscriptions and
-//  run a remediation task - see scripts/Deploy-AbstractAppReg.sh.
+//  run a remediation task - see ./deploy.sh grant and ./deploy.sh remediate.
 // =============================================================================
 
 targetScope = 'managementGroup'
@@ -103,8 +103,8 @@ param enforcementMode string = 'DoNotEnforce'
 @description('''
 Resource ID of a user-assigned managed identity that ALREADY holds Microsoft Graph
 Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All, consented by a
-Global Administrator. Policy cannot create or consent this - see scripts/
-Deploy-AbstractAppReg.sh -a Bootstrap for the one-time setup.
+Global Administrator. Policy cannot create or consent this - see this template's
+./deploy.sh bootstrap for the one-time setup.
 
 This identity can grant itself any directory permission. Treat it as tier-0.
 
@@ -671,7 +671,7 @@ output assignmentName string = appRegAssignment.name
 output assignmentPrincipalId string = appRegAssignment.identity!.principalId
 
 output nextSteps object = {
-  step1: 'Bootstrap the Graph identity if you have not: scripts/Deploy-AbstractAppReg.sh -a Bootstrap. Needs Global Administrator ONCE.'
+  step1: 'Bootstrap the Graph identity if you have not: ./deploy.sh bootstrap -g <resource-group> in this template folder. Needs Global Administrator ONCE.'
   step2: 'Grant the assignment principal above Owner on the target subscriptions and Key Vault Secrets Officer on ${centralKeyVaultName}.'
   step3: 'Leave effect=AuditIfNotExists first and read Policy > Compliance: it lists exactly which subscriptions would be onboarded.'
   step4: 'Flip to DeployIfNotExists + enforcementMode=Default, then run a remediation task to act on EXISTING subscriptions.'

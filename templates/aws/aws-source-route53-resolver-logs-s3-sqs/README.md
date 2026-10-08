@@ -75,7 +75,7 @@ Query logging to S3 is billed per GB by CloudWatch vended-logs pricing; busy VPC
 | `RestrictBySourceAccount` | string | no | Add aws:SourceAccount = this account to the PutObject condition (recommended). |  |
 | `SourceArnCondition` | string | no | Optional aws:SourceArn value to further restrict who may write (e.g. a specific trail or distribution ARN). |  |
 | `LogDeliveryPrincipalOverride` | string | no | Override the log-delivery service principal (advanced; leave blank to use the correct default for the SourceType). |  |
-| `Route53VpcIds` | array | no | VPC IDs to associate with the Route 53 Resolver query-logging config (SourceType=Route53Resolver, CreateNew bucket). Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId | `aws ec2 describe-vpcs --query Vpcs[].VpcId` |
+| `Route53VpcIds` | array | yes | Comma-separated VPC IDs whose DNS queries the stack logs, up to 10; any VPC after the tenth is not logged, so use a second stack for more. With BucketMode=UseExisting it is not used: enter the VPCs that already log to your bucket. Find them with: aws ec2 describe-vpcs --query Vpcs[].VpcId | `aws ec2 describe-vpcs --query Vpcs[].VpcId` |
 | `EnableDlqAlarm` | string | no | Create a CloudWatch alarm that fires when messages land in the dead-letter queue (Abstract failing to process). Requires QueueMode=CreateNew. |  |
 | `DlqAlarmThreshold` | int | no | Number of visible DLQ messages that triggers the alarm. |  |
 | `EnableQueueAgeAlarm` | string | no | Alarm when the oldest message in the main queue exceeds QueueAgeAlarmSeconds (ingestion lag). Requires QueueMode=CreateNew. |  |
@@ -133,6 +133,7 @@ Query logging to S3 is billed per GB by CloudWatch vended-logs pricing; busy VPC
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present. |
+| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, SqsQueueArn, BucketNameOut, AwsRegion and RoleArn (or the access-key outputs) are present; the Abstract integration's form asks for all five. |
+| Every VPC you named is associated with the query-logging configuration | `aws route53resolver list-resolver-query-log-config-associations --query 'ResolverQueryLogConfigAssociations[].[ResourceId,Status]'` | One ACTIVE row per VPC in Route53VpcIds (up to 10). |
 | The SQS queue is receiving notifications | `aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | A non-zero count, or a count that returns to zero because Abstract is consuming. |
 | Nothing is failing into the dead-letter queue | `aws sqs get-queue-attributes --queue-url <dead-letter-queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | Zero messages. |

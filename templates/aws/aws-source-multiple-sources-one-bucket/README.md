@@ -36,7 +36,8 @@ Or from a shell, in this folder:
 - AWS CLI v2, authenticated
 - The Abstract principal ARN (or account ID) and External ID for your tenant; the console regenerates the External ID on each pass, so mint it once and use the same value on both sides
 - Only for deploy.sh: an S3 bucket to host your own copy of the child templates (Launch Stack uses Abstract's public copy)
-- Per enabled source: a VPC, subnet or ENI ID (VPC Flow Logs), a WebACL ARN (WAF), an existing stream name (Kinesis), or a data lake ARN (Security Lake)
+- Per enabled source: a VPC, subnet or ENI ID (VPC Flow Logs), a WebACL ARN (WAF), up to 10 VPC IDs (Route 53 Resolver), an existing stream name (Kinesis), or a data lake ARN (Security Lake); the stack refuses to start without them
+- Load balancer, CloudFront and S3 access logs are not switched on by the stack: point each producer at its child stack's bucket afterwards
 - With Security Lake enabled, AbstractPrincipalArn must be a bare 12-digit account ID
 - deploy.sh uploads the child templates from the sibling folders to s3://&lt;template-bucket&gt;/&lt;prefix&gt;/&lt;template-id&gt;.yaml before it deploys; CloudFormation refuses any TemplateURL that is not on S3
 
@@ -74,6 +75,7 @@ Object count drives the S3 request, SQS and KMS charges more than byte volume. K
 | `EnableSecurityLake` | string | no | Deploy the SecurityLake child stack. |  |
 | `VpcFlowResourceId` | string | no | vpc-/subnet-/eni- ID for VPC Flow Logs (if enabled). Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId | `aws ec2 describe-vpcs --query Vpcs[].VpcId` |
 | `WafWebAclArn` | string | no | WAF WebACL ARN (if WAF enabled). Find it with: aws wafv2 list-web-acls --scope REGIONAL | `aws wafv2 list-web-acls --scope REGIONAL` |
+| `Route53VpcIds` | array | no | Comma-separated VPC IDs whose DNS queries to log, up to 10 (if Route 53 enabled); any VPC after the tenth is not logged. Find them with: aws ec2 describe-vpcs --query Vpcs[].VpcId | `aws ec2 describe-vpcs --query Vpcs[].VpcId` |
 | `KinesisStreamName` | string | no | Existing Kinesis stream name (if Kinesis enabled). Find it with: aws kinesis list-streams | `aws kinesis list-streams` |
 | `SecurityLakeDataLakeArn` | string | no | Security Lake data lake ARN (if Security Lake enabled). Note: when Security Lake is enabled, AbstractPrincipalArn must be a bare 12-digit account ID (the Security Lake subscriber principal), not a full IAM ARN. Find it with: aws securitylake list-data-lakes | `aws securitylake list-data-lakes` |
 | `SecurityLakeSourceName` | string | no | Security Lake AWS log source (if Security Lake enabled). |  |

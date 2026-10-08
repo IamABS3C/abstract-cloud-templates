@@ -36,11 +36,12 @@ Or from a shell, in this folder:
 - The Abstract principal ARN (or 12-digit account ID) and the External ID, copied from the integration in the Abstract console
 - With BucketMode=UseExisting, wire the bucket's notifications and the log producer yourself; the stack does not write them on a bucket it does not own
 - For an organization trail, deploy in the management or delegated administrator account and set CtIsOrganizationTrail=true and CtOrganizationId
+- Check for a trail you already have first: aws cloudtrail describe-trails. If one exists (Control Tower and Organizations set-ups create an organization trail), read its bucket with the read role instead: a second trail delivers a second, billed copy of management events
 - With KmsMode=UseExisting, the key policy must already allow cloudtrail.amazonaws.com to GenerateDataKey* and Decrypt, or trail creation fails
 
 ## Cost
 
-Management events on one trail are free; S3 and Lambda data events are high volume and billed per event, so they are off by default.
+The first copy of management events in each account is free; if a trail (or an organization trail) already delivers them, this trail is a second copy and every management event is billed. S3 and Lambda data events are high volume and billed per event, so they are off by default.
 
 ## Parameters
 
@@ -142,6 +143,7 @@ Management events on one trail are free; S3 and Lambda data events are high volu
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present. |
+| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, SqsQueueArn, BucketNameOut, AwsRegion and RoleArn (or the access-key outputs) are present; the Abstract integration's form asks for all five. |
+| The trail is logging to the bucket | `aws cloudtrail get-trail-status --name <NamePrefix>-trail --query '[IsLogging,LatestDeliveryTime]'` | IsLogging is true, and LatestDeliveryTime advances within about 15 minutes. |
 | The SQS queue is receiving notifications | `aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | A non-zero count, or a count that returns to zero because Abstract is consuming. |
 | Nothing is failing into the dead-letter queue | `aws sqs get-queue-attributes --queue-url <dead-letter-queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | Zero messages. |

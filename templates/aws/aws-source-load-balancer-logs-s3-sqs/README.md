@@ -130,6 +130,6 @@ Access-log delivery is free; S3 storage and the per-object S3 and SQS requests a
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present. |
+| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, SqsQueueArn, BucketNameOut, AwsRegion and RoleArn (or the access-key outputs) are present; the Abstract integration's form asks for all five. |
 | The SQS queue is receiving notifications | `aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | A non-zero count, or a count that returns to zero because Abstract is consuming. |
 | Nothing is failing into the dead-letter queue | `aws sqs get-queue-attributes --queue-url <dead-letter-queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | Zero messages. |

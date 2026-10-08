@@ -43,7 +43,7 @@ never_touches:
 - The managed identity and its Graph consent, which must already exist and are never created or changed here
 - The Key Vault itself, which must already exist; only secrets are written to it
 prerequisites:
-- A user-assigned managed identity, created and consented with the Bootstrap action
+- A user-assigned managed identity, created and consented once with ./deploy.sh bootstrap (Global Administrator)
 - A central Key Vault that already exists
 - Keep the tag gate (default abstract-onboard=true) so only opted-in subscriptions are onboarded
 - Restrict Managed Identity Operator on the identity; it controls who can use it
@@ -68,8 +68,8 @@ parameters:
   required: true
   find_it: az identity list --query "[].id" -o tsv
   description: 'Resource ID of a user-assigned managed identity holding Graph Application.ReadWrite.All
-    + AppRoleAssignment.ReadWrite.All (admin-consented). Create and consent it with scripts/Deploy-AbstractAppReg.sh
-    -a Bootstrap. Treat as tier-0. Find it with: az identity list --query [].id -o tsv'
+    + AppRoleAssignment.ReadWrite.All (admin-consented). Create and consent it with ./deploy.sh bootstrap
+    in this template folder. Treat as tier-0. Find it with: az identity list --query [].id -o tsv'
 - name: managedIdentityClientId
   type: string
   required: false

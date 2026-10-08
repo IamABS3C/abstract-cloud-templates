@@ -66,9 +66,9 @@ on that bucket.
 
 | Where the logs are | Option |
 |---|---|
-| CloudWatch Logs | Abstract reads the log groups by API. Fine at modest volume; at high volume, streaming through Firehose to S3 costs less, and has no template yet. |
+| CloudWatch Logs | Abstract reads the log groups by API. Fine at modest volume; at high volume, streaming through Firehose to S3 costs less; only EKS control-plane logs have a Firehose template so far. |
 | A Kinesis data stream | Abstract reads the stream directly. No bucket or queue. |
-| Amazon Security Lake | Abstract subscribes as a Security Lake subscriber. |
+| Amazon Security Lake | Abstract subscribes as a Security Lake subscriber. Its Security Lake integration reads WAF records; other sources use their own path. |
 
 ## Many accounts
 

@@ -39,10 +39,14 @@ never_touches:
 prerequisites:
 - AWS CLI v2, authenticated to the account and Region, and jq for deploy.sh
 - AWS Config recording in this Region (aws configservice describe-configuration-recorders)
-- 'With an existing delivery channel (the usual case), leave CreateDeliveryChannel=false and repoint it after deploying,
-  with no key prefix: aws configservice put-delivery-channel --delivery-channel name=<channel-name>,s3BucketName=<BucketNameOut>.
-  Then confirm aws configservice describe-delivery-channels shows no s3KeyPrefix: a prefix moves the files outside
-  AWSLogs/<account>/Config/, where the bucket policy refuses them and the queue never hears of them'
+- 'With an existing delivery channel (the usual case), leave CreateDeliveryChannel=false and repoint it after deploying.
+  Save it first, every field, because it is the rollback: aws configservice describe-delivery-channels > config-channel-backup.json.
+  Then change only the bucket and drop the key prefix and KMS key, keeping the SNS topic and snapshot frequency: jq
+  ''.DeliveryChannels[0] | .s3BucketName = "<BucketNameOut>" | del(.s3KeyPrefix, .s3KmsKeyArn)'' config-channel-backup.json
+  > config-channel-abstract.json, then aws configservice put-delivery-channel --delivery-channel file://config-channel-abstract.json.
+  Confirm describe-delivery-channels shows no s3KeyPrefix: a prefix moves the files outside AWSLogs/<account>/Config/,
+  where the bucket policy refuses them and the queue never hears of them. To roll back, put .DeliveryChannels[0] of
+  the backup with put-delivery-channel: that restores every field, not only the bucket'
 - The Abstract principal ARN (or account ID) and External ID, from the AWS S3 SQS Source integration in the Abstract
   console
 - 'In Abstract, the AWS S3 SQS Source with dataformat json and json_key configurationItems, and a parser built

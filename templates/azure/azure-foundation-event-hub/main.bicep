@@ -570,7 +570,7 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
 // ---------------------------------------------------------------------------
 // Outputs (intentionally NO keys / connection strings / secrets - deployment
 // outputs are readable in deployment history by anyone with reader access.
-// Fetch secrets post-deploy with the companion script, the portal, or CLI.)
+// Copy secrets post-deploy from the portal, straight into Abstract.)
 // ---------------------------------------------------------------------------
 output namespaceName string = ehNamespace.name
 output namespaceId string = ehNamespace.id
@@ -603,7 +603,7 @@ output abstractOnboarding object = {
   storageBlobContainerName: createStorageAccount ? blobContainerName : '(bring your own)'
   eventHubNamespaceFqdn: '${ehNamespace.name}.servicebus.windows.net'
   storageAccountUrl: createStorageAccount ? checkpointStorage!.properties.primaryEndpoints.blob : '(bring your own)'
-  eventHubConnectionString: enableSas ? 'Portal: Event Hubs Namespace > Shared access policies > ${sasRuleName} > Connection string-primary key (or run the companion script with -Action Credentials)' : '(SAS disabled)'
-  storageAccountConnectionString: createStorageAccount && storageAllowSharedKeyAccess ? 'Portal: Storage Account > Security + networking > Access keys > Connection string (or run the companion script with -Action Credentials)' : '(shared key access disabled)'
+  eventHubConnectionString: enableSas ? 'Portal: Event Hubs Namespace > Shared access policies > ${sasRuleName} > Connection string-primary key. It is a secret: copy it from the portal straight into Abstract, never print it in a terminal.' : '(SAS disabled)'
+  storageAccountConnectionString: createStorageAccount && storageAllowSharedKeyAccess ? 'Portal: Storage Account > Security + networking > Access keys > Connection string (Basic tier only; Standard and above need no storage account in Abstract)' : '(shared key access disabled)'
   docs: 'https://docs.abstractsecurity.app -> Integrations -> Azure Event Hub'
 }

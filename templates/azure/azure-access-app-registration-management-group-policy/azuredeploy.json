@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "8051595679612722366"
+      "templateHash": "11423490225662086214"
     }
   },
   "parameters": {
@@ -51,7 +51,7 @@
     "managedIdentityResourceId": {
       "type": "string",
       "metadata": {
-        "description": "Resource ID of a user-assigned managed identity that ALREADY holds Microsoft Graph\nApplication.ReadWrite.All and AppRoleAssignment.ReadWrite.All, consented by a\nGlobal Administrator. Policy cannot create or consent this - see scripts/\nDeploy-AbstractAppReg.sh -a Bootstrap for the one-time setup.\n\nThis identity can grant itself any directory permission. Treat it as tier-0.\n\nFind it with: az identity list --query [].id -o tsv\n"
+        "description": "Resource ID of a user-assigned managed identity that ALREADY holds Microsoft Graph\nApplication.ReadWrite.All and AppRoleAssignment.ReadWrite.All, consented by a\nGlobal Administrator. Policy cannot create or consent this - see this template's\n./deploy.sh bootstrap for the one-time setup.\n\nThis identity can grant itself any directory permission. Treat it as tier-0.\n\nFind it with: az identity list --query [].id -o tsv\n"
       }
     },
     "managedIdentityClientId": {
@@ -615,7 +615,7 @@
     "nextSteps": {
       "type": "object",
       "value": {
-        "step1": "Bootstrap the Graph identity if you have not: scripts/Deploy-AbstractAppReg.sh -a Bootstrap. Needs Global Administrator ONCE.",
+        "step1": "Bootstrap the Graph identity if you have not: ./deploy.sh bootstrap -g <resource-group> in this template folder. Needs Global Administrator ONCE.",
         "step2": "[format('Grant the assignment principal above Owner on the target subscriptions and Key Vault Secrets Officer on {0}.', parameters('centralKeyVaultName'))]",
         "step3": "Leave effect=AuditIfNotExists first and read Policy > Compliance: it lists exactly which subscriptions would be onboarded.",
         "step4": "Flip to DeployIfNotExists + enforcementMode=Default, then run a remediation task to act on EXISTING subscriptions.",

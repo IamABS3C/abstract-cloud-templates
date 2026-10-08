@@ -32,12 +32,14 @@ From a shell, in this folder:
 - Organizations trusted access enabled for CloudFormation StackSets
 - The target OU ID and the list of regions
 - Confirm the OU membership before running: the StackSet applies to every account in it
+- The External ID and Abstract's account ID in the environment (read -rs ABSTRACT_EXTERNAL_ID &amp;&amp; export ABSTRACT_EXTERNAL_ID; export ABSTRACT_PRINCIPAL=...). Never write them into parameters.example.json or another file here: those are tracked and published
+- A source whose stack needs no per-account ID: VPC Flow Logs, WAF and Route 53 Resolver take a VPC or web ACL ID that differs in every account, so one StackSet value cannot fit the unit
 
 ## Parameters
 
 | Name | Type | Required | Description | Find it |
 |---|---|---|---|---|
-| `TemplateId` | string | yes | The sibling template to roll out, e.g. aws-source-vpc-flow-logs-s3-sqs; its parameters.example.json supplies the stack-set parameters. |  |
+| `TemplateId` | string | yes | The sibling template to roll out, e.g. aws-source-load-balancer-logs-s3-sqs; its parameters.example.json supplies the non-secret defaults, and --param Key=Value overrides any of them. The External ID and Abstract's account ID come from the ABSTRACT_EXTERNAL_ID and ABSTRACT_PRINCIPAL environment variables, never from a file. |  |
 | `OrganizationalUnitId` | string | yes | The organizational unit whose accounts receive a stack instance. | `aws organizations list-organizational-units-for-parent --parent-id <root-id>` |
 | `Regions` | array | yes | The regions to deploy a stack instance to in each account. |  |
 

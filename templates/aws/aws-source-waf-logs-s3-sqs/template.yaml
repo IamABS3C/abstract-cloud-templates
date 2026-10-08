@@ -119,7 +119,7 @@ Metadata:
       LogDeliveryPrincipalOverride:
         default: Override log-delivery service principal
       WafWebAclArn:
-        default: WAF WebACL ARN
+        default: WAF web ACL ARN to log (required)
       EnableDlqAlarm:
         default: Alarm when messages hit the dead-letter queue?
       DlqAlarmThreshold:
@@ -285,8 +285,7 @@ Parameters:
     Description: Override the log-delivery service principal (advanced; leave blank to use the correct default for the SourceType).
   WafWebAclArn:
     Type: String
-    Default: ''
-    Description: 'ARN of the WAF WebACL to enable logging on (SourceType=WAF, CreateNew bucket). Find it with: aws wafv2 list-web-acls --scope REGIONAL'
+    Description: 'ARN of the web ACL the stack turns logging on for. A web ACL has one logging configuration, so any logging it already has is replaced. With BucketMode=UseExisting it is not used: enter the web ACL that already logs to your bucket. Find it with: aws wafv2 list-web-acls --scope REGIONAL (CLOUDFRONT scope in us-east-1)'
   EnableDlqAlarm:
     Type: String
     Default: 'false'
@@ -348,6 +347,12 @@ Rules:
       - Assert: !Not
           - !Equals [!Ref ExistingKmsKeyArn, '']
         AssertDescription: ExistingKmsKeyArn is required when KmsMode=UseExisting.
+  WafLoggingNeedsWebAcl:
+    RuleCondition: !Equals [!Ref BucketMode, CreateNew]
+    Assertions:
+      - Assert: !Not
+          - !Equals [!Ref WafWebAclArn, '']
+        AssertDescription: WafWebAclArn is required. Without it the stack creates a bucket that receives no WAF logs.
 Conditions:
   IsAssumeRole: !Equals [!Ref AuthMode, AssumeRole]
   IsAccessKey: !Equals [!Ref AuthMode, AccessKey]

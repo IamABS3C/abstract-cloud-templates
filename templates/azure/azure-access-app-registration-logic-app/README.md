@@ -30,7 +30,7 @@ Or from a shell, in this folder:
 
 ## Prerequisites
 
-- A user-assigned managed identity, created and consented with the Bootstrap action
+- A user-assigned managed identity, created and consented once with ./deploy.sh bootstrap (Global Administrator)
 - A central Key Vault that already exists
 - Keep the tag gate (default abstract-onboard=true) so only opted-in subscriptions are onboarded
 - Restrict Managed Identity Operator on the identity; it controls who can use it
@@ -46,7 +46,7 @@ No per-subscription compute and no per-run cost.
 | `location` | string | no | Region for the Logic App and Event Grid subscription. |  |
 | `workflowName` | string | no | Name of the Logic App workflow. |  |
 | `tags` | object | no | Tags applied to every resource created here. |  |
-| `managedIdentityResourceId` | string | yes | Resource ID of a user-assigned managed identity holding Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All (admin-consented). Create and consent it with scripts/Deploy-AbstractAppReg.sh -a Bootstrap. Treat as tier-0. Find it with: az identity list --query [].id -o tsv | `az identity list --query "[].id" -o tsv` |
+| `managedIdentityResourceId` | string | yes | Resource ID of a user-assigned managed identity holding Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All (admin-consented). Create and consent it with ./deploy.sh bootstrap in this template folder. Treat as tier-0. Find it with: az identity list --query [].id -o tsv | `az identity list --query "[].id" -o tsv` |
 | `managedIdentityClientId` | string | no | Client ID of that identity. Unused by the Logic App itself (it authenticates by resource ID) but recorded in outputs so the two paths stay interchangeable. |  |
 | `keyVaultName` | string | yes | Central Key Vault that receives every generated client secret. Must already exist; grant the identity Key Vault Secrets Officer on it. Find it with: az keyvault list --query [].name -o tsv | `az keyvault list --query "[].name" -o tsv` |
 | `keyVaultInThisSubscription` | bool | no | Set false if the Key Vault lives in a different subscription - then supply keyVaultUri instead. |  |

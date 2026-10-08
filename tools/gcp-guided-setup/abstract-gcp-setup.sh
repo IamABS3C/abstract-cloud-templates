@@ -70,9 +70,10 @@ save() {
 }
 
 # Ask with a default. In --check mode nothing is asked.
-ask() { local q="$1" def="${2:-}" a; if $CHECK_ONLY; then printf '%s' "$def"; return; fi
-  read -r -p "  $q${def:+ [$def]}: " a </dev/tty; printf '%s' "${a:-$def}"; }
-yes_no() { $CHECK_ONLY && return 1; local a; read -r -p "  $1 [y/N] " a </dev/tty; [[ "$a" == y || "$a" == Y ]]; }
+# Without a terminal (CI, a pipe) a read fails: the default is taken and a yes/no is a "no", never an abort.
+ask() { local q="$1" def="${2:-}" a=""; if $CHECK_ONLY; then printf '%s' "$def"; return; fi
+  read -r -p "  $q${def:+ [$def]}: " a </dev/tty 2>/dev/null || true; printf '%s' "${a:-$def}"; }
+yes_no() { $CHECK_ONLY && return 1; local a=""; read -r -p "  $1 [y/N] " a </dev/tty 2>/dev/null || true; [[ "$a" == y || "$a" == Y ]]; }
 
 # Show the command, ask, run it. Returns the command's status; "no" is not a failure.
 run() { printf '%s   $' "$D"; printf ' %q' "$@"; printf '%s\n' "$O"; if $CHECK_ONLY; then return 3; fi
@@ -148,18 +149,30 @@ step2() {
     local o; o=$(held "https://cloudresourcemanager.googleapis.com/v3/organizations/$ORG_ID" resourcemanager.projects.create)
     has "$o" resourcemanager.projects.create && pass "create a new logging project (step 3)" || warn "you cannot create projects in the organization; pick an existing logging project in step 3"
   fi
-  if [[ -n "$LOG_PROJECT" ]]; then
-    local p; p=$(held "https://cloudresourcemanager.googleapis.com/v3/projects/$LOG_PROJECT" pubsub.topics.create pubsub.subscriptions.create iam.serviceAccounts.create iam.serviceAccountKeys.create serviceusage.services.enable pubsub.topics.setIamPolicy)
-    local miss=""; for x in pubsub.topics.create pubsub.subscriptions.create pubsub.topics.setIamPolicy iam.serviceAccounts.create iam.serviceAccountKeys.create serviceusage.services.enable; do
-      has "$p" "$x" || miss+=" $x"; done
-    [[ -z "$miss" ]] && pass "build the pipeline in $LOG_PROJECT (steps 3-5)" \
-      || bad "missing in $LOG_PROJECT:$miss — Owner, or Pub/Sub Admin + Service Account Admin + Service Account Key Admin + Service Usage Admin"
-    # The org policy that most often blocks the key in step 5.
-    local kp; kp=$(gcloud resource-manager org-policies describe iam.disableServiceAccountKeyCreation --project="$LOG_PROJECT" --effective --format='value(booleanPolicy.enforced)' 2>/dev/null)
-    [[ "$kp" == "True" ]] && bad "org policy iam.disableServiceAccountKeyCreation is enforced on $LOG_PROJECT: step 5 cannot create a key. Ask for an exception on this project." \
-      || pass "service-account keys are allowed on $LOG_PROJECT"
+  if [[ -n "$LOG_PROJECT" ]]; then project_checks
   else
-    warn "project checks run once the logging project is chosen (step 3)"
+    warn "not checked yet: your rights in the logging project, and whether an org policy blocks the key step 5 makes. Step 3 checks both as soon as the project is chosen, before step 4 builds anything."
+  fi
+}
+
+# What steps 4 and 5 need in the logging project. Step 2 runs it when the project is already known,
+# and step 3 runs it again, so a blocked key shows up before step 4 creates the sink, not after.
+# Called directly, never through $(...): a subshell would lose the pass and fail counts.
+project_checks() {
+  local p; p=$(held "https://cloudresourcemanager.googleapis.com/v3/projects/$LOG_PROJECT" pubsub.topics.create pubsub.subscriptions.create iam.serviceAccounts.create iam.serviceAccountKeys.create serviceusage.services.enable pubsub.topics.setIamPolicy)
+  local miss=""; for x in pubsub.topics.create pubsub.subscriptions.create pubsub.topics.setIamPolicy iam.serviceAccounts.create iam.serviceAccountKeys.create serviceusage.services.enable; do
+    has "$p" "$x" || miss+=" $x"; done
+  [[ -z "$miss" ]] && pass "build the pipeline in $LOG_PROJECT (steps 3-5)" \
+    || bad "missing in $LOG_PROJECT:$miss — Owner, or Pub/Sub Admin + Service Account Admin + Service Account Key Admin + Service Usage Admin"
+  # The org policy that most often blocks the key in step 5.
+  # A lookup that fails is not an answer: it is reported as unknown, never as "allowed".
+  local kp
+  if ! kp=$(gcloud resource-manager org-policies describe iam.disableServiceAccountKeyCreation --project="$LOG_PROJECT" --effective --format='value(booleanPolicy.enforced)' 2>/dev/null); then
+    warn "could not read the org policy iam.disableServiceAccountKeyCreation on $LOG_PROJECT (it needs Organization Policy Viewer). If it is enforced, step 5 cannot create a key; ask your organization admin before step 4."
+  elif [[ "$kp" == "True" ]]; then
+    bad "org policy iam.disableServiceAccountKeyCreation is enforced on $LOG_PROJECT: step 5 cannot create a key. Ask for an exception on this project before step 4."
+  else
+    pass "service-account keys are allowed on $LOG_PROJECT (org policy iam.disableServiceAccountKeyCreation is not enforced)"
   fi
 }
 
@@ -208,6 +221,10 @@ step3() {
     # shellcheck disable=SC2086
     run gcloud services enable $missing --project="$LOG_PROJECT" && pass "APIs enabled"
   fi
+  # Step 2 cannot check the project before it is chosen. Check now, once the APIs these lookups
+  # use are on, and before step 4 creates the sink outside this project.
+  why "What steps 4 and 5 need in $LOG_PROJECT:"
+  project_checks
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -218,6 +235,28 @@ filter() {
     f+=" OR (logName:\"cloudaudit.googleapis.com%2Fdata_access\" AND protoPayload.serviceName=($c))"
   fi
   printf '%s' "$f"
+}
+
+# Sinks already at this scope that export audit logs somewhere else. The estate audit lists only
+# organization sinks, so a folder or project export is seen here, before a second sink is added.
+# A listing that fails is said to have failed, never read as "none".
+existing_audit_sinks() {  # existing_audit_sinks <scope flag> <our destination>
+  local out
+  if ! out=$(gcloud logging sinks list "$1" --format='value(name,destination,filter)' 2>&1); then
+    warn "could not list the sinks already at the $SCOPE (${out%%$'\n'*}). Check them before you add one: gcloud logging sinks list $1"
+    return
+  fi
+  local name dest filter found=0
+  while IFS=$'\t' read -r name dest filter; do
+    [[ -z "$name" || "$dest" == "$2" ]] && continue
+    # An empty filter routes every log, audit logs included. _Required and _Default are Google's own.
+    [[ "$name" == _Required || "$name" == _Default ]] && continue
+    if [[ -z "$filter" || "$filter" == *cloudaudit* ]]; then
+      warn "sink $name at the $SCOPE already exports audit logs, to $dest"; found=1
+    fi
+  done <<<"$out"
+  (( found )) && why "A new sink adds a second copy for Abstract; it changes nothing for those. If one of them is meant to feed Abstract, stop and ask its owner first."
+  (( found )) || pass "no other sink at the $SCOPE exports audit logs"
 }
 
 step4() {
@@ -274,6 +313,7 @@ PY
          run gcloud logging sinks update "$SINK" "$sf" --log-filter="($f) OR $missing_clauses" && pass "sink filter extended"; fi
   else
     warn "sink $SINK does not exist at the $SCOPE"
+    existing_audit_sinks "$sf" "$dest"
     say "   filter: $want"
     local ic=""; [[ "$SCOPE" != project ]] && ic="--include-children"
     # shellcheck disable=SC2086
@@ -594,23 +634,54 @@ for m in json.load(sys.stdin) or []:
 step10() {
   title 10 "Connect Abstract"
   cat <<EOF
-  In Abstract: Integrations → ${B}GCP Pub/Sub${O} (pull)
+  In Abstract, add the ${B}GCP Pub/Sub Source${O} integration:
     Project ID        ${B}$LOG_PROJECT${O}     ← the project with the SUBSCRIPTION, not the ones sending logs
     Subscription ID   ${B}$SUB${O}      ← the short name only
-    Credentials       ${B}$KEY_FILE${O}
+    Credentials       ${B}$(basename "$KEY_FILE")${O}      ← the key file, downloaded below
 EOF
   [[ "$WORKSPACE" == yes ]] && cat <<EOF
 
-  In Abstract: Integrations → ${B}Google Workspace${O}
+  In Abstract, add the ${B}Google Workspace Audit Log Integration${O}:
     Admin Email       ${B}$WS_ADMIN${O}
-    Credentials       ${B}$WS_KEY_FILE${O}
-    Applications      login, admin, token, saml, user_accounts, groups (start here)
+    Credentials       ${B}$(basename "$WS_KEY_FILE")${O}      ← the key file, downloaded below
+    Application Name  every application is selected by default. To start small, keep
+                      Login, Admin, Token, SAML, User Accounts and Groups.
 EOF
-  cat <<EOF
-
-  After uploading, delete the key files:  rm -f "$KEY_FILE" "$WS_KEY_FILE"
-  Re-check everything any time:           $0 --check
-EOF
+  # The keys exist only in this Cloud Shell session, which is temporary. Whoever fills in the
+  # Abstract form needs them on their own computer: download, upload to Abstract, delete everywhere.
+  local keys=("$KEY_FILE") f; [[ "$WORKSPACE" == yes ]] && keys+=("$WS_KEY_FILE")
+  say ""
+  say "  ${B}Download the key files.${O} They exist only in this Cloud Shell session, which is temporary:"
+  local acct n
+  for f in "${keys[@]}"; do
+    if [[ -f "$f" ]]; then say "    cloudshell download $f"; continue; fi
+    # No file is normal after the upload: the guide says to delete it. Only a missing key is a problem.
+    if [[ "$f" == "$WS_KEY_FILE" ]]; then acct="$WS_SA@$LOG_PROJECT.iam.gserviceaccount.com"; else acct="$SA@$LOG_PROJECT.iam.gserviceaccount.com"; fi
+    local step; step=$([[ "$f" == "$WS_KEY_FILE" ]] && echo 7 || echo 5)
+    local ids; ids=$(gcloud iam service-accounts keys list --iam-account="$acct" --managed-by=user --format='value(name.basename())' 2>/dev/null)
+    n=$(grep -c . <<<"$ids")
+    if [[ "${n:-0}" -gt 0 ]]; then
+      say "    $(basename "$f") is no longer in Cloud Shell, and $acct has $n key(s). If Abstract already has it, nothing to do."
+      # Google keeps only the public half of a key, so a file lost before the upload cannot be
+      # downloaded again. The way on is a new key, then deleting the one nobody holds.
+      say "    Lost it before Abstract had it? Make a new one: $0 --step $step (answer y to a new key)."
+      say "    Then delete the lost one, once the new key is in Abstract:"
+      local id; for id in $ids; do say "      gcloud iam service-accounts keys delete $id --iam-account=$acct"; done
+    else
+      warn "no key for $acct, here or in Google Cloud. Step $step makes one: run it again."
+    fi
+  done
+  why "If someone else fills in the Abstract form, hand the key over through your password manager or"
+  why "secret-sharing tool, never by email or chat. Anyone holding it can read the subscription."
+  say ""
+  say "  ${B}Download your answers too.${O} The clean-up needs them to know what this setup made:"
+  say "    cloudshell download $STATE"
+  say ""
+  say "  ${B}Once Abstract has saved the integration, delete every copy of the keys:${O}"
+  say "    rm -f$(printf ' %q' "${keys[@]}")"
+  say "    and delete the downloaded copies from your computer."
+  say ""
+  say "  Re-check everything any time:  $0 --check"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

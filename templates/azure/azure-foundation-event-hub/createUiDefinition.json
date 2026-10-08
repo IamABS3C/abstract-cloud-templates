@@ -212,7 +212,7 @@
             "name": "principalId",
             "type": "Microsoft.Common.TextBox",
             "label": "Service principal object ID",
-            "toolTip": "Object ID of the Enterprise Application (service principal) Abstract authenticates as — NOT the Application (client) ID. Create the app registration first (e.g. abstract-eventhub-ingestion) or let the companion script create it for you.",
+            "toolTip": "Object ID of the Enterprise Application (service principal) Abstract authenticates as — NOT the Application (client) ID. Create the app registration first (e.g. abstract-eventhub-ingestion): az ad app create, then az ad sp create, then az ad sp show --id <client-id> --query id -o tsv gives this object ID.",
             "placeholder": "00000000-0000-0000-0000-000000000000",
             "defaultValue": "",
             "constraints": {

@@ -52,7 +52,7 @@
 //  ---------------------------------------------------------------------------
 //  ONE-TIME BOOTSTRAP - not automatable, by design
 //  ---------------------------------------------------------------------------
-//    scripts/Deploy-AbstractAppReg.sh -a Bootstrap -i <identity-resource-id>
+//    ./deploy.sh bootstrap -g <resource-group> -l <region>   (this folder; wraps ../_modules/deploy-appreg.sh)
 //  Needs Global Administrator ONCE, to consent Application.ReadWrite.All and
 //  AppRoleAssignment.ReadWrite.All to the identity. Nothing can automate this -
 //  if it could, it would be a privilege-escalation hole.
@@ -80,7 +80,7 @@ param tags object = {}
 // ---------------------------------------------------------------------------
 // The pre-consented identity
 // ---------------------------------------------------------------------------
-@description('Resource ID of a user-assigned managed identity holding Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All (admin-consented). Create and consent it with scripts/Deploy-AbstractAppReg.sh -a Bootstrap. Treat as tier-0. Find it with: az identity list --query [].id -o tsv')
+@description('Resource ID of a user-assigned managed identity holding Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All (admin-consented). Create and consent it with ./deploy.sh bootstrap in this template folder. Treat as tier-0. Find it with: az identity list --query [].id -o tsv')
 param managedIdentityResourceId string
 
 @description('Client ID of that identity. Unused by the Logic App itself (it authenticates by resource ID) but recorded in outputs so the two paths stay interchangeable.')
@@ -1058,9 +1058,9 @@ resource workflow 'Microsoft.Logic/workflows@2019-05-01' = {
               subscriptionId: '@outputs(\'Resolve_subscription\')'
               failedActions: '@result(\'Guard_subscription_present\')'
               likelyCauses: [
-                'Get_subscription Forbidden -> the managed identity has no RBAC on the target subscription. Run: Deploy-AbstractAppReg.sh -a Grant -s <sub-id>'
-                'Graph 403 on applications/servicePrincipals -> the identity lacks Application.ReadWrite.All admin consent. Run: Deploy-AbstractAppReg.sh -a Bootstrap'
-                'Key Vault 403 -> the identity lacks Key Vault Secrets Officer on the vault. Run: Deploy-AbstractAppReg.sh -a Grant -k <vault>'
+                'Get_subscription Forbidden -> the managed identity has no RBAC on the target subscription. Run: ./deploy.sh grant -g <resource-group> -s <sub-id>'
+                'Graph 403 on applications/servicePrincipals -> the identity lacks Application.ReadWrite.All admin consent. Run: ./deploy.sh bootstrap -g <resource-group>'
+                'Key Vault 403 -> the identity lacks Key Vault Secrets Officer on the vault. Run: ./deploy.sh grant -g <resource-group> -k <vault>'
               ]
               runHistory: 'Full request/response bodies are in the Logic App run history for this run.'
             }
@@ -1236,7 +1236,7 @@ output identityClientId string = empty(managedIdentityClientId) ? identity.prope
 output triggerUrlHint string = 'az rest --method POST --url "$(az logic workflow show -g ${resourceGroup().name} -n ${workflowName} --query accessEndpoint -o tsv)" --body \'{"subscriptionId":"<guid>"}\' -- or read the callback URL from the portal Overview blade.'
 
 output nextSteps object = {
-  step1: 'Bootstrap: scripts/Deploy-AbstractAppReg.sh -a Bootstrap -i ${managedIdentityResourceId}. Needs Global Administrator ONCE - consents Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All.'
+  step1: 'Bootstrap, if ${managedIdentityResourceId} is not consented yet: ./deploy.sh bootstrap -g <resource-group> in this template folder. Needs Global Administrator ONCE - consents Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All.'
   step2: 'Grant the identity above Key Vault Secrets Officer on ${keyVaultName} and Owner on each target subscription.'
   step3: 'Test with ONE subscription by POSTing {"subscriptionId":"<guid>"} to the trigger URL. Check the run history - a consent shortfall returns 500 with the exact count.'
   step4: 'Backfill existing subscriptions with the same POST, then set enableEventTrigger=true so new subscriptions onboard themselves.'

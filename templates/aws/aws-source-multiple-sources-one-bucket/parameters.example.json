@@ -104,6 +104,10 @@
     "ParameterValue": ""
   },
   {
+    "ParameterKey": "Route53VpcIds",
+    "ParameterValue": ""
+  },
+  {
     "ParameterKey": "KinesisStreamName",
     "ParameterValue": ""
   },

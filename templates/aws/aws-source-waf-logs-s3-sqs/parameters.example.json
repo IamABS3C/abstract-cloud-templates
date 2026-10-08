@@ -117,7 +117,7 @@
   },
   {
     "ParameterKey": "WafWebAclArn",
-    "ParameterValue": ""
+    "ParameterValue": "<WafWebAclArn>"
   },
   {
     "ParameterKey": "EnableDlqAlarm",

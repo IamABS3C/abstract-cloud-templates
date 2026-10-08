@@ -51,6 +51,7 @@ The setting is free; volume into the hub is the charge. MicrosoftGraphActivityLo
 
 - **Security Administrator (Entra directory role, not Azure RBAC)** on The Entra tenant: Deployer: Create or edit the tenant diagnostic setting; subscription or management-group ownership does not grant it.
 - **Attribute Log Administrator (Entra directory role)** on The Entra tenant: Deployer: Only for CustomSecurityAttributeAuditLogs.
+- **Microsoft.Resources/deployments/* at tenant scope (for example Owner or Contributor on "/")** on The tenant root scope "/": Deployer: Any tenant-scope deployment needs it, besides the Entra role. A Global Administrator elevates access, then assigns it (az role assignment create --assignee &lt;user&gt; --scope "/" --role Owner). Source: Microsoft Learn, Tenant deployments with Bicep, Required access.
 - **listKeys on the Event Hub authorization rule** on The Event Hubs namespace: Deployer: Creating a setting that streams to an Event Hub requires ListKey on the target rule.
 - **Send on the Event Hub authorization rule** on The namespace or the hub: Azure Monitor: The streaming mechanism writes with the key of the referenced rule.
 

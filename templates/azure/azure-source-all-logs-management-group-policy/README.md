@@ -32,7 +32,8 @@ Or from a shell, in this folder:
 
 - Deploy the Event Hub source stack first; one namespace per region that holds regional resources, each with a Send-capable rule
 - Hub names passed here must match hubs the source stack actually created; add resource to its hubSources for a resource-log hub
-- Decide report-only versus enforce before assigning. ./deploy.sh assigns report-only by default (examples/default.parameters.json: effect AuditIfNotExists, enforcementMode DoNotEnforce), which changes nothing; read the compliance counts, then re-run with --enforce to use parameters.example.json and the template defaults (DeployIfNotExists, Default), which write settings everywhere
+- Decide report-only versus enforce before assigning. Copy examples/default.parameters.json (effect AuditIfNotExists, enforcementMode DoNotEnforce: it changes nothing), put in your Send rule IDs and one regions row per region, and run scripts/deploy-log-streams.sh -a Deploy -m &lt;mg-id&gt; -p &lt;your copy&gt;. Read the compliance counts, then set effect DeployIfNotExists and enforcementMode Default in the same copy and deploy again, which writes settings everywhere. ./deploy.sh --enforce on its own reads the empty parameters.example.json, so it assigns no Event Hub rule and no regions: always pass your own values
+- Enforcing is not the end: run -a Grant once per namespace, then -a Remediate, or existing subscriptions and resources never send
 - At most 5 diagnostic settings per resource; existing exports count
 
 ## Cost
@@ -102,5 +103,5 @@ Azure Policy and diagnostic settings are free; the volume they switch on is not.
 |---|---|---|
 | The assignments exist and carry managed identities | `az policy assignment list --scope /providers/Microsoft.Management/managementGroups/<mg-id> --query "[].{name:name,identity:identity.principalId,enforcement:enforcementMode}"` | One assignment per enabled feature, each with a non-null principalId. |
 | Compliance is being evaluated | `az policy state summarize --management-group <mg-id>` | Non-zero resource counts, with non-compliant resources falling after remediation. |
-| A remediation task actually ran and succeeded |  | Policy, Remediation shows a completed task, not merely a compliance report. |
+| A remediation task actually ran and succeeded | `az policy remediation list --management-group <mg-id> --query "[].{name:name, state:provisioningState, ok:deploymentStatus.successfulDeployments, failed:deploymentStatus.failedDeployments}" -o table` | Every task Succeeded with failed 0, not merely a compliance report. scripts/deploy-log-streams.sh -a Remediate hides task-creation errors, so this list is the evidence. |
 | Diagnostic settings now exist on a sample resource | `az monitor diagnostic-settings list --resource <resource-id> --query "[].{name:name,eventHub:eventHubName}"` | A setting pointing at the expected hub. |

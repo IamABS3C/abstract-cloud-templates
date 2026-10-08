@@ -56,6 +56,9 @@ prerequisites:
   so set NamePrefix=aws, or pass BucketName=aws-waf-logs-<suffix>; with the default prefix the logging configuration
   is refused
 - The ARN of the web ACL to log (WafWebAclArn); a CloudFront-scope web ACL lives in us-east-1
+- 'A web ACL has one logging configuration. Check it first with aws wafv2 get-logging-configuration --resource-arn
+  <WafWebAclArn>: if it already logs to Firehose, CloudWatch Logs or another bucket, this stack replaces that, and
+  deleting the stack turns the web ACL''s logging off'
 parameters:
 - name: NamePrefix
   type: string
@@ -270,11 +273,12 @@ parameters:
   default: ''
 - name: WafWebAclArn
   type: string
-  required: false
-  description: 'ARN of the WAF WebACL to enable logging on (SourceType=WAF, CreateNew bucket). Find it with: aws
-    wafv2 list-web-acls --scope REGIONAL'
-  default: ''
+  required: true
+  description: 'ARN of the web ACL the stack turns logging on for. A web ACL has one logging configuration, so any
+    logging it already has is replaced. With BucketMode=UseExisting it is not used: enter the web ACL that already
+    logs to your bucket. Find it with: aws wafv2 list-web-acls --scope REGIONAL (CLOUDFRONT scope in us-east-1)'
   find_it: aws wafv2 list-web-acls --scope REGIONAL
+  example: <WafWebAclArn>
 - name: EnableDlqAlarm
   type: string
   required: false
@@ -335,7 +339,11 @@ abstract:
 verify:
 - check: The stack outputs carry the values the Abstract integration needs
   command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
-  healthy: SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present.
+  healthy: SqsQueueUrl, SqsQueueArn, BucketNameOut, AwsRegion and RoleArn (or the access-key outputs) are present;
+    the Abstract integration's form asks for all five.
+- check: The web ACL logs to the bucket
+  command: aws wafv2 get-logging-configuration --resource-arn <WafWebAclArn> --query LoggingConfiguration.LogDestinationConfigs
+  healthy: The stack's bucket ARN, and nothing else.
 - check: The SQS queue is receiving notifications
   command: aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible
   healthy: A non-zero count, or a count that returns to zero because Abstract is consuming.

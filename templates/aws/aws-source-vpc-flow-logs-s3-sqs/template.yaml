@@ -126,7 +126,7 @@ Metadata:
       VpcFlowResourceType:
         default: Flow log resource type
       VpcFlowResourceId:
-        default: VPC / Subnet / ENI ID
+        default: VPC, subnet or network interface ID to log (required)
       VpcFlowTrafficType:
         default: Traffic type to capture
       VpcFlowMaxAggregationInterval:
@@ -302,8 +302,7 @@ Parameters:
     AllowedValues: [VPC, Subnet, NetworkInterface]
   VpcFlowResourceId:
     Type: String
-    Default: ''
-    Description: 'The vpc-/subnet-/eni- ID to attach flow logs to (required for VPCFlowLogs with CreateNew bucket). Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId'
+    Description: 'The vpc-, subnet- or eni- ID the stack turns flow logs on for. One per stack. With BucketMode=UseExisting it is not used: enter the ID of the resource that already logs to your bucket. Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId'
   VpcFlowTrafficType:
     Type: String
     Default: ALL
@@ -377,6 +376,12 @@ Rules:
       - Assert: !Not
           - !Equals [!Ref ExistingKmsKeyArn, '']
         AssertDescription: ExistingKmsKeyArn is required when KmsMode=UseExisting.
+  FlowLogNeedsResource:
+    RuleCondition: !Equals [!Ref BucketMode, CreateNew]
+    Assertions:
+      - Assert: !Not
+          - !Equals [!Ref VpcFlowResourceId, '']
+        AssertDescription: VpcFlowResourceId is required. Without it the stack creates a bucket that receives no flow logs.
 Conditions:
   IsAssumeRole: !Equals [!Ref AuthMode, AssumeRole]
   IsAccessKey: !Equals [!Ref AuthMode, AccessKey]

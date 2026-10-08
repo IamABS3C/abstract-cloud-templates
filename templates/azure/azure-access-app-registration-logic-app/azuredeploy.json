@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "5326618693403719584"
+      "templateHash": "16672138040284377170"
     }
   },
   "parameters": {
@@ -33,7 +33,7 @@
     "managedIdentityResourceId": {
       "type": "string",
       "metadata": {
-        "description": "Resource ID of a user-assigned managed identity holding Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All (admin-consented). Create and consent it with scripts/Deploy-AbstractAppReg.sh -a Bootstrap. Treat as tier-0. Find it with: az identity list --query [].id -o tsv"
+        "description": "Resource ID of a user-assigned managed identity holding Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All (admin-consented). Create and consent it with ./deploy.sh bootstrap in this template folder. Treat as tier-0. Find it with: az identity list --query [].id -o tsv"
       }
     },
     "managedIdentityClientId": {
@@ -985,9 +985,9 @@
                   "subscriptionId": "@outputs('Resolve_subscription')",
                   "failedActions": "@result('Guard_subscription_present')",
                   "likelyCauses": [
-                    "Get_subscription Forbidden -> the managed identity has no RBAC on the target subscription. Run: Deploy-AbstractAppReg.sh -a Grant -s <sub-id>",
-                    "Graph 403 on applications/servicePrincipals -> the identity lacks Application.ReadWrite.All admin consent. Run: Deploy-AbstractAppReg.sh -a Bootstrap",
-                    "Key Vault 403 -> the identity lacks Key Vault Secrets Officer on the vault. Run: Deploy-AbstractAppReg.sh -a Grant -k <vault>"
+                    "Get_subscription Forbidden -> the managed identity has no RBAC on the target subscription. Run: ./deploy.sh grant -g <resource-group> -s <sub-id>",
+                    "Graph 403 on applications/servicePrincipals -> the identity lacks Application.ReadWrite.All admin consent. Run: ./deploy.sh bootstrap -g <resource-group>",
+                    "Key Vault 403 -> the identity lacks Key Vault Secrets Officer on the vault. Run: ./deploy.sh grant -g <resource-group> -k <vault>"
                   ],
                   "runHistory": "Full request/response bodies are in the Logic App run history for this run."
                 }
@@ -1164,7 +1164,7 @@
     "nextSteps": {
       "type": "object",
       "value": {
-        "step1": "[format('Bootstrap: scripts/Deploy-AbstractAppReg.sh -a Bootstrap -i {0}. Needs Global Administrator ONCE - consents Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All.', parameters('managedIdentityResourceId'))]",
+        "step1": "[format('Bootstrap, if {0} is not consented yet: ./deploy.sh bootstrap -g <resource-group> in this template folder. Needs Global Administrator ONCE - consents Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All.', parameters('managedIdentityResourceId'))]",
         "step2": "[format('Grant the identity above Key Vault Secrets Officer on {0} and Owner on each target subscription.', parameters('keyVaultName'))]",
         "step3": "Test with ONE subscription by POSTing {\"subscriptionId\":\"<guid>\"} to the trigger URL. Check the run history - a consent shortfall returns 500 with the exact count.",
         "step4": "Backfill existing subscriptions with the same POST, then set enableEventTrigger=true so new subscriptions onboard themselves.",

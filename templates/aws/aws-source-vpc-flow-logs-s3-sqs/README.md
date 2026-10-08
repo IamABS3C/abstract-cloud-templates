@@ -75,7 +75,7 @@ Flow logs are billed per GB delivered to S3; object count drives SQS and, with S
 | `SourceArnCondition` | string | no | Optional aws:SourceArn value to further restrict who may write (e.g. a specific trail or distribution ARN). |  |
 | `LogDeliveryPrincipalOverride` | string | no | Override the log-delivery service principal (advanced; leave blank to use the correct default for the SourceType). |  |
 | `VpcFlowResourceType` | string | no | What VpcFlowResourceId names: a VPC, a subnet or a network interface. |  |
-| `VpcFlowResourceId` | string | no | The vpc-/subnet-/eni- ID to attach flow logs to (required for VPCFlowLogs with CreateNew bucket). Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId | `aws ec2 describe-vpcs --query Vpcs[].VpcId` |
+| `VpcFlowResourceId` | string | yes | The vpc-, subnet- or eni- ID the stack turns flow logs on for. One per stack. With BucketMode=UseExisting it is not used: enter the ID of the resource that already logs to your bucket. Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId | `aws ec2 describe-vpcs --query Vpcs[].VpcId` |
 | `VpcFlowTrafficType` | string | no | Which traffic to record: ALL, ACCEPT or REJECT. |  |
 | `VpcFlowMaxAggregationInterval` | int | no | Seconds over which a flow is aggregated into one record: 60 or 600. |  |
 | `VpcFlowLogFormat` | string | no | Optional custom flow-log format string (e.g. "${version} ${account-id} ..."). Blank = AWS default fields. |  |
@@ -136,6 +136,7 @@ Flow logs are billed per GB delivered to S3; object count drives SQS and, with S
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present. |
+| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, SqsQueueArn, BucketNameOut, AwsRegion and RoleArn (or the access-key outputs) are present; the Abstract integration's form asks for all five. |
+| The flow log exists and writes to the bucket | `aws ec2 describe-flow-logs --filter Name=resource-id,Values=<VpcFlowResourceId> --query 'FlowLogs[].[FlowLogStatus,LogDestination]'` | One flow log, status ACTIVE, whose destination is the stack's bucket. |
 | The SQS queue is receiving notifications | `aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | A non-zero count, or a count that returns to zero because Abstract is consuming. |
 | Nothing is failing into the dead-letter queue | `aws sqs get-queue-attributes --queue-url <dead-letter-queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | Zero messages. |

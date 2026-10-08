@@ -16,7 +16,7 @@
               "visible": true,
               "options": {
                 "icon": "Warning",
-                "text": "This is a MANAGEMENT GROUP deployment - that is what makes future subscriptions onboard themselves. You need Owner, or 'Resource Policy Contributor' + 'User Access Administrator', on the target management group. Guaranteed CLI path: ./scripts/Deploy-AbstractLogStreams.sh -a Deploy -m <mg-id> -p parameters/logstreams-policy.parameters.json",
+                "text": "This is a MANAGEMENT GROUP deployment - that is what makes future subscriptions onboard themselves. You need Owner, or 'Resource Policy Contributor' + 'User Access Administrator', on the target management group. Guaranteed CLI path, from this template's folder: cp examples/default.parameters.json my.parameters.json, edit it, then ./scripts/deploy-log-streams.sh -a Deploy -m <mg-id> -p my.parameters.json",
                 "uri": "https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-to-management-group"
               }
             },
@@ -123,6 +123,15 @@
               "options": {
                 "icon": "Info",
                 "text": "Report-only: assignments are created with effect AuditIfNotExists and enforcement disabled. Nothing is deployed and no data flows. Compliance results appear under Policy > Compliance within ~30 minutes and tell you the exact resource count driving your Event Hub sizing."
+              }
+            },
+            {
+              "name": "enforceInfo",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": "[equals(basics('rolloutMode'), 'deploy')]",
+              "options": {
+                "icon": "Warning",
+                "text": "ENFORCE writes settings across the management group. From now on Azure Policy adds a diagnostic setting to every subscription (abstract-activity-logs) and to every supported resource in the regions you list (abstract-logstream) that is created or changed, sending allLogs to your Event Hubs. Each resource allows at most 5 diagnostic settings, and existing exports count; a resource needs a hub in its own region. Existing resources change only when you run the remediation (STEP 2 on the last page), which is the mass change: read the report-only counts first."
               }
             }
           ]
@@ -450,7 +459,7 @@
               "type": "Microsoft.Common.InfoBox",
               "options": {
                 "icon": "Warning",
-                "text": "STEP 1 \u2014 Grant Event Hub access. Each policy assignment gets a system-assigned managed identity. Because the Event Hubs namespace normally lives outside the management group's assignment scope, this template cannot grant it. The Outputs tab lists every principal ID; give each one 'Azure Event Hubs Data Owner' on the namespace. scripts/Deploy-AbstractLogStreams.sh -Action Grant does it for you."
+                "text": "STEP 1 \u2014 Grant Event Hub access. Each policy assignment gets a system-assigned managed identity. Because the Event Hubs namespace normally lives outside the management group's assignment scope, this template cannot grant it. The Outputs tab lists every principal ID; give each one 'Azure Event Hubs Data Owner' on the namespace. ./scripts/deploy-log-streams.sh -a Grant -m <mg-id> -n <namespace-resource-id> does it for you; run it once per namespace."
               }
             },
             {
@@ -458,7 +467,7 @@
               "type": "Microsoft.Common.InfoBox",
               "options": {
                 "icon": "Warning",
-                "text": "STEP 2 \u2014 Backfill existing resources. DeployIfNotExists only fires when a resource is created or updated. Everything you already own stays non-compliant until you run a remediation task \u2014 one per policy in the initiative. scripts/Deploy-AbstractLogStreams.sh -Action Remediate loops through them.",
+                "text": "STEP 2 \u2014 Backfill existing resources. DeployIfNotExists only fires when a resource is created or updated. Everything you already own stays non-compliant until you run a remediation task \u2014 one per policy in the initiative. ./scripts/deploy-log-streams.sh -a Remediate -m <mg-id> loops through them; then check az policy remediation list --management-group <mg-id>, because the script does not show a task that failed to start.",
                 "uri": "https://learn.microsoft.com/azure/governance/policy/how-to/remediate-resources"
               }
             },
@@ -476,7 +485,7 @@
               "type": "Microsoft.Common.InfoBox",
               "options": {
                 "icon": "Info",
-                "text": "STEP 4 \u2014 Onboard the tenant-level streams. Microsoft Entra ID, Defender XDR and Microsoft 365 are not per-subscription objects, so no Azure Policy can reach them. Entra is one command: az deployment tenant create --template-file templates/tenant/entra-diagnostics.bicep. See the coverage matrix in docs/azure-log-streams.md for Defender XDR and M365."
+                "text": "STEP 4 \u2014 Onboard the tenant-level streams. Microsoft Entra ID, Defender XDR and Microsoft 365 are not per-subscription objects, so no Azure Policy can reach them. Entra ID is the azure-source-entra-id-logs-tenant template, one CLI deploy. See the coverage matrix in docs/azure/azure-log-streams.md for Defender XDR and M365."
               }
             }
           ]

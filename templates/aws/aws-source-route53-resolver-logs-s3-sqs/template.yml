@@ -269,11 +269,12 @@ parameters:
   default: ''
 - name: Route53VpcIds
   type: array
-  required: false
-  description: 'VPC IDs to associate with the Route 53 Resolver query-logging config (SourceType=Route53Resolver,
-    CreateNew bucket). Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId'
-  default: ''
+  required: true
+  description: 'Comma-separated VPC IDs whose DNS queries the stack logs, up to 10; any VPC after the tenth is not
+    logged, so use a second stack for more. With BucketMode=UseExisting it is not used: enter the VPCs that already
+    log to your bucket. Find them with: aws ec2 describe-vpcs --query Vpcs[].VpcId'
   find_it: aws ec2 describe-vpcs --query Vpcs[].VpcId
+  example: <Route53VpcIds>
 - name: EnableDlqAlarm
   type: string
   required: false
@@ -334,7 +335,11 @@ abstract:
 verify:
 - check: The stack outputs carry the values the Abstract integration needs
   command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
-  healthy: SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present.
+  healthy: SqsQueueUrl, SqsQueueArn, BucketNameOut, AwsRegion and RoleArn (or the access-key outputs) are present;
+    the Abstract integration's form asks for all five.
+- check: Every VPC you named is associated with the query-logging configuration
+  command: aws route53resolver list-resolver-query-log-config-associations --query 'ResolverQueryLogConfigAssociations[].[ResourceId,Status]'
+  healthy: One ACTIVE row per VPC in Route53VpcIds (up to 10).
 - check: The SQS queue is receiving notifications
   command: aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible
   healthy: A non-zero count, or a count that returns to zero because Abstract is consuming.

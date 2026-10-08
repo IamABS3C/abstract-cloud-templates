@@ -37,6 +37,7 @@ Or from a shell, in this folder:
 - With BucketMode=UseExisting, wire the bucket's notifications and the log producer yourself; the stack does not write them on a bucket it does not own
 - AWS WAF only delivers to a bucket whose name starts with aws-waf-logs-. The auto-generated name is &lt;NamePrefix&gt;-waf-logs-&lt;account&gt;-&lt;region&gt;, so set NamePrefix=aws, or pass BucketName=aws-waf-logs-&lt;suffix&gt;; with the default prefix the logging configuration is refused
 - The ARN of the web ACL to log (WafWebAclArn); a CloudFront-scope web ACL lives in us-east-1
+- A web ACL has one logging configuration. Check it first with aws wafv2 get-logging-configuration --resource-arn &lt;WafWebAclArn&gt;: if it already logs to Firehose, CloudWatch Logs or another bucket, this stack replaces that, and deleting the stack turns the web ACL's logging off
 
 ## Cost
 
@@ -75,7 +76,7 @@ WAF log delivery to S3 is billed per GB by CloudWatch vended-logs pricing, plus 
 | `RestrictBySourceAccount` | string | no | Add aws:SourceAccount = this account to the PutObject condition (recommended). |  |
 | `SourceArnCondition` | string | no | Optional aws:SourceArn value to further restrict who may write (e.g. a specific trail or distribution ARN). |  |
 | `LogDeliveryPrincipalOverride` | string | no | Override the log-delivery service principal (advanced; leave blank to use the correct default for the SourceType). |  |
-| `WafWebAclArn` | string | no | ARN of the WAF WebACL to enable logging on (SourceType=WAF, CreateNew bucket). Find it with: aws wafv2 list-web-acls --scope REGIONAL | `aws wafv2 list-web-acls --scope REGIONAL` |
+| `WafWebAclArn` | string | yes | ARN of the web ACL the stack turns logging on for. A web ACL has one logging configuration, so any logging it already has is replaced. With BucketMode=UseExisting it is not used: enter the web ACL that already logs to your bucket. Find it with: aws wafv2 list-web-acls --scope REGIONAL (CLOUDFRONT scope in us-east-1) | `aws wafv2 list-web-acls --scope REGIONAL` |
 | `EnableDlqAlarm` | string | no | Create a CloudWatch alarm that fires when messages land in the dead-letter queue (Abstract failing to process). Requires QueueMode=CreateNew. |  |
 | `DlqAlarmThreshold` | int | no | Number of visible DLQ messages that triggers the alarm. |  |
 | `EnableQueueAgeAlarm` | string | no | Alarm when the oldest message in the main queue exceeds QueueAgeAlarmSeconds (ingestion lag). Requires QueueMode=CreateNew. |  |
@@ -133,6 +134,7 @@ WAF log delivery to S3 is billed per GB by CloudWatch vended-logs pricing, plus 
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present. |
+| The stack outputs carry the values the Abstract integration needs | `aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table` | SqsQueueUrl, SqsQueueArn, BucketNameOut, AwsRegion and RoleArn (or the access-key outputs) are present; the Abstract integration's form asks for all five. |
+| The web ACL logs to the bucket | `aws wafv2 get-logging-configuration --resource-arn <WafWebAclArn> --query LoggingConfiguration.LogDestinationConfigs` | The stack's bucket ARN, and nothing else. |
 | The SQS queue is receiving notifications | `aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | A non-zero count, or a count that returns to zero because Abstract is consuming. |
 | Nothing is failing into the dead-letter queue | `aws sqs get-queue-attributes --queue-url <dead-letter-queue-url> --attribute-names ApproximateNumberOfMessagesVisible` | Zero messages. |

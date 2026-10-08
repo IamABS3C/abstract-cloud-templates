@@ -41,10 +41,11 @@
 //
 //  Deploy
 //  ------
+//    scripts/deploy-log-streams.sh -a Deploy -m <mg-id> -p <your-parameters.json>
+//  or, from this folder:
 //    az deployment mg create \
 //      --management-group-id <mg-id> --location eastus \
-//      --template-file templates/policy/abstract-logstreams-policy.bicep \
-//      --parameters @parameters/logstreams-policy.parameters.json
+//      --template-file main.bicep --parameters @<your-parameters.json>
 //
 //  Hub names must match what the source stack actually created. main.bicep
 //  auto-names hubs <hubPrefix>-<environment>-<source>, so the defaults here are
@@ -52,8 +53,9 @@
 //  hubSources (default is activity/entra/defender) or the resource-log hub will
 //  not exist and every diagnostic setting the policy deploys will fail.
 //
-//  Then run scripts/Deploy-AbstractLogStreams.sh -a Remediate to bring
-//  EXISTING resources into compliance - DeployIfNotExists only fires on create
+//  Then run scripts/deploy-log-streams.sh -a Grant (Event Hubs access for the
+//  assignment identities) and -a Remediate to bring EXISTING resources into
+//  compliance - DeployIfNotExists only fires on create
 //  or update until a remediation task backfills the estate.
 // =============================================================================
 
@@ -437,7 +439,7 @@ resource resourceLogAssignments 'Microsoft.Authorization/policyAssignments@2024-
 
 // No Monitoring Contributor here: every member policy of the resource-log initiatives
 // declares only Log Analytics Contributor (below) and Azure Event Hubs Data Owner
-// (granted on the namespace by Deploy-AbstractLogStreams.sh -a Grant).
+// (granted on the namespace by scripts/deploy-log-streams.sh -a Grant).
 resource resourceLogLawRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for (region, i) in regions: if (enableResourceLogs) {
   name: guid(managementGroup().id, 'res', string(region.location), roles.logAnalyticsContributor)
   properties: {
@@ -550,8 +552,8 @@ resource defenderContributorRole 'Microsoft.Authorization/roleAssignments@2022-0
 // Outputs
 // The Event Hubs namespace usually lives OUTSIDE this management group's
 // assignment scope, so the Event Hubs Data Owner grant cannot be made from here.
-// Feed these principal IDs to scripts/Deploy-AbstractLogStreams.sh -Action Grant,
-// which assigns Azure Event Hubs Data Owner on the namespace itself.
+// scripts/deploy-log-streams.sh -a Grant finds these identities by name prefix and
+// assigns Azure Event Hubs Data Owner on the namespace itself.
 // ---------------------------------------------------------------------------
 output managementGroupId string = managementGroup().id
 
@@ -587,6 +589,6 @@ output onboardingSummary object = {
   resourceLogs: enableResourceLogs ? '${categoryGroup} assigned for ${length(regions)} region(s)' : 'not assigned'
   sqlAuditing: enableSqlAuditing ? 'assigned for ${length(regions)} region(s)' : 'not assigned'
   defenderForCloud: enableDefenderExport ? 'assigned' : 'not assigned'
-  nextStep: 'Grant Azure Event Hubs Data Owner to the principals above on the Event Hubs namespace, then run a remediation task to backfill EXISTING resources.'
-  notCoveredByPolicy: 'Microsoft Entra ID, Defender XDR and Microsoft 365 are tenant-level streams - see templates/tenant/entra-diagnostics.bicep and the coverage matrix in docs/azure-log-streams.md'
+  nextStep: 'Run scripts/deploy-log-streams.sh -a Grant -m <mg-id> -n <namespace-resource-id> once per namespace, then -a Remediate -m <mg-id> to backfill EXISTING resources. Report-only assignments (AuditIfNotExists) need neither until you enforce.'
+  notCoveredByPolicy: 'Microsoft Entra ID, Defender XDR and Microsoft 365 are tenant-level streams - Entra ID is the azure-source-entra-id-logs-tenant template; see the coverage matrix in docs/azure/azure-log-streams.md'
 }

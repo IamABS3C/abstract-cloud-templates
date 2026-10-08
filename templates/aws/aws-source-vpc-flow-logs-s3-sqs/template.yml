@@ -277,11 +277,12 @@ parameters:
   - NetworkInterface
 - name: VpcFlowResourceId
   type: string
-  required: false
-  description: 'The vpc-/subnet-/eni- ID to attach flow logs to (required for VPCFlowLogs with CreateNew bucket).
-    Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId'
-  default: ''
+  required: true
+  description: 'The vpc-, subnet- or eni- ID the stack turns flow logs on for. One per stack. With BucketMode=UseExisting
+    it is not used: enter the ID of the resource that already logs to your bucket. Find it with: aws ec2 describe-vpcs
+    --query Vpcs[].VpcId'
   find_it: aws ec2 describe-vpcs --query Vpcs[].VpcId
+  example: <VpcFlowResourceId>
 - name: VpcFlowTrafficType
   type: string
   required: false
@@ -365,7 +366,11 @@ abstract:
 verify:
 - check: The stack outputs carry the values the Abstract integration needs
   command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
-  healthy: SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present.
+  healthy: SqsQueueUrl, SqsQueueArn, BucketNameOut, AwsRegion and RoleArn (or the access-key outputs) are present;
+    the Abstract integration's form asks for all five.
+- check: The flow log exists and writes to the bucket
+  command: aws ec2 describe-flow-logs --filter Name=resource-id,Values=<VpcFlowResourceId> --query 'FlowLogs[].[FlowLogStatus,LogDestination]'
+  healthy: One flow log, status ACTIVE, whose destination is the stack's bucket.
 - check: The SQS queue is receiving notifications
   command: aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible
   healthy: A non-zero count, or a count that returns to zero because Abstract is consuming.

@@ -37,6 +37,12 @@ never_touches:
   to hand to the bucket owner
 prerequisites:
 - Terraform 1.5 or later and AWS credentials for the account that owns the bucket
+- 'If the bucket already sends event notifications anywhere, keep manage_bucket_notification = false (the default).
+  With true in direct or sns mode, apply replaces the bucket''s entire notification configuration and destroy deletes
+  it. Save it first either way: aws s3api get-bucket-notification-configuration --bucket <bucket> > notification-backup.json'
+- 'Upgrading a deployment made before the default became false, that relied on it: set manage_bucket_notification
+  = true explicitly before you apply. If terraform plan shows aws_s3_bucket_notification being destroyed, stop: the
+  apply would empty the bucket''s notification configuration and the feed would stop without an error'
 - Terraform or OpenTofu 1.10 or later, AWS provider 6.0 or later
 - An existing bucket; point the provider at the bucket's region, because the queues must be in the same region
 - Your tenant's Abstract-managed AWS account ID (per tenant, not a published constant)
@@ -95,8 +101,8 @@ parameters:
     flag is NOT set, so the bucket emits nothing until someone sets it. The one-line command is in the `manual_bucket_steps`
     output. In "eventbridge" mode with this left true, the module sets only the independent EventBridgeConfiguration
     flag and does not touch QueueConfigurations - so it will not disturb another team''s notifications the way "direct"
-    mode would.'
-  default: true
+    mode would. Defaults to false, so nothing on the bucket changes unless you choose it.'
+  default: false
 - name: sources
   type: object
   required: true

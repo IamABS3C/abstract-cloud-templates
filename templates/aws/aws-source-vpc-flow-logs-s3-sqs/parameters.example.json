@@ -121,7 +121,7 @@
   },
   {
     "ParameterKey": "VpcFlowResourceId",
-    "ParameterValue": ""
+    "ParameterValue": "<VpcFlowResourceId>"
   },
   {
     "ParameterKey": "VpcFlowTrafficType",

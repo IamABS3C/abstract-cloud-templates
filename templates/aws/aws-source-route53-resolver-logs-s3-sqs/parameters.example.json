@@ -117,7 +117,7 @@
   },
   {
     "ParameterKey": "Route53VpcIds",
-    "ParameterValue": ""
+    "ParameterValue": "<Route53VpcIds>"
   },
   {
     "ParameterKey": "EnableDlqAlarm",

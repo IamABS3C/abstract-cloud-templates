@@ -92,9 +92,9 @@ parameters:
 
     Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All, consented by a
 
-    Global Administrator. Policy cannot create or consent this - see scripts/
+    Global Administrator. Policy cannot create or consent this - see this template''s
 
-    Deploy-AbstractAppReg.sh -a Bootstrap for the one-time setup.
+    ./deploy.sh bootstrap for the one-time setup.
 
 
     This identity can grant itself any directory permission. Treat it as tier-0.

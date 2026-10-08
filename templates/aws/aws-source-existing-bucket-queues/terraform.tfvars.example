@@ -1,7 +1,7 @@
 routing_mode = "direct"
 eventbridge_emit_s3_envelope = true
 bucket_name = "example-security-logs-111122223333-us-east-1"
-manage_bucket_notification = true
+manage_bucket_notification = false
 sources = {"cloudtrail": {"prefix": "AWSLogs/", "suffix": ".json.gz", "integration": "default.cloudtrail.1_0_7"}}
 abstract_aws_account_id = "111122223333"
 external_id = "<external_id>"

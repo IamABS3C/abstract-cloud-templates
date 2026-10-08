@@ -26,6 +26,8 @@ Metadata:
         Parameters: [VpcFlowResourceId]
       - Label: { default: "WAF (if enabled)" }
         Parameters: [WafWebAclArn]
+      - Label: { default: "Route 53 Resolver (if enabled)" }
+        Parameters: [Route53VpcIds]
       - Label: { default: "Kinesis (if enabled)" }
         Parameters: [KinesisStreamName]
       - Label: { default: "Security Lake (if enabled)" }
@@ -35,6 +37,9 @@ Metadata:
       AuthMode: { default: "Authentication method" }
       AbstractPrincipalArn: { default: "Abstract principal ARN or account ID" }
       ExternalId: { default: "External ID (from Abstract)" }
+      VpcFlowResourceId: { default: "VPC, subnet or network interface ID (required with VPC Flow Logs)" }
+      WafWebAclArn: { default: "WAF web ACL ARN (required with WAF)" }
+      Route53VpcIds: { default: "VPC IDs for DNS query logging, up to 10 (required with Route 53)" }
 
 Parameters:
   NamePrefix:
@@ -166,6 +171,10 @@ Parameters:
     Type: String
     Default: ""
     Description: "WAF WebACL ARN (if WAF enabled). Find it with: aws wafv2 list-web-acls --scope REGIONAL"
+  Route53VpcIds:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: "Comma-separated VPC IDs whose DNS queries to log, up to 10 (if Route 53 enabled); any VPC after the tenth is not logged. Find them with: aws ec2 describe-vpcs --query Vpcs[].VpcId"
   KinesisStreamName:
     Type: String
     Default: ""
@@ -182,6 +191,26 @@ Parameters:
     Type: String
     Default: WAFV2
     Description: Security Lake AWS log source (if Security Lake enabled).
+
+# A source switched on with no producer ID would deploy a bucket and a queue nothing writes to and still
+# show CREATE_COMPLETE. These refuse it before anything is created.
+Rules:
+  VpcFlowLogsNeedResource:
+    RuleCondition: !Equals [!Ref EnableVPCFlowLogs, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref VpcFlowResourceId, ""]]
+        AssertDescription: VpcFlowResourceId is required when EnableVPCFlowLogs=true.
+  WafNeedsWebAcl:
+    RuleCondition: !Equals [!Ref EnableWAF, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref WafWebAclArn, ""]]
+        AssertDescription: WafWebAclArn is required when EnableWAF=true.
+  Route53NeedsVpcs:
+    RuleCondition: !Equals [!Ref EnableRoute53, "true"]
+    Assertions:
+      - Assert: !Not
+          - Fn::EachMemberEquals: [!Ref Route53VpcIds, ""]
+        AssertDescription: Route53VpcIds is required when EnableRoute53=true.
 
 Conditions:
   DoCloudTrail: !Equals [!Ref EnableCloudTrail, "true"]
@@ -284,6 +313,7 @@ Resources:
         EnableDashboard: !Ref EnableDashboard
         AlarmEmail: !Ref AlarmEmail
         NotificationPath: S3ToSQS
+        Route53VpcIds: !Join [",", !Ref Route53VpcIds]
       Tags:
         - { Key: Purpose, Value: AbstractSecurity }
 

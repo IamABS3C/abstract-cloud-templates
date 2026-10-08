@@ -84,7 +84,7 @@ variable "bucket_name" {
 
 variable "manage_bucket_notification" {
   type        = bool
-  default     = true
+  default     = false
   description = <<-EOT
     Whether this module writes to the bucket's notification configuration.
     Honored in EVERY routing mode, including "eventbridge".
@@ -106,6 +106,12 @@ variable "manage_bucket_notification" {
     independent EventBridgeConfiguration flag and does not touch
     QueueConfigurations - so it will not disturb another team's notifications
     the way "direct" mode would.
+
+    Defaults to false, so nothing on the bucket changes unless you choose it.
+    Upgrading a deployment made while the default was true? Set this to true
+    explicitly before you apply. If terraform plan shows
+    aws_s3_bucket_notification being destroyed, stop: the apply would empty
+    the bucket's notification configuration and the feed would stop silently.
   EOT
 }
 

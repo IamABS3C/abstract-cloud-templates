@@ -29,7 +29,7 @@
 //  ------
 //    az deployment tenant create \
 //      --location eastus \
-//      --template-file templates/tenant/entra-diagnostics.bicep \
+//      --template-file main.bicep \
 //      --parameters eventHubAuthorizationRuleId=<namespace-auth-rule-id> \
 //                   eventHubName=abs-prod-entra
 //
@@ -145,5 +145,5 @@ output abstractOnboarding object = {
   scope: 'Microsoft Entra ID tenant - one setting covers the whole organisation'
   policyManaged: 'No. Entra diagnostic settings are tenant-level; Azure Policy has no per-subscription object to evaluate. This template IS the automation.'
   firstDataLatency: 'Up to 3 days for the first records, per Microsoft documentation.'
-  notIncluded: 'Microsoft 365 unified audit (Exchange/SharePoint/Teams) and Defender XDR advanced hunting are separate streams - see docs/azure-log-streams.md'
+  notIncluded: 'Microsoft 365 unified audit (Exchange/SharePoint/Teams) and Defender XDR advanced hunting are separate streams - see docs/azure/azure-log-streams.md'
 }

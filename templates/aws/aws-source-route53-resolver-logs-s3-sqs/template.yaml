@@ -119,7 +119,7 @@ Metadata:
       LogDeliveryPrincipalOverride:
         default: Override log-delivery service principal
       Route53VpcIds:
-        default: VPC IDs to associate with query logging
+        default: VPC IDs whose DNS queries to log, up to 10 (required)
       EnableDlqAlarm:
         default: Alarm when messages hit the dead-letter queue?
       DlqAlarmThreshold:
@@ -285,8 +285,7 @@ Parameters:
     Description: Override the log-delivery service principal (advanced; leave blank to use the correct default for the SourceType).
   Route53VpcIds:
     Type: CommaDelimitedList
-    Default: ''
-    Description: 'VPC IDs to associate with the Route 53 Resolver query-logging config (SourceType=Route53Resolver, CreateNew bucket). Find it with: aws ec2 describe-vpcs --query Vpcs[].VpcId'
+    Description: 'Comma-separated VPC IDs whose DNS queries the stack logs, up to 10; any VPC after the tenth is not logged, so use a second stack for more. With BucketMode=UseExisting it is not used: enter the VPCs that already log to your bucket. Find them with: aws ec2 describe-vpcs --query Vpcs[].VpcId'
   EnableDlqAlarm:
     Type: String
     Default: 'false'
@@ -348,6 +347,12 @@ Rules:
       - Assert: !Not
           - !Equals [!Ref ExistingKmsKeyArn, '']
         AssertDescription: ExistingKmsKeyArn is required when KmsMode=UseExisting.
+  Route53LoggingNeedsVpcs:
+    RuleCondition: !Equals [!Ref BucketMode, CreateNew]
+    Assertions:
+      - Assert: !Not
+          - Fn::EachMemberEquals: [!Ref Route53VpcIds, '']
+        AssertDescription: Route53VpcIds is required. Without it the stack creates a bucket that receives no DNS query logs.
 Conditions:
   IsAssumeRole: !Equals [!Ref AuthMode, AssumeRole]
   IsAccessKey: !Equals [!Ref AuthMode, AccessKey]
@@ -445,6 +450,123 @@ Conditions:
     - !Not
       - !Equals
         - !Select [0, !Ref Route53VpcIds]
+        - ''
+  Route53Vpc2: !And
+    - !Condition MakeRoute53Logging
+    - !Not
+      - !Equals
+        - !Select
+          - 1
+          - !Split
+            - ','
+            - !Join
+              - ''
+              - - !Join [',', !Ref Route53VpcIds]
+                - ',,,,,,,,,'
+        - ''
+  Route53Vpc3: !And
+    - !Condition MakeRoute53Logging
+    - !Not
+      - !Equals
+        - !Select
+          - 2
+          - !Split
+            - ','
+            - !Join
+              - ''
+              - - !Join [',', !Ref Route53VpcIds]
+                - ',,,,,,,,,'
+        - ''
+  Route53Vpc4: !And
+    - !Condition MakeRoute53Logging
+    - !Not
+      - !Equals
+        - !Select
+          - 3
+          - !Split
+            - ','
+            - !Join
+              - ''
+              - - !Join [',', !Ref Route53VpcIds]
+                - ',,,,,,,,,'
+        - ''
+  Route53Vpc5: !And
+    - !Condition MakeRoute53Logging
+    - !Not
+      - !Equals
+        - !Select
+          - 4
+          - !Split
+            - ','
+            - !Join
+              - ''
+              - - !Join [',', !Ref Route53VpcIds]
+                - ',,,,,,,,,'
+        - ''
+  Route53Vpc6: !And
+    - !Condition MakeRoute53Logging
+    - !Not
+      - !Equals
+        - !Select
+          - 5
+          - !Split
+            - ','
+            - !Join
+              - ''
+              - - !Join [',', !Ref Route53VpcIds]
+                - ',,,,,,,,,'
+        - ''
+  Route53Vpc7: !And
+    - !Condition MakeRoute53Logging
+    - !Not
+      - !Equals
+        - !Select
+          - 6
+          - !Split
+            - ','
+            - !Join
+              - ''
+              - - !Join [',', !Ref Route53VpcIds]
+                - ',,,,,,,,,'
+        - ''
+  Route53Vpc8: !And
+    - !Condition MakeRoute53Logging
+    - !Not
+      - !Equals
+        - !Select
+          - 7
+          - !Split
+            - ','
+            - !Join
+              - ''
+              - - !Join [',', !Ref Route53VpcIds]
+                - ',,,,,,,,,'
+        - ''
+  Route53Vpc9: !And
+    - !Condition MakeRoute53Logging
+    - !Not
+      - !Equals
+        - !Select
+          - 8
+          - !Split
+            - ','
+            - !Join
+              - ''
+              - - !Join [',', !Ref Route53VpcIds]
+                - ',,,,,,,,,'
+        - ''
+  Route53Vpc10: !And
+    - !Condition MakeRoute53Logging
+    - !Not
+      - !Equals
+        - !Select
+          - 9
+          - !Split
+            - ','
+            - !Join
+              - ''
+              - - !Join [',', !Ref Route53VpcIds]
+                - ',,,,,,,,,'
         - ''
 Resources:
   AbstractKmsKey:
@@ -848,6 +970,123 @@ Resources:
     Properties:
       ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
       ResourceId: !Select [0, !Ref Route53VpcIds]
+  Route53QueryLogAssociation2:
+    Type: AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation
+    Condition: Route53Vpc2
+    Properties:
+      ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
+      ResourceId: !Select
+        - 1
+        - !Split
+          - ','
+          - !Join
+            - ''
+            - - !Join [',', !Ref Route53VpcIds]
+              - ',,,,,,,,,'
+  Route53QueryLogAssociation3:
+    Type: AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation
+    Condition: Route53Vpc3
+    Properties:
+      ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
+      ResourceId: !Select
+        - 2
+        - !Split
+          - ','
+          - !Join
+            - ''
+            - - !Join [',', !Ref Route53VpcIds]
+              - ',,,,,,,,,'
+  Route53QueryLogAssociation4:
+    Type: AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation
+    Condition: Route53Vpc4
+    Properties:
+      ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
+      ResourceId: !Select
+        - 3
+        - !Split
+          - ','
+          - !Join
+            - ''
+            - - !Join [',', !Ref Route53VpcIds]
+              - ',,,,,,,,,'
+  Route53QueryLogAssociation5:
+    Type: AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation
+    Condition: Route53Vpc5
+    Properties:
+      ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
+      ResourceId: !Select
+        - 4
+        - !Split
+          - ','
+          - !Join
+            - ''
+            - - !Join [',', !Ref Route53VpcIds]
+              - ',,,,,,,,,'
+  Route53QueryLogAssociation6:
+    Type: AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation
+    Condition: Route53Vpc6
+    Properties:
+      ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
+      ResourceId: !Select
+        - 5
+        - !Split
+          - ','
+          - !Join
+            - ''
+            - - !Join [',', !Ref Route53VpcIds]
+              - ',,,,,,,,,'
+  Route53QueryLogAssociation7:
+    Type: AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation
+    Condition: Route53Vpc7
+    Properties:
+      ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
+      ResourceId: !Select
+        - 6
+        - !Split
+          - ','
+          - !Join
+            - ''
+            - - !Join [',', !Ref Route53VpcIds]
+              - ',,,,,,,,,'
+  Route53QueryLogAssociation8:
+    Type: AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation
+    Condition: Route53Vpc8
+    Properties:
+      ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
+      ResourceId: !Select
+        - 7
+        - !Split
+          - ','
+          - !Join
+            - ''
+            - - !Join [',', !Ref Route53VpcIds]
+              - ',,,,,,,,,'
+  Route53QueryLogAssociation9:
+    Type: AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation
+    Condition: Route53Vpc9
+    Properties:
+      ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
+      ResourceId: !Select
+        - 8
+        - !Split
+          - ','
+          - !Join
+            - ''
+            - - !Join [',', !Ref Route53VpcIds]
+              - ',,,,,,,,,'
+  Route53QueryLogAssociation10:
+    Type: AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation
+    Condition: Route53Vpc10
+    Properties:
+      ResolverQueryLogConfigId: !Ref Route53QueryLogConfig
+      ResourceId: !Select
+        - 9
+        - !Split
+          - ','
+          - !Join
+            - ''
+            - - !Join [',', !Ref Route53VpcIds]
+              - ',,,,,,,,,'
   AbstractIngestRole:
     Type: AWS::IAM::Role
     Condition: IsAssumeRole

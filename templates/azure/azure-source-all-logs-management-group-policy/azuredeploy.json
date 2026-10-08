@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "13506679351663874097"
+      "templateHash": "15799060236753571950"
     }
   },
   "parameters": {
@@ -609,8 +609,8 @@
         "resourceLogs": "[if(parameters('enableResourceLogs'), format('{0} assigned for {1} region(s)', parameters('categoryGroup'), length(parameters('regions'))), 'not assigned')]",
         "sqlAuditing": "[if(parameters('enableSqlAuditing'), format('assigned for {0} region(s)', length(parameters('regions'))), 'not assigned')]",
         "defenderForCloud": "[if(parameters('enableDefenderExport'), 'assigned', 'not assigned')]",
-        "nextStep": "Grant Azure Event Hubs Data Owner to the principals above on the Event Hubs namespace, then run a remediation task to backfill EXISTING resources.",
-        "notCoveredByPolicy": "Microsoft Entra ID, Defender XDR and Microsoft 365 are tenant-level streams - see templates/tenant/entra-diagnostics.bicep and the coverage matrix in docs/azure-log-streams.md"
+        "nextStep": "Run scripts/deploy-log-streams.sh -a Grant -m <mg-id> -n <namespace-resource-id> once per namespace, then -a Remediate -m <mg-id> to backfill EXISTING resources. Report-only assignments (AuditIfNotExists) need neither until you enforce.",
+        "notCoveredByPolicy": "Microsoft Entra ID, Defender XDR and Microsoft 365 are tenant-level streams - Entra ID is the azure-source-entra-id-logs-tenant template; see the coverage matrix in docs/azure/azure-log-streams.md"
       }
     }
   }

@@ -16,7 +16,7 @@
               "visible": true,
               "options": {
                 "icon": "Warning",
-                "text": "Tenant-scope deployments require elevated rights and the portal may refuse if your account cannot deploy at tenant scope. The guaranteed path is the CLI: az deployment tenant create --location eastus --template-file templates/tenant/entra-diagnostics.bicep",
+                "text": "Tenant-scope deployments require elevated rights and the portal may refuse if your account cannot deploy at tenant scope. The guaranteed path is the CLI, from this template's folder: ./deploy.sh <location> --parameters eventHubAuthorizationRuleId=<rule-id> --yes",
                 "uri": "https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-to-tenant"
               }
             },

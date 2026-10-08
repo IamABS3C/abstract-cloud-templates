@@ -55,6 +55,9 @@ prerequisites:
   write them on a bucket it does not own
 - For an organization trail, deploy in the management or delegated administrator account and set CtIsOrganizationTrail=true
   and CtOrganizationId
+- 'Check for a trail you already have first: aws cloudtrail describe-trails. If one exists (Control Tower and Organizations
+  set-ups create an organization trail), read its bucket with the read role instead: a second trail delivers a second,
+  billed copy of management events'
 - With KmsMode=UseExisting, the key policy must already allow cloudtrail.amazonaws.com to GenerateDataKey* and Decrypt,
   or trail creation fails
 parameters:
@@ -399,15 +402,20 @@ abstract:
 verify:
 - check: The stack outputs carry the values the Abstract integration needs
   command: aws cloudformation describe-stacks --stack-name <stack-name> --query 'Stacks[0].Outputs' --output table
-  healthy: SqsQueueUrl, AwsRegion and RoleArn (or the access-key outputs) are present.
+  healthy: SqsQueueUrl, SqsQueueArn, BucketNameOut, AwsRegion and RoleArn (or the access-key outputs) are present;
+    the Abstract integration's form asks for all five.
+- check: The trail is logging to the bucket
+  command: aws cloudtrail get-trail-status --name <NamePrefix>-trail --query '[IsLogging,LatestDeliveryTime]'
+  healthy: IsLogging is true, and LatestDeliveryTime advances within about 15 minutes.
 - check: The SQS queue is receiving notifications
   command: aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names ApproximateNumberOfMessagesVisible
   healthy: A non-zero count, or a count that returns to zero because Abstract is consuming.
 - check: Nothing is failing into the dead-letter queue
   command: aws sqs get-queue-attributes --queue-url <dead-letter-queue-url> --attribute-names ApproximateNumberOfMessagesVisible
   healthy: Zero messages.
-cost: Management events on one trail are free; S3 and Lambda data events are high volume and billed per event, so
-  they are off by default.
+cost: The first copy of management events in each account is free; if a trail (or an organization trail) already
+  delivers them, this trail is a second copy and every management event is billed. S3 and Lambda data events are
+  high volume and billed per event, so they are off by default.
 when_to_use: You want the account's (or organization's) API activity in Abstract and no trail delivers to a bucket
   Abstract can read yet.
 when_not_to_use: 'A trail already delivers to a bucket: use the read role for an existing bucket and queue, or BucketMode=UseExisting.'

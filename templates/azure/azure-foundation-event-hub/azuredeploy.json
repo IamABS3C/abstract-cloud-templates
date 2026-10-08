@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "17155489946242305501"
+      "templateHash": "389193308612955011"
     }
   },
   "parameters": {
@@ -816,8 +816,8 @@
         "storageBlobContainerName": "[if(parameters('createStorageAccount'), parameters('blobContainerName'), '(bring your own)')]",
         "eventHubNamespaceFqdn": "[format('{0}.servicebus.windows.net', parameters('namespaceName'))]",
         "storageAccountUrl": "[if(parameters('createStorageAccount'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageNameEffective')), '2023-05-01').primaryEndpoints.blob, '(bring your own)')]",
-        "eventHubConnectionString": "[if(parameters('enableSas'), format('Portal: Event Hubs Namespace > Shared access policies > {0} > Connection string-primary key (or run the companion script with -Action Credentials)', parameters('sasRuleName')), '(SAS disabled)')]",
-        "storageAccountConnectionString": "[if(and(parameters('createStorageAccount'), parameters('storageAllowSharedKeyAccess')), 'Portal: Storage Account > Security + networking > Access keys > Connection string (or run the companion script with -Action Credentials)', '(shared key access disabled)')]",
+        "eventHubConnectionString": "[if(parameters('enableSas'), format('Portal: Event Hubs Namespace > Shared access policies > {0} > Connection string-primary key. It is a secret: copy it from the portal straight into Abstract, never print it in a terminal.', parameters('sasRuleName')), '(SAS disabled)')]",
+        "storageAccountConnectionString": "[if(and(parameters('createStorageAccount'), parameters('storageAllowSharedKeyAccess')), 'Portal: Storage Account > Security + networking > Access keys > Connection string (Basic tier only; Standard and above need no storage account in Abstract)', '(shared key access disabled)')]",
         "docs": "https://docs.abstractsecurity.app -> Integrations -> Azure Event Hub"
       }
     }

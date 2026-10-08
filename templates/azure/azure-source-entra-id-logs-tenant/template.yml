@@ -20,6 +20,11 @@ permissions:
 - role: Attribute Log Administrator (Entra directory role)
   where: The Entra tenant
   why: 'Deployer: Only for CustomSecurityAttributeAuditLogs.'
+- role: Microsoft.Resources/deployments/* at tenant scope (for example Owner or Contributor on "/")
+  where: The tenant root scope "/"
+  why: 'Deployer: Any tenant-scope deployment needs it, besides the Entra role. A Global Administrator elevates
+    access, then assigns it (az role assignment create --assignee <user> --scope "/" --role Owner). Source:
+    Microsoft Learn, Tenant deployments with Bicep, Required access.'
 - role: listKeys on the Event Hub authorization rule
   where: The Event Hubs namespace
   why: 'Deployer: Creating a setting that streams to an Event Hub requires ListKey on the target rule.'
