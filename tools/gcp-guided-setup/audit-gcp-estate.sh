@@ -8,6 +8,9 @@
 #   Infrastructure Manager readiness.
 # =============================================================================
 set -uo pipefail
+# Read-only: gcloud must never stop to ask (for example "enable the Compute API and retry?"). A prompt
+# here once left the audit waiting for hours on a project without the Compute API.
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
 B=$'\033[1m'; P=$'\033[38;5;198m'; G=$'\033[0;32m'; Y=$'\033[0;33m'; R=$'\033[0;31m'; C=$'\033[0;36m'; D=$'\033[2m'; O=$'\033[0m'
 banner() {
@@ -66,7 +69,12 @@ else
   exit 1
 fi
 
-TOKEN=$(gcloud auth print-access-token 2>/dev/null || true)
+# A configured account is not a working sign-in: when gcloud needs to sign in again, every later call
+# fails quietly and the audit used to report "no organization, 0 projects" as if the estate were empty.
+if ! TOKEN=$(gcloud auth print-access-token 2>&1) || [[ -z "$TOKEN" || "$TOKEN" == *ERROR* ]]; then
+  ! $JSON_OUTPUT && fail "gcloud is signed in as $ACTIVE_ACCOUNT but cannot get a token: run 'gcloud auth login' (and 'gcloud auth application-default login'), then run this audit again. Nothing was checked."
+  exit 2
+fi
 
 # 2. Resource Hierarchy Discovery
 ! $JSON_OUTPUT && heading "2. Resource Hierarchy Discovery" "━━━━━━━━━━━━━━━━━━━━━━━"
@@ -109,16 +117,45 @@ done <<< "$ALL_PROJECTS"
 
 if [[ ${#CANDIDATE_LOG_PROJECTS[@]} -gt 0 ]]; then
   ! $JSON_OUTPUT && pass "Candidate Centralized Logging Project(s): ${B}${CANDIDATE_LOG_PROJECTS[*]}${O}"
-  if [[ -z "$TARGET_PROJECT" ]]; then
-    TARGET_PROJECT="${CANDIDATE_LOG_PROJECTS[0]}"
+fi
+# Which project to inspect, most certain first: --project; the guided setup's saved answers; the project
+# an organization sink already sends to over Pub/Sub; then the first log-like name. Picking the first
+# name alone once inspected a leftover duplicate and said nothing about the project Abstract reads.
+TARGET_REASON="--project"
+if [[ -z "$TARGET_PROJECT" ]]; then
+  saved="${ABSTRACT_GCP_STATE:-$HOME/.abstract-gcp-setup.env}"
+  if [[ -f "$saved" ]]; then
+    saved_org=$(sed -n 's/^ORG_ID=//p' "$saved" | head -n1 | tr -d "'\"")
+    # Answers saved for another organization describe another estate: never mix the two.
+    if [[ -z "$TARGET_ORG" || -z "$saved_org" || "$saved_org" == "$TARGET_ORG" ]]; then
+      TARGET_PROJECT=$(sed -n 's/^LOG_PROJECT=//p' "$saved" | head -n1 | tr -d "'\"")
+      TARGET_REASON="the guided setup's saved answers name it"
+    fi
   fi
+fi
+if [[ -z "$TARGET_PROJECT" && -n "$TARGET_ORG" ]]; then
+  # The AUDIT sink, not merely the first Pub/Sub one: the network-threat sink also sends to Pub/Sub.
+  pubsub_sinks=$(gcloud logging sinks list --organization="$TARGET_ORG" --format="value(name,destination)" 2>/dev/null \
+    | awk -F'\t' '$2 ~ /^pubsub\.googleapis\.com\/projects\//')
+  sink_line=$(echo "$pubsub_sinks" | awk -F'\t' '$1 == "abstract-org-audit-sink" || $2 ~ /\/topics\/abstract-audit-logs$/ {print; exit}')
+  if [[ -z "$sink_line" && $(echo "$pubsub_sinks" | grep -c .) -eq 1 ]]; then sink_line="$pubsub_sinks"; fi
+  if [[ -n "$sink_line" ]]; then
+    TARGET_PROJECT=$(echo "$sink_line" | sed -E 's|.*pubsub\.googleapis\.com/projects/([^/]+)/.*|\1|')
+    TARGET_REASON="the organization sink $(echo "$sink_line" | cut -f1) sends there"
+  elif [[ -n "$pubsub_sinks" ]]; then
+    ! $JSON_OUTPUT && warn "Several organization sinks send to Pub/Sub and none is the audit sink; pass --project to choose: $(echo "$pubsub_sinks" | cut -f1 | tr '\n' ' ')"
+  fi
+fi
+if [[ -z "$TARGET_PROJECT" && ${#CANDIDATE_LOG_PROJECTS[@]} -gt 0 ]]; then
+  TARGET_PROJECT="${CANDIDATE_LOG_PROJECTS[0]}"
+  TARGET_REASON="first project with a logging-like name; pass --project to choose another"
 fi
 
 CURRENT_PROJECT=$(gcloud config get-value project 2>/dev/null | grep -v "^(unset)$" || true)
 if [[ -z "$TARGET_PROJECT" ]]; then
-  TARGET_PROJECT="$CURRENT_PROJECT"
+  TARGET_PROJECT="$CURRENT_PROJECT"; TARGET_REASON="gcloud's current project"
 fi
-! $JSON_OUTPUT && info "Active audit inspection target project: ${B}${TARGET_PROJECT:-none}${O}"
+! $JSON_OUTPUT && info "Active audit inspection target project: ${B}${TARGET_PROJECT:-none}${O} (${TARGET_REASON:-none found})"
 
 # 3. Permissions & Policy Governance
 ! $JSON_OUTPUT && heading "3. Permissions & Policy Governance" "━━━━━━━━━━━━━━━━━━━━━━"
@@ -179,7 +216,9 @@ fi
 # 4. Existing Log Sinks & Pub/Sub Pipelines
 ! $JSON_OUTPUT && heading "4. Existing Log Sinks & Telemetry Streams" "━━━━━━━━━━━━━━━━━━━━"
 if [[ -n "$TARGET_ORG" ]]; then
-  ORG_SINKS=$(gcloud logging sinks list --organization="$TARGET_ORG" --format="value(name,destination)" 2>/dev/null || true)
+  # Google's own _Required and _Default sinks exist in every organization; they export nothing.
+  ORG_SINKS=$(gcloud logging sinks list --organization="$TARGET_ORG" --format="value(name,destination)" 2>/dev/null \
+    | grep -v -E '^_(Required|Default)\b' || true)
   ORG_SINK_COUNT=$(echo "$ORG_SINKS" | grep -c . || true)
   if [[ "$ORG_SINK_COUNT" -gt 0 ]]; then
     ! $JSON_OUTPUT && pass "Found $ORG_SINK_COUNT Organization-level log sink(s)"
@@ -330,7 +369,7 @@ if ! $JSON_OUTPUT; then
   fi
 
   printf "\n%sOnboarding & Standalone Setup Options:%s\n" "$B" "$O"
-  printf "  • Guided interactive walkthrough:  %scloudshell launch-tutorial WALKTHROUGH.md%s\n" "$C" "$O"
+  printf "  • Guided interactive walkthrough:  %scloudshell launch-tutorial tools/gcp-guided-setup/WALKTHROUGH.md%s\n" "$C" "$O"
   printf "  • Guided setup:                     %s./tools/gcp-guided-setup/abstract-gcp-setup.sh%s\n" "$C" "$O"
   printf "  • One template per source:          %stemplates/gcp/<template-id>/ (README.md and TUTORIAL.md)%s\n\n" "$C" "$O"
 fi

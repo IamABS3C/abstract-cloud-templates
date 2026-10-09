@@ -31,13 +31,17 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 **Not chosen:** A folder or project sink: it would miss projects outside it.
 
-1. **Check first.** Cloud admin, in Cloud Shell.
+1. **Check first.** Cloud admin, in Cloud Shell, or any terminal with gcloud.
 
-   Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes.
+   Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Every command from here on runs from the top folder of the templates repository.
+
+   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Anywhere else, the clone line fetches it; without it the scripts are not found ("no such file or directory").
 
    ```bash
    gcloud auth login
    gcloud auth application-default login
+   git clone https://github.com/IamABS3C/abstract-cloud-templates && cd abstract-cloud-templates
+   cd "$(git rev-parse --show-toplevel)"
    ./tools/gcp-guided-setup/audit-gcp-estate.sh
    ```
 
@@ -278,13 +282,17 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 **Not chosen:** The organization sink: you asked for one folder.
 
-1. **Check first.** Cloud admin, in Cloud Shell.
+1. **Check first.** Cloud admin, in Cloud Shell, or any terminal with gcloud.
 
-   Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes.
+   Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Every command from here on runs from the top folder of the templates repository.
+
+   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Anywhere else, the clone line fetches it; without it the scripts are not found ("no such file or directory").
 
    ```bash
    gcloud auth login
    gcloud auth application-default login
+   git clone https://github.com/IamABS3C/abstract-cloud-templates && cd abstract-cloud-templates
+   cd "$(git rev-parse --show-toplevel)"
    ./tools/gcp-guided-setup/audit-gcp-estate.sh
    ```
 
@@ -463,13 +471,17 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 **Not chosen:** The organization sink: it needs organization rights you may not have for a pilot.
 
-1. **Check first.** Cloud admin, in Cloud Shell.
+1. **Check first.** Cloud admin, in Cloud Shell, or any terminal with gcloud.
 
-   Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes.
+   Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Every command from here on runs from the top folder of the templates repository.
+
+   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Anywhere else, the clone line fetches it; without it the scripts are not found ("no such file or directory").
 
    ```bash
    gcloud auth login
    gcloud auth application-default login
+   git clone https://github.com/IamABS3C/abstract-cloud-templates && cd abstract-cloud-templates
+   cd "$(git rev-parse --show-toplevel)"
    ./tools/gcp-guided-setup/audit-gcp-estate.sh
    ```
 
