@@ -159,35 +159,53 @@ fi
 
 # 3. Permissions & Policy Governance
 ! $JSON_OUTPUT && heading "3. Permissions & Policy Governance" "━━━━━━━━━━━━━━━━━━━━━━"
+# testIamPermissions answers with the subset of permissions the caller holds ({} when none), or with an
+# error. An error names permissions too, so only the "permissions" list is ever read as an answer, and
+# anything that is not a clean answer - no body, not JSON, any error - leaves the check unanswered.
+granted()    { python3 -c 'import json,sys; d=json.loads(sys.argv[1] or "{}"); sys.exit(0 if sys.argv[2] in d.get("permissions",[]) else 1)' "$1" "$2" 2>/dev/null; }
+perm_error() { python3 -c '
+import json, sys
+body = sys.argv[1].strip()
+if not body: sys.exit(print("no answer from Google (network or sign-in problem)"))
+try: d = json.loads(body)
+except ValueError: sys.exit(print("the answer was not JSON"))
+if not isinstance(d, dict): sys.exit(print("the answer was not a permissions list"))
+e = d.get("error")
+if e is not None: print((e.get("message") if isinstance(e, dict) else "") or "Google returned an error")
+' "$1" 2>/dev/null || echo "the answer could not be read"; }
+
 if [[ -n "$TARGET_ORG" && -n "$TOKEN" ]]; then
+  # Only permissions an organization can answer for: Google rejects the whole call if one is not.
   ORG_PERMS_TEST=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
     "https://cloudresourcemanager.googleapis.com/v1/organizations/${TARGET_ORG}:testIamPermissions" \
-    -d '{"permissions":["logging.sinks.create","resourcemanager.organizations.setIamPolicy","securitycenter.notificationconfigs.create","cloudasset.feeds.create"]}' 2>/dev/null || true)
+    -d '{"permissions":["logging.sinks.create","resourcemanager.organizations.setIamPolicy","cloudasset.feeds.create"]}' 2>/dev/null || true)
+  ORG_PERMS_ERROR=$(perm_error "$ORG_PERMS_TEST")
 
-  if echo "$ORG_PERMS_TEST" | grep -q "logging.sinks.create"; then
-    ! $JSON_OUTPUT && pass "Organization Sink Creator (roles/logging.configWriter) is HELD"
+  if [[ -n "$ORG_PERMS_ERROR" ]]; then
+    ! $JSON_OUTPUT && warn "Could not check organization permissions: $ORG_PERMS_ERROR"
   else
-    ! $JSON_OUTPUT && fail "Organization Sink Creator (roles/logging.configWriter) is MISSING on Organization $TARGET_ORG"
-    add_rec "Request 'roles/logging.configWriter' on Organization $TARGET_ORG to create aggregated organization-wide sinks."
+    if granted "$ORG_PERMS_TEST" logging.sinks.create; then
+      ! $JSON_OUTPUT && pass "Organization Sink Creator (roles/logging.configWriter) is HELD"
+    else
+      ! $JSON_OUTPUT && fail "Organization Sink Creator (roles/logging.configWriter) is MISSING on Organization $TARGET_ORG"
+      add_rec "Request 'roles/logging.configWriter' on Organization $TARGET_ORG to create aggregated organization-wide sinks."
+    fi
+
+    if granted "$ORG_PERMS_TEST" resourcemanager.organizations.setIamPolicy; then
+      ! $JSON_OUTPUT && pass "Organization IAM Admin (resourcemanager.organizations.setIamPolicy) is HELD"
+    else
+      ! $JSON_OUTPUT && warn "Organization IAM Admin is MISSING. Needed for templates/gcp/gcp-foundation-data-access-audit-logs (Data Access Audit Configs)."
+    fi
+
+    if granted "$ORG_PERMS_TEST" cloudasset.feeds.create; then
+      ! $JSON_OUTPUT && pass "Cloud Asset Owner (cloudasset.feeds.create) is HELD"
+    else
+      ! $JSON_OUTPUT && warn "Cloud Asset Owner is MISSING. Needed for templates/gcp/gcp-source-asset-and-iam-changes."
+    fi
   fi
 
-  if echo "$ORG_PERMS_TEST" | grep -q "resourcemanager.organizations.setIamPolicy"; then
-    ! $JSON_OUTPUT && pass "Organization IAM Admin (resourcemanager.organizations.setIamPolicy) is HELD"
-  else
-    ! $JSON_OUTPUT && warn "Organization IAM Admin is MISSING. Needed for templates/gcp/gcp-foundation-data-access-audit-logs (Data Access Audit Configs)."
-  fi
-
-  if echo "$ORG_PERMS_TEST" | grep -q "securitycenter.notificationconfigs.create"; then
-    ! $JSON_OUTPUT && pass "SCC Notification Editor (securitycenter.notificationconfigs.create) is HELD"
-  else
-    ! $JSON_OUTPUT && warn "SCC Notification Editor is MISSING. Needed for templates/gcp/gcp-source-security-command-center-findings."
-  fi
-
-  if echo "$ORG_PERMS_TEST" | grep -q "cloudasset.feeds.create"; then
-    ! $JSON_OUTPUT && pass "Cloud Asset Owner (cloudasset.feeds.create) is HELD"
-  else
-    ! $JSON_OUTPUT && warn "Cloud Asset Owner is MISSING. Needed for templates/gcp/gcp-source-asset-and-iam-changes."
-  fi
+  # Security Command Center permissions cannot be tested on an organization ahead of time.
+  ! $JSON_OUTPUT && info "SCC notifications cannot be checked in advance: templates/gcp/gcp-source-security-command-center-findings needs roles/securitycenter.notificationConfigEditor on the organization."
 fi
 
 # Check Target Project permissions
@@ -196,7 +214,10 @@ if [[ -n "$TARGET_PROJECT" && -n "$TOKEN" ]]; then
     "https://cloudresourcemanager.googleapis.com/v1/projects/${TARGET_PROJECT}:testIamPermissions" \
     -d '{"permissions":["pubsub.topics.create","pubsub.subscriptions.create","iam.serviceAccounts.create","iam.serviceAccountKeys.create","serviceusage.services.enable"]}' 2>/dev/null || true)
 
-  if echo "$PROJ_PERMS_TEST" | grep -q "pubsub.topics.create" && echo "$PROJ_PERMS_TEST" | grep -q "pubsub.subscriptions.create"; then
+  PROJ_PERMS_ERROR=$(perm_error "$PROJ_PERMS_TEST")
+  if [[ -n "$PROJ_PERMS_ERROR" ]]; then
+    ! $JSON_OUTPUT && warn "Could not check permissions on '$TARGET_PROJECT': $PROJ_PERMS_ERROR"
+  elif granted "$PROJ_PERMS_TEST" pubsub.topics.create && granted "$PROJ_PERMS_TEST" pubsub.subscriptions.create; then
     ! $JSON_OUTPUT && pass "Pub/Sub Admin on project '$TARGET_PROJECT' is HELD"
   else
     ! $JSON_OUTPUT && fail "Pub/Sub topic/subscription creation is MISSING on '$TARGET_PROJECT'"
