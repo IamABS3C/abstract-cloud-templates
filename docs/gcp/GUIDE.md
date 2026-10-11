@@ -35,7 +35,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Every command from here on runs from the top folder of the templates repository.
 
-   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Anywhere else, the clone line fetches it; without it the scripts are not found ("no such file or directory").
+   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Anywhere else, the clone line fetches it; without it the scripts are not found ("no such file or directory"). Google opens a repository that is not its own in a temporary Cloud Shell without your credentials, so start with the two sign-in lines; the guided script also offers to sign in, or switch account, on its first screen.
 
    ```bash
    gcloud auth login
@@ -286,7 +286,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Every command from here on runs from the top folder of the templates repository.
 
-   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Anywhere else, the clone line fetches it; without it the scripts are not found ("no such file or directory").
+   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Anywhere else, the clone line fetches it; without it the scripts are not found ("no such file or directory"). Google opens a repository that is not its own in a temporary Cloud Shell without your credentials, so start with the two sign-in lines; the guided script also offers to sign in, or switch account, on its first screen.
 
    ```bash
    gcloud auth login
@@ -475,7 +475,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Every command from here on runs from the top folder of the templates repository.
 
-   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Anywhere else, the clone line fetches it; without it the scripts are not found ("no such file or directory").
+   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Anywhere else, the clone line fetches it; without it the scripts are not found ("no such file or directory"). Google opens a repository that is not its own in a temporary Cloud Shell without your credentials, so start with the two sign-in lines; the guided script also offers to sign in, or switch account, on its first screen.
 
    ```bash
    gcloud auth login

@@ -14,18 +14,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
 B=$'\033[1m'; P=$'\033[38;5;198m'; G=$'\033[0;32m'; Y=$'\033[0;33m'; R=$'\033[0;31m'; C=$'\033[0;36m'; D=$'\033[2m'; O=$'\033[0m'
-banner() {
-  printf "%s" "$P"
-  cat <<'EOF'
-    _   _         _                  _     ___                      _ _         
-   /_\ | |__  ___| |_ _ _ __ _  __ _| |_  / __| ___ __ _  _ _ _(_) |_ _  _ 
-  / _ \| '_ \(_-<  _| '_/ _` |/ _` |  _| \__ \/ -_) _| || | '_| |  _| || |
- /_/ \_\_.__/__/\__|_| \__,_|\__, |\__| |___/\___\__|\_,_|_| |_|\__|\_, |
-                              |___/                                   |__/ 
-EOF
-  printf "%s" "$O"
-  printf "%s   Google Cloud Platform Estate Security & Telemetry Audit%s\n\n" "$D" "$O"
-}
+# The Abstract header (brand.py: the official lockup, as in the Search & Export kit).
+banner() { python3 "$HERE/brand.py" header "Google Cloud estate audit" "read-only - nothing will change"; }
 
 heading() { printf "\n%s━━ %s %s━━%s\n" "$P" "$1" "$2" "$O"; }
 pass()    { printf "  %s✓%s %s\n" "$G" "$O" "$*"; PASS_COUNT=$((PASS_COUNT+1)); }

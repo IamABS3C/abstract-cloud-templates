@@ -7,6 +7,10 @@
 #
 # READ-ONLY. Every command here is a get or a list. It changes nothing.
 set -uo pipefail
+# gcloud must never stop to ask a question: its questions go to stderr, which these lookups hide, so a hidden
+# "enable this API and retry? (y/N)" would freeze the check (measured 2026-10-08 in the estate audit).
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ORG_ID=""; FOLDER_ID=""; PROJECT=""; SCOPE="organization"; REPORT=""
 TMP=$(mktemp -t abspf.XXXXXX); trap 'rm -f "$TMP"' EXIT
@@ -44,6 +48,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -z "$PROJECT" ]] && { usage; exit 2; }
 
+python3 "$HERE/brand.py" header "Google Cloud preflight" "read-only - nothing will change"
 h "Identity"
 # Three sources, because they fail in different environments:
 #   config account   — unset under token auth (ADC, and Cloud Shell service accounts)

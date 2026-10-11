@@ -19,6 +19,7 @@
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh              guided: every step, asks before each change
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6     one step
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --check      verify everything, change nothing
+#    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --reset      forget the saved answers and start over
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove     list what clean-up would delete; --remove --confirm deletes it
 #    ... --remove --project <id>                                 no saved answers: list what carries the setup's names
 #
@@ -33,20 +34,23 @@ STATE="${ABSTRACT_GCP_STATE:-$HOME/.abstract-gcp-setup.env}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"   # the repository root: this script lives in tools/gcp-guided-setup
 
-# Defaults; anything in the state file wins.
-TOPIC="abstract-audit-logs"; SUB="abstract-audit-logs-sub"; SINK="abstract-org-audit-sink"  # the Terraform and deploy-script default
-SA="abstract-pubsub-reader"; WS_SA="abstract-workspace-reader"; RETENTION_DAYS=7
-# iam and sts record service-account token minting and Workload Identity Federation token exchange.
-DA_SERVICES="bigquery.googleapis.com,storage.googleapis.com,cloudkms.googleapis.com,iam.googleapis.com,sts.googleapis.com"; DA_TYPES="ADMIN_READ,DATA_WRITE"
-DATA_ACCESS=no; WORKSPACE=no; ALERTS=no
-ORG_ID=""; SCOPE=""; SCOPE_ID=""; LOG_PROJECT=""; BILLING=""; WS_ADMIN=""; ALERT_EMAIL=""
-ALERT_POLICIES=""; ALERT_CHANNELS=""; FIND_PROJECT=""   # the alerts step 8 made, recorded by name
+# Defaults; anything in the state file wins. A function, so "start over" can put every answer back.
+defaults() {
+  TOPIC="abstract-audit-logs"; SUB="abstract-audit-logs-sub"; SINK="abstract-org-audit-sink"  # the Terraform and deploy-script default
+  SA="abstract-pubsub-reader"; WS_SA="abstract-workspace-reader"; RETENTION_DAYS=7
+  # iam and sts record service-account token minting and Workload Identity Federation token exchange.
+  DA_SERVICES="bigquery.googleapis.com,storage.googleapis.com,cloudkms.googleapis.com,iam.googleapis.com,sts.googleapis.com"; DA_TYPES="ADMIN_READ,DATA_WRITE"
+  DATA_ACCESS=no; WORKSPACE=no; ALERTS=no
+  ORG_ID=""; SCOPE=""; SCOPE_ID=""; LOG_PROJECT=""; BILLING=""; WS_ADMIN=""; ALERT_EMAIL=""
+  ALERT_POLICIES=""; ALERT_CHANNELS=""   # the alerts step 8 made, recorded by name
+  SINK_CREATED_AT=0
+  # Set to 1 only when THIS script creates the piece, so --remove never deletes something it found.
+  TOPIC_CREATED=0; SUB_CREATED=0; SA_CREATED=0; WS_SA_CREATED=0
+}
+defaults; FIND_PROJECT=""
 # Keys go outside any checkout, in a folder only you can read, so they cannot be committed by accident.
 KEY_DIR="${ABSTRACT_KEY_DIR:-$HOME/abstract-keys}"
 KEY_FILE="$KEY_DIR/abstract-pubsub-key.json"; WS_KEY_FILE="$KEY_DIR/abstract-workspace-key.json"
-SINK_CREATED_AT=0
-# Set to 1 only when THIS script creates the piece, so --remove never deletes something it found.
-TOPIC_CREATED=0; SUB_CREATED=0; SA_CREATED=0; WS_SA_CREATED=0
 # shellcheck disable=SC1090
 [[ -f "$STATE" ]] && source "$STATE"
 
@@ -70,11 +74,117 @@ save() {
       ALERT_POLICIES ALERT_CHANNELS; do printf '%s=%q\n' "$v" "${!v}"; done; } > "$STATE"
 }
 
-# Ask with a default. In --check mode nothing is asked.
-# Without a terminal (CI, a pipe) a read fails: the default is taken and a yes/no is a "no", never an abort.
-ask() { local q="$1" def="${2:-}" a=""; if $CHECK_ONLY; then printf '%s' "$def"; return; fi
-  read -r -p "  $q${def:+ [$def]}: " a </dev/tty 2>/dev/null || true; printf '%s' "${a:-$def}"; }
-yes_no() { $CHECK_ONLY && return 1; local a=""; read -r -p "  $1 [y/N] " a </dev/tty 2>/dev/null || true; [[ "$a" == y || "$a" == Y ]]; }
+# gcloud must never stop to ask something itself: its questions go to stderr, which the lookups below hide,
+# so a hidden "enable this API and retry? (y/N)" would freeze the script (measured 2026-10-08 in the estate
+# audit). The sign-in command turns questions back on for itself.
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+
+# ── Questions ───────────────────────────────────────────────────────────────────
+# Every question is written to and read from the terminal itself (/dev/tty), never stdout or stderr: answers are
+# captured with $(...), and stderr is often hidden. Until 2026-10-11 the prompt went to stderr and was thrown
+# away with 2>/dev/null, so every question was invisible and the script looked frozen; Enter then took the
+# default, which looked like a skipped step. Answers are checked and asked again when they do not fit.
+# Without a terminal (CI, a pipe) nothing is asked: the default is taken and a yes/no is "no", never a hang.
+# Written for bash 3.2 (macOS): no ${x,,}, and empty arrays are expanded with ${a[@]+"${a[@]}"}.
+HAVE_TTY=false; { : </dev/tty >/dev/tty; } 2>/dev/null && HAVE_TTY=true
+interactive() { ! $CHECK_ONLY && $HAVE_TTY; }
+to_tty() { printf "$@" >/dev/tty; }
+trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
+lower() { tr '[:upper:]' '[:lower:]' <<<"$1"; }
+csv()   { tr -d '[:space:]' <<<"$1"; }   # "a, b" -> "a,b": a list answer is used exactly as Google needs it
+
+# ask "question" [default] [check]   check: a function that prints why an answer does not fit and returns 1.
+# A check starting with "?" (e.g. "?valid_email") also accepts an empty answer.
+ask() {
+  local q="$1" def="${2:-}" check="${3:-}" a why_not optional=false
+  [[ "$check" == \?* ]] && { optional=true; check="${check#\?}"; }
+  interactive || { printf '%s' "$def"; return; }
+  while true; do
+    to_tty '  %s%s%s%s: ' "$B" "$q" "$O" "${def:+ [$def]}"
+    IFS= read -r a </dev/tty || { to_tty '\n'; printf '%s' "$def"; return; }
+    a=$(trim "${a:-$def}")
+    if [[ -z "$a" ]]; then $optional && return; to_tty '  %sAn answer is needed here.%s\n' "$Y" "$O"; continue; fi
+    if [[ -n "$check" ]] && ! why_not=$("$check" "$a"); then to_tty '  %s%s%s\n' "$Y" "$why_not" "$O"; continue; fi
+    printf '%s' "$a"; return
+  done
+}
+
+# yes_no "question" [y|n]   the second argument is what Enter means (default n). Only y, yes, n or no count.
+yes_no() {
+  local def="${2:-n}" a; interactive || return 1
+  while true; do
+    to_tty '  %s %s ' "$1" "$([[ $def == y ]] && echo '[Y/n]' || echo '[y/N]')"
+    IFS= read -r a </dev/tty || { to_tty '\n'; return 1; }
+    a=$(lower "$(trim "$a")"); [[ -z "$a" ]] && a="$def"
+    case "$a" in y|yes) return 0 ;; n|no) return 1 ;; esac
+    to_tty '  %sType y or n.%s\n' "$Y" "$O"
+  done
+}
+
+# choose "title" "id<TAB>description lines" [new-option label] [default id] [id pattern]
+# (choose_existing below re-asks until the chosen id is one Google can describe.)
+# Prints the chosen id, or "+new" when the extra option is picked. Accepts the number shown, an id from the
+# list, or an id matching the pattern (for ones the list cannot show); any other text narrows the list.
+choose() {
+  local title="$1" list="$2" new="${3:-}" def="${4:-}" pat="${5:-}" id desc a i n filter="" max=25
+  local -a ids=() descs=() shown=()
+  while IFS=$'\t' read -r id desc; do [[ -n "$id" ]] && { ids+=("$id"); descs+=("$desc"); }; done <<<"$list"
+  interactive || { printf '%s' "$def"; return; }
+  while true; do
+    shown=()
+    for ((i = 0; i < ${#ids[@]}; i++)); do
+      [[ -z "$filter" ]] || grep -qiF -- "$filter" <<<"${ids[$i]} ${descs[$i]}" && shown+=("$i")
+    done
+    to_tty '\n  %s%s%s\n' "$B" "$title" "$O"
+    n=0
+    for i in ${shown[@]+"${shown[@]}"}; do
+      (( n >= max )) && break; n=$((n + 1))
+      to_tty '    %s%2d)%s %s%s%s\n' "$P" "$n" "$O" "${ids[$i]}" "${descs[$i]:+  $D${descs[$i]}}" "$O"
+    done
+    (( ${#shown[@]} > max )) && to_tty '    %s... %d more - type part of a name to narrow the list%s\n' "$D" $(( ${#shown[@]} - max )) "$O"
+    (( ${#shown[@]} == 0 )) && to_tty '    %snothing matches "%s" - type other text, or press Enter for the full list%s\n' "$Y" "$filter" "$O"
+    [[ -n "$new" ]] && to_tty '    %s n)%s %s\n' "$P" "$O" "$new"
+    if (( ${#ids[@]} <= 9 )) && [[ -z "$filter" ]]; then to_tty '  Choose 1-%d%s' "$n" "${new:+ or n}"
+    else to_tty '  Choose a number%s, an ID, or type part of a name to search' "${new:+, n for new}"; fi
+    to_tty '%s: ' "${def:+ [$def]}"
+    IFS= read -r a </dev/tty || { to_tty '\n'; printf '%s' "$def"; return; }
+    a=$(trim "$a")
+    if [[ -z "$a" ]]; then
+      [[ -n "$filter" ]] && { filter=""; continue; }
+      [[ -n "$def" ]] && { printf '%s' "$def"; return; }
+      to_tty '  %sChoose one to continue.%s\n' "$Y" "$O"; continue
+    fi
+    if [[ -n "$new" && $(lower "$a") == n ]]; then printf '+new'; return; fi
+    if [[ "$a" =~ ^[0-9]+$ ]] && (( a >= 1 && a <= n )); then printf '%s' "${ids[${shown[$((a - 1))]}]}"; return; fi
+    for ((i = 0; i < ${#ids[@]}; i++)); do [[ "${ids[$i]}" == "$a" ]] && { printf '%s' "$a"; return; }; done
+    # Text that matches entries narrows the list; only an id that matches none is taken as typed (the caller
+    # then checks it exists).
+    if [[ -n "$pat" && "$a" =~ $pat ]] && ! grep -qiF -- "$a" <<<"$list"; then printf '%s' "$a"; return; fi
+    filter="$a"
+  done
+}
+
+# choose_existing "what" "describe command with {} for the id" choose-args...   re-asks until the id exists.
+choose_existing() {
+  local what="$1" describe="$2" pick; shift 2
+  while true; do
+    pick=$(choose "$@")
+    [[ -z "$pick" || "$pick" == +new ]] && { printf '%s' "$pick"; return; }
+    # shellcheck disable=SC2086  # the describe command is split into words on purpose
+    ${describe//\{\}/$pick} >/dev/null 2>&1 && { printf '%s' "$pick"; return; }
+    interactive || { printf '%s' "$pick"; return; }
+    to_tty '  %s%s %s was not found, or you cannot see it. Choose again.%s\n' "$Y" "$what" "$pick" "$O"
+  done
+}
+
+# Checks for ask(): print why an answer does not fit, and return 1.
+valid_project_id() { [[ "$1" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]] && return
+  echo "A project ID is 6 to 30 characters: lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen."; return 1; }
+valid_email() { [[ "$1" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] && return; echo "That is not an email address."; return 1; }
+valid_services() { local s; for s in ${1//,/ }; do [[ "$s" == allServices || "$s" =~ ^[a-z0-9-]+\.googleapis\.com$ ]] \
+    || { echo "\"$s\" is not a service name: use names like storage.googleapis.com, separated by commas."; return 1; }; done; }
+valid_log_types() { local t; for t in ${1//,/ }; do case "$t" in ADMIN_READ|DATA_WRITE|DATA_READ) ;; \
+    *) echo "\"$t\" is not a log type: use ADMIN_READ, DATA_WRITE and/or DATA_READ, separated by commas."; return 1 ;; esac; done; }
 
 # Show the command, ask, run it. Returns the command's status; "no" is not a failure.
 run() { printf '%s   $' "$D"; printf ' %q' "$@"; printf '%s\n' "$O"; if $CHECK_ONLY; then return 3; fi
@@ -100,39 +210,146 @@ scope_url() { case "$SCOPE" in
 scope_flag() { case "$SCOPE" in organization) echo "--organization=$SCOPE_ID" ;; folder) echo "--folder=$SCOPE_ID" ;; project) echo "--project=$SCOPE_ID" ;; esac; }
 has() { [[ " $1 " == *" $2 "* ]]; }
 
+# ── Launch: who you are, what is saved, and a way to change either ──────────────────
+MIRROR_URL="https://github.com/IamABS3C/abstract-cloud-templates"
+
+# A listed account is not a working sign-in: gcloud keeps showing an account as active after its sign-in
+# has expired (measured 2026-10-09). Only a token proves it.
+signed_in() { [[ -n "$(gcloud config get-value account 2>/dev/null)" ]] && gcloud auth print-access-token >/dev/null 2>&1; }
+
+sign_in() {
+  say "  Signing in. A browser opens, or gcloud prints a link to open; finish there and come back."
+  why "--update-adc also refreshes the credentials Terraform uses, for the template path."
+  # The one command allowed to ask questions: it may need a code pasted back.
+  CLOUDSDK_CORE_DISABLE_PROMPTS=0 gcloud auth login --update-adc </dev/tty >/dev/tty 2>&1 \
+    && signed_in && pass "signed in as $(gcloud config get-value account 2>/dev/null)" || bad "sign-in did not finish"
+}
+
+switch_account() {
+  local accts pick
+  accts=$(gcloud auth list --format='value(account)' 2>/dev/null | sed 's/$/\t/')
+  pick=$(choose "Which account?" "$accts" "sign in with another account" "$(gcloud config get-value account 2>/dev/null)")
+  if [[ "$pick" == +new ]]; then sign_in
+  elif [[ -n "$pick" ]]; then gcloud config set account "$pick" >/dev/null 2>&1
+    signed_in && pass "using $pick" || { warn "$pick needs to sign in again"; sign_in; }
+  fi
+  # Answers saved under another account describe what that account could see.
+  if [[ -n "$ORG_ID" ]] && ! gcloud organizations describe "$ORG_ID" >/dev/null 2>&1; then
+    warn "this account cannot see the saved organization $ORG_ID"
+    yes_no "Forget the saved answers and start over?" y && start_over
+  fi
+}
+
+start_over() {
+  local old; old="$STATE.old-$(date +%Y%m%d%H%M%S)"
+  # Moved, never deleted: it records what this script created, which --remove --state <that file> still cleans up.
+  [[ -f "$STATE" ]] && mv "$STATE" "$old" && say "  saved answers moved to $old (clean-up of what they created: --remove --state $old)"
+  defaults
+}
+
+update_and_restart() {
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    run git -C "$ROOT" pull --ff-only || { warn "not updated"; return; }
+    say "  restarting with the updated scripts"
+    exec bash "$0" ${ARGS[@]+"${ARGS[@]}"}
+  fi
+  warn "this folder is not a git copy of the repository, so it cannot update itself"
+  say "  Get a fresh copy:  git clone $MIRROR_URL && cd abstract-cloud-templates && ./tools/gcp-guided-setup/abstract-gcp-setup.sh"
+}
+
+# Google opens a repository that is not its own in a TEMPORARY Cloud Shell: "without access to the user's
+# credentials", with a home folder "deleted when the session ends" (Cloud Shell docs, open-in-cloud-shell).
+# That deletes the saved answers and the key file too. CLOUD_SHELL is only a hint that this is Cloud Shell.
+explain_cloud_shell() {
+  [[ "${CLOUD_SHELL:-}" == true ]] || return 0
+  say ""
+  say "  ${B}Cloud Shell:${O} a repository opened from a link that is not Google's runs in a temporary session,"
+  say "  without your credentials, and its home folder (saved answers, and the key file step 5 makes) is"
+  say "  deleted when the session ends. Either:"
+  say "    - sign in here, and download the key in step 5 before you close Cloud Shell, or"
+  say "    - open Cloud Shell from the Google Cloud console (the >_ button, top right) and run:"
+  say "        git clone $MIRROR_URL && cd abstract-cloud-templates && ./tools/gcp-guided-setup/abstract-gcp-setup.sh"
+}
+
+launch() {
+  local acct st=() ok=false a
+  acct=$(gcloud config get-value account 2>/dev/null)
+  signed_in && ok=true
+  if $ok; then st+=("ok|signed in as $acct")
+  elif [[ -n "$acct" ]]; then st+=("bad|$acct must sign in again")
+  else st+=("bad|not signed in to gcloud"); fi
+  [[ -n "$ORG_ID$SCOPE$LOG_PROJECT" ]] && st+=("info|saved: organization ${ORG_ID:-?}, scope ${SCOPE:-?} ${SCOPE_ID}, logging project ${LOG_PROJECT:-not chosen}")
+  python3 "$HERE/brand.py" header "Google Cloud setup" "$($CHECK_ONLY && echo 'check only - nothing will change' || echo 'guided setup')" ${st[@]+"${st[@]}"}
+  interactive || return 0
+  while true; do
+    if ! signed_in; then
+      explain_cloud_shell
+      say ""; say "  ${B}Sign in to continue:${O}  1) sign in now   2) switch to another account gcloud knows   q) quit"
+      a=$(ask "Choose" 1)
+      case "$a" in 1) sign_in ;; 2) switch_account ;; q|Q) exit 0 ;; *) warn "choose 1, 2 or q" ;; esac
+      continue
+    fi
+    say ""
+    say "  ${B}Enter${O} continue as $(gcloud config get-value account 2>/dev/null)   ${B}s${O} switch account   ${B}l${O} sign in again"
+    say "  ${B}r${O} start over (forget saved answers)   ${B}u${O} update this repository and restart   ${B}q${O} quit"
+    a=$(lower "$(ask "Choose" continue)")
+    case "$a" in
+      continue|c) return 0 ;;
+      s) switch_account ;; l) sign_in ;; r) start_over; pass "starting over" ;; u) update_and_restart ;; q) exit 0 ;;
+      *) warn "press Enter, or type s, l, r, u or q" ;;
+    esac
+  done
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 step1() {
   title 1 "Sign-in and organization"
   why "Everything below is checked for the account you are signed in as."
-  local acct; acct=$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null | head -1)
-  [[ -n "$acct" ]] && pass "signed in as $acct" || { bad "not signed in. Run: gcloud auth login"; return; }
+  local acct; acct=$(gcloud config get-value account 2>/dev/null)
+  signed_in && pass "signed in as $acct" || { bad "not signed in, or the sign-in has expired. Start the script again and choose to sign in, or run: gcloud auth login --update-adc"; return; }
 
-  local orgs; orgs=$(gcloud organizations list --format='value(ID,displayName)' 2>/dev/null)
+  local orgs; orgs=$(listing gcloud organizations list --format='value(ID,displayName)')
   if [[ -z "$orgs" ]]; then bad "no organization visible to $acct. An organization is needed for org or folder scope; a project pilot still works."
   else
-    [[ -z "$ORG_ID" && $(wc -l <<<"$orgs") -eq 1 ]] && ORG_ID=$(cut -f1 <<<"$orgs")
-    if [[ -z "$ORG_ID" ]]; then say "  Organizations you can see:"; sed 's/^/    /' <<<"$orgs"; ORG_ID=$(ask "Organization ID"); fi
-    gcloud organizations describe "$ORG_ID" >/dev/null 2>&1 && pass "organization $ORG_ID ($(gcloud organizations describe "$ORG_ID" --format='value(displayName)'))" || bad "cannot read organization $ORG_ID"
+    if [[ -z "$ORG_ID" ]]; then
+      if [[ $(grep -c . <<<"$orgs") -eq 1 ]]; then ORG_ID=$(cut -f1 <<<"$orgs")
+      else ORG_ID=$(choose_existing organization "gcloud organizations describe {}" "Which organization?" "$orgs" "" "" '^[0-9]{6,}$'); fi
+    fi
+    gcloud organizations describe "$ORG_ID" >/dev/null 2>&1 && pass "organization $ORG_ID ($(gcloud organizations describe "$ORG_ID" --format='value(displayName)'))" || bad "cannot read organization ${ORG_ID:-(none chosen)}"
   fi
 
-  if [[ -z "$SCOPE" ]] && ! $CHECK_ONLY; then
-    say ""
-    say "  ${B}Which part of Google Cloud should send logs?${O}"
-    say "    1) the whole organization   — every project, including ones created later (recommended)"
-    say "    2) one folder               — every project in it; anything outside is missed"
-    say "    3) one project              — a pilot; does not cover other or future projects"
-    case "$(ask "Choose 1, 2 or 3" 1)" in 2) SCOPE=folder ;; 3) SCOPE=project ;; *) SCOPE=organization ;; esac
+  if [[ -z "$SCOPE" ]] && interactive; then
+    SCOPE=$(choose "Which part of Google Cloud should send logs?" "$(printf '%s\t%s\n' \
+      organization "the whole organization - every project, including ones created later (recommended)" \
+      folder "one folder - every project in it; anything outside is missed" \
+      project "one project - a pilot; does not cover other or future projects")" "" organization)
   fi
   case "$SCOPE" in
     organization) SCOPE_ID="$ORG_ID" ;;
     folder) if [[ -z "$SCOPE_ID" || "$SCOPE_ID" == "$ORG_ID" ]]; then
-              gcloud resource-manager folders list --organization="$ORG_ID" --format='table(ID,displayName)' 2>/dev/null | sed 's/^/    /'
-              SCOPE_ID=$(ask "Folder ID"); fi ;;
-    project) [[ -z "$SCOPE_ID" || "$SCOPE_ID" == "$ORG_ID" ]] && SCOPE_ID=$(ask "Project ID to pilot" "$(gcloud config get-value project 2>/dev/null)") ;;
+              SCOPE_ID=$(choose_existing folder "gcloud resource-manager folders describe {}" "Which folder? (top-level folders are listed; type the ID of a nested one)" \
+                "$(listing gcloud resource-manager folders list --organization="$ORG_ID" --format='value(ID,displayName)')" "" "" '^[0-9]{6,}$')
+            fi ;;
+    project) if [[ -z "$SCOPE_ID" || "$SCOPE_ID" == "$ORG_ID" ]]; then
+               SCOPE_ID=$(choose_existing project "gcloud projects describe {}" "Which project is the pilot?" "$(project_list)" "" "$(gcloud config get-value project 2>/dev/null)" '^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
+             fi ;;
   esac
   [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] && pass "scope: $SCOPE $SCOPE_ID" || bad "no scope chosen yet"
   save
 }
+
+# A lookup that fails says so on the screen, instead of looking like an empty list. Callers capture stdout,
+# so the message goes to the terminal (stderr without one), never into the list being built.
+listing() {
+  local out err rc=0; err=$(mktemp)
+  if out=$("$@" 2>"$err"); then printf '%s' "$out"
+  else rc=1
+    if $HAVE_TTY; then to_tty '  %s!%s could not list: %s\n' "$Y" "$O" "$(grep -v '^[[:space:]]*$' "$err" | head -n1)"
+    else printf '  ! could not list: %s\n' "$(grep -v '^[[:space:]]*$' "$err" | head -n1)" >&2; fi
+  fi
+  rm -f "$err"; return $rc
+}
+project_list() { listing gcloud projects list --format='value(projectId,name)' --sort-by=projectId; }
 
 # ─────────────────────────────────────────────────────────────────────────────
 step2() {
@@ -182,19 +399,21 @@ step3() {
   title 3 "Logging project"
   why "One dedicated project holds the topic, subscription and Abstract's service account."
   why "Not a workload project: whoever owns that project could read or break the pipeline."
-  if [[ -z "$LOG_PROJECT" ]] && ! $CHECK_ONLY; then
-    say "    1) use an existing project"
-    say "    2) create a new one"
-    if [[ "$(ask "Choose 1 or 2" 1)" == 2 ]]; then
-      LOG_PROJECT=$(ask "New project ID (globally unique, e.g. <company>-security-logging)")
+  while [[ -z "$LOG_PROJECT" ]] && interactive; do
+    # Suggest the project an existing Abstract sink already sends to, as the estate audit does.
+    local sent; sent=$(gcloud logging sinks list "$(scope_flag)" --format='value(destination)' 2>/dev/null \
+      | sed -n "s|^pubsub.googleapis.com/projects/\([^/]*\)/topics/$TOPIC\$|\1|p" | head -n1)
+    [[ -n "$sent" ]] && say "  The existing sink already sends to $sent: choosing it keeps one pipeline."
+    local pick; pick=$(choose_existing project "gcloud projects describe {}" "Which project holds the pipeline?" "$(project_list)" "create a new project for Abstract (recommended when none exists)" "$sent" '^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
+    if [[ "$pick" == +new ]]; then
+      local new; new=$(ask "New project ID (globally unique, e.g. <company>-security-logging)" "" valid_project_id)
       local parent="--organization=$ORG_ID"; [[ "$SCOPE" == folder ]] && parent="--folder=$SCOPE_ID"
-      run gcloud projects create "$LOG_PROJECT" "$parent" --name="Abstract security logging"
-    else
-      gcloud projects list --format='table(projectId,name)' --limit=30 2>/dev/null | sed 's/^/    /'
-      LOG_PROJECT=$(ask "Logging project ID")
-    fi
-    save
-  fi
+      # Saved only once it exists: an ID Google refused (taken, quota, no right) must not be kept.
+      if run gcloud projects create "$new" "$parent" --name="Abstract security logging"; then LOG_PROJECT="$new"
+      else warn "project $new was not created; choose again"; fi
+    else LOG_PROJECT="$pick"; fi
+  done
+  save
   [[ -n "$LOG_PROJECT" ]] || { bad "no logging project chosen"; return; }
   local st; st=$(gcloud projects describe "$LOG_PROJECT" --format='value(lifecycleState)' 2>/dev/null)
   [[ "$st" == ACTIVE ]] && pass "project $LOG_PROJECT is active" || { bad "project $LOG_PROJECT not found or not active"; return; }
@@ -205,9 +424,10 @@ step3() {
     warn "no billing linked. That is fine for this path: Pub/Sub and Logging free tiers cover an audit feed."
     why "Link billing only if you will use Infrastructure Manager or high-volume logs."
     if ! $CHECK_ONLY && yes_no "Link a billing account now?"; then
-      gcloud billing accounts list --filter=open=true --format='table(name.basename(),displayName)' 2>/dev/null | sed 's/^/    /'
-      BILLING=$(ask "Billing account ID"); save
-      run gcloud billing projects link "$LOG_PROJECT" --billing-account="$BILLING"
+      local accounts; accounts=$(listing gcloud billing accounts list --filter=open=true --format='value(name.basename(),displayName)')
+      if [[ -z "$accounts" ]]; then warn "no open billing account is visible to you; ask your billing admin to link one to $LOG_PROJECT"
+      else BILLING=$(choose "Which billing account?" "$accounts" "" "" '^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$'); save
+        run gcloud billing projects link "$LOG_PROJECT" --billing-account="$BILLING"; fi
     fi
   fi
 
@@ -397,8 +617,8 @@ step6() {
     DATA_ACCESS=yes
     why "iam.googleapis.com records service-account impersonation and token minting; sts.googleapis.com"
     why "records Workload Identity Federation (GitHub Actions, AWS, Azure). Keep both unless you have a reason."
-    DA_SERVICES=$(ask "Services (comma-separated)" "$DA_SERVICES")
-    DA_TYPES=$(ask "Log types (ADMIN_READ, DATA_WRITE, DATA_READ)" "$DA_TYPES")
+    DA_SERVICES=$(csv "$(ask "Services (comma-separated)" "$DA_SERVICES" valid_services)")
+    DA_TYPES=$(csv "$(ask "Log types (ADMIN_READ, DATA_WRITE, DATA_READ)" "$DA_TYPES" valid_log_types)")
     save
   fi
   [[ "$DATA_ACCESS" == yes ]] || { say "  off (your choice)"; return; }
@@ -459,7 +679,7 @@ step7() {
   why "A Google Cloud Owner cannot do that last part; plan for the super admin."
   if [[ "$WORKSPACE" != yes ]] && ! $CHECK_ONLY; then
     yes_no "Set up Google Workspace logs?" || { say "  skipped"; return; }
-    WORKSPACE=yes; WS_ADMIN=$(ask "Workspace admin email Abstract should act as" "$WS_ADMIN"); save
+    WORKSPACE=yes; WS_ADMIN=$(ask "Workspace admin email Abstract should act as" "$WS_ADMIN" valid_email); save
   fi
   [[ "$WORKSPACE" == yes ]] || { say "  off (your choice)"; return; }
   [[ -n "$LOG_PROJECT" ]] || { bad "finish step 3 first"; return; }
@@ -552,7 +772,7 @@ step8() {
   $CHECK_ONLY && return
   need terraform
   while [[ -z "$ALERT_EMAIL" ]]; do
-    ALERT_EMAIL=$(ask "Email that receives the alerts")
+    ALERT_EMAIL=$(ask "Email that receives the alerts (Enter for none)" "" "?valid_email")
     [[ -n "$ALERT_EMAIL" ]] || { yes_no "Create the alerts with nobody to tell?" && break; }
   done; save
   local dir="$ROOT/templates/gcp/gcp-monitoring-pipeline-health-alerts" ch="[]"
@@ -824,6 +1044,8 @@ remove_all() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+ARGS=("$@")
+RESET=false
 # shellcheck disable=SC1090  # the state file is chosen at run time
 while [[ $# -gt 0 ]]; do case "$1" in
   --check) CHECK_ONLY=true; shift ;;
@@ -832,13 +1054,14 @@ while [[ $# -gt 0 ]]; do case "$1" in
   --step) ONLY_STEP="$2"; shift 2 ;;
   --state) STATE="$2"; shift 2; [[ -f "$STATE" ]] && source "$STATE" ;;
   --project) FIND_PROJECT="$2"; shift 2 ;;
-  -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  --reset) RESET=true; shift ;;
+  -h|--help) sed -n '2,/^# =====/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "unknown option $1 (try --help)"; exit 2 ;; esac; done
 
 need gcloud; need python3; need curl
-printf '%sAbstract Security — Google Cloud guided setup%s%s\n' "$P" "$O" "$($CHECK_ONLY && echo '  (check only: nothing will change)')"
-if $REMOVE; then remove_all
+$RESET && start_over
+if $REMOVE; then python3 "$HERE/brand.py" header "Google Cloud setup" "clean-up"; remove_all
 elif $CONFIRM; then echo "--confirm only goes with --remove"; exit 2
-elif [[ -n "$ONLY_STEP" ]]; then "step$ONLY_STEP"; else for s in 1 2 3 4 5 6 7 8 9 10; do "step$s"; done; fi
+else launch; if [[ -n "$ONLY_STEP" ]]; then "step$ONLY_STEP"; else for s in 1 2 3 4 5 6 7 8 9 10; do "step$s"; done; fi; fi
 printf '\n%s%d passed%s · %s%d to look at%s · %s%d to fix%s\n' "$G" "$PASSES" "$O" "$Y" "$WARNS" "$O" "$R" "$FAILS" "$O"
 [[ $FAILS -eq 0 ]]

@@ -6,7 +6,7 @@
 
 One walkthrough that creates and checks everything Abstract needs in Google Cloud, in the order it has to happen. Nothing changes until you say yes, and every step can be re-checked later.
 
-Each page runs one part of the guided script, called script step 1 to 10. It prints what it will do, asks before it changes anything, and checks the result. You can stop at any step and come back; your answers are kept for this Cloud Shell session. The session is temporary, so script step 10 has you download them, with the service-account key.
+Each page runs one part of the guided script, called script step 1 to 10. It prints what it will do, asks before it changes anything, and checks the result. You can stop at any step and come back; your answers are kept for this Cloud Shell session. The session is temporary, so script step 10 has you download them, with the service-account key. Google also opens a repository that is not its own without your credentials, so you start signed out: the script's first screen offers to sign you in, switch account, start over or update the scripts.
 
 Make the script runnable:
 
