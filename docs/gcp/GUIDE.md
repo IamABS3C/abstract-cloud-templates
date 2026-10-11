@@ -96,11 +96,11 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 6. **Set up (optional).** Cloud admin, in Cloud Shell.
 
-   Script step 6: turn on Data Access audit logs and route them. Both switches are needed: the audit settings make Google write the logs, and the sink filter sends them. Either alone does nothing.
+   Script step 6: turn on Data Access audit logs and route them. Both switches are needed: the audit settings make Google write the logs, and the sink filter sends them. Either alone does nothing. Keep the suggested services: iam.googleapis.com and sts.googleapis.com record identity, and the script routes their events (as iamcredentials.googleapis.com and sts.googleapis.com) for you.
 
    > **This changes:** Changes the audit settings (auditConfigs) at your organization, folder or project, so Google writes Data Access logs for the services you choose, and extends the sink's filter. Role bindings are untouched. A copy of the earlier settings is saved first, as abstract-audit-config-backup-*.json.
 
-   *Optional:* Skip unless you need to know who read or changed data in BigQuery, Cloud Storage or Cloud KMS. It adds volume and cost.
+   *Optional:* Recommended for identity: this is where service account impersonation, token minting and Workload Identity Federation (GitHub Actions, AWS, Azure) are recorded. Also records who read or changed data in BigQuery, Cloud Storage and Cloud KMS. It adds volume and cost.
 
    Template: [Turn on Data Access audit logs: organization, folder or project](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-foundation-data-access-audit-logs)
 
@@ -108,7 +108,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6
    ```
 
-   **Check:** Script step 6 shows a ✓ for switch 1 (Data Access is generated for each service you chose) and for switch 2 (the sink routes Data Access logs).
+   **Check:** Script step 6 shows a ✓ for switch 1 (Data Access is generated for each service you chose) and for switch 2 (the sink routes Data Access logs for each of them, naming iamcredentials.googleapis.com and sts.googleapis.com).
 
 7. **Set up (optional).** Cloud admin and a Workspace super admin, in Cloud Shell, then admin.google.com.
 
@@ -347,17 +347,17 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 6. **Set up (optional).** Cloud admin, in Cloud Shell.
 
-   Script step 6: turn on Data Access audit logs and route them. Both switches are needed: the audit settings make Google write the logs, and the sink filter sends them. Either alone does nothing.
+   Script step 6: turn on Data Access audit logs and route them. Both switches are needed: the audit settings make Google write the logs, and the sink filter sends them. Either alone does nothing. Keep the suggested services: iam.googleapis.com and sts.googleapis.com record identity, and the script routes their events (as iamcredentials.googleapis.com and sts.googleapis.com) for you.
 
    > **This changes:** Changes the audit settings (auditConfigs) at your organization, folder or project, so Google writes Data Access logs for the services you choose, and extends the sink's filter. Role bindings are untouched. A copy of the earlier settings is saved first, as abstract-audit-config-backup-*.json.
 
-   *Optional:* Skip unless you need to know who read or changed data in BigQuery, Cloud Storage or Cloud KMS. It adds volume and cost.
+   *Optional:* Recommended for identity: this is where service account impersonation, token minting and Workload Identity Federation (GitHub Actions, AWS, Azure) are recorded. Also records who read or changed data in BigQuery, Cloud Storage and Cloud KMS. It adds volume and cost.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6
    ```
 
-   **Check:** Script step 6 shows a ✓ for switch 1 (Data Access is generated for each service you chose) and for switch 2 (the sink routes Data Access logs).
+   **Check:** Script step 6 shows a ✓ for switch 1 (Data Access is generated for each service you chose) and for switch 2 (the sink routes Data Access logs for each of them, naming iamcredentials.googleapis.com and sts.googleapis.com).
 
 7. **Set up (optional).** Cloud admin and a Workspace super admin, in Cloud Shell, then admin.google.com.
 
@@ -536,17 +536,17 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 6. **Set up (optional).** Cloud admin, in Cloud Shell.
 
-   Script step 6: turn on Data Access audit logs and route them. Both switches are needed: the audit settings make Google write the logs, and the sink filter sends them. Either alone does nothing.
+   Script step 6: turn on Data Access audit logs and route them. Both switches are needed: the audit settings make Google write the logs, and the sink filter sends them. Either alone does nothing. Keep the suggested services: iam.googleapis.com and sts.googleapis.com record identity, and the script routes their events (as iamcredentials.googleapis.com and sts.googleapis.com) for you.
 
    > **This changes:** Changes the audit settings (auditConfigs) at your organization, folder or project, so Google writes Data Access logs for the services you choose, and extends the sink's filter. Role bindings are untouched. A copy of the earlier settings is saved first, as abstract-audit-config-backup-*.json.
 
-   *Optional:* Skip unless you need to know who read or changed data in BigQuery, Cloud Storage or Cloud KMS. It adds volume and cost.
+   *Optional:* Recommended for identity: this is where service account impersonation, token minting and Workload Identity Federation (GitHub Actions, AWS, Azure) are recorded. Also records who read or changed data in BigQuery, Cloud Storage and Cloud KMS. It adds volume and cost.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6
    ```
 
-   **Check:** Script step 6 shows a ✓ for switch 1 (Data Access is generated for each service you chose) and for switch 2 (the sink routes Data Access logs).
+   **Check:** Script step 6 shows a ✓ for switch 1 (Data Access is generated for each service you chose) and for switch 2 (the sink routes Data Access logs for each of them, naming iamcredentials.googleapis.com and sts.googleapis.com).
 
 7. **Set up (optional).** Cloud admin and a Workspace super admin, in Cloud Shell, then admin.google.com.
 

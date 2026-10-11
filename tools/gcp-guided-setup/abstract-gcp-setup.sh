@@ -36,7 +36,8 @@ ROOT="$(cd "$HERE/../.." && pwd)"   # the repository root: this script lives in 
 # Defaults; anything in the state file wins.
 TOPIC="abstract-audit-logs"; SUB="abstract-audit-logs-sub"; SINK="abstract-org-audit-sink"  # the Terraform and deploy-script default
 SA="abstract-pubsub-reader"; WS_SA="abstract-workspace-reader"; RETENTION_DAYS=7
-DA_SERVICES="bigquery.googleapis.com,storage.googleapis.com,cloudkms.googleapis.com"; DA_TYPES="ADMIN_READ,DATA_WRITE"
+# iam and sts record service-account token minting and Workload Identity Federation token exchange.
+DA_SERVICES="bigquery.googleapis.com,storage.googleapis.com,cloudkms.googleapis.com,iam.googleapis.com,sts.googleapis.com"; DA_TYPES="ADMIN_READ,DATA_WRITE"
 DATA_ACCESS=no; WORKSPACE=no; ALERTS=no
 ORG_ID=""; SCOPE=""; SCOPE_ID=""; LOG_PROJECT=""; BILLING=""; WS_ADMIN=""; ALERT_EMAIL=""
 ALERT_POLICIES=""; ALERT_CHANNELS=""; FIND_PROJECT=""   # the alerts step 8 made, recorded by name
@@ -228,10 +229,21 @@ step3() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Google turns token-minting logs on ONLY through the IAM API (iam.googleapis.com), but the events carry
+# serviceName iamcredentials.googleapis.com. So the audit settings and the sink filter need different
+# names: https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-iamcreds
+audit_services() {   # the names Google accepts in the audit settings
+  tr ',' '\n' <<<"$1" | sed 's/^iamcredentials\.googleapis\.com$/iam.googleapis.com/' | awk 'NF && !seen[$0]++' | paste -sd, -
+}
+routed_services() {  # the serviceName values the events carry, for the sink filter. Only the token
+  # events are routed for iam: its other ADMIN_READ entries (listing roles, reading policies) stay in Cloud Logging.
+  tr ',' '\n' <<<"$1" | sed 's/^iam\.googleapis\.com$/iamcredentials.googleapis.com/' | awk 'NF && !seen[$0]++' | paste -sd, -
+}
+
 filter() {
   local f='logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy"'
   if [[ "$DATA_ACCESS" == yes ]]; then
-    local c=""; IFS=',' read -ra S <<<"$DA_SERVICES"; for s in "${S[@]}"; do c+="${c:+ OR }\"$s\""; done
+    local c=""; IFS=',' read -ra S <<<"$(routed_services "$DA_SERVICES")"; for s in "${S[@]}"; do c+="${c:+ OR }\"$s\""; done
     f+=" OR (logName:\"cloudaudit.googleapis.com%2Fdata_access\" AND protoPayload.serviceName=($c))"
   fi
   printf '%s' "$f"
@@ -375,21 +387,24 @@ audit_config_json() {  # the current auditConfigs at the scope, as JSON
 step6() {
   title 6 "Data Access logs (optional)"
   why "Admin Activity logs are always on. Data Access logs (who read or changed data in BigQuery,"
-  why "Cloud Storage, KMS…) are OFF until you turn them on. It takes TWO switches:"
+  why "Cloud Storage, KMS…, and who minted service-account tokens or exchanged federated identities)"
+  why "are OFF until you turn them on. It takes TWO switches:"
   why "  switch 1 — generate them: the audit config at the ${SCOPE:-chosen scope}"
   why "  switch 2 — route them:    the sink filter (step 4 adds them when this is on)"
   why "Either alone does nothing, silently. DATA_READ is high volume; it is off by default here."
   if [[ "$DATA_ACCESS" != yes ]] && ! $CHECK_ONLY; then
     yes_no "Turn on Data Access logs?" || { say "  skipped — Admin Activity still flows"; return; }
     DATA_ACCESS=yes
+    why "iam.googleapis.com records service-account impersonation and token minting; sts.googleapis.com"
+    why "records Workload Identity Federation (GitHub Actions, AWS, Azure). Keep both unless you have a reason."
     DA_SERVICES=$(ask "Services (comma-separated)" "$DA_SERVICES")
     DA_TYPES=$(ask "Log types (ADMIN_READ, DATA_WRITE, DATA_READ)" "$DA_TYPES")
     save
   fi
   [[ "$DATA_ACCESS" == yes ]] || { say "  off (your choice)"; return; }
 
-  local cur; cur=$(audit_config_json)
-  local missing; missing=$(python3 - "$cur" "$DA_SERVICES" "$DA_TYPES" <<'PY'
+  local cur; cur=$(audit_config_json); local switched; switched=$(audit_services "$DA_SERVICES")
+  local missing; missing=$(python3 - "$cur" "$switched" "$DA_TYPES" <<'PY'
 import json, sys
 cur = json.loads(sys.argv[1]); svcs = sys.argv[2].split(","); types = sys.argv[3].split(",")
 have = {}
@@ -399,7 +414,7 @@ allsvc = have.get("allServices", set())
 print(" ".join(f"{s}:{t}" for s in svcs for t in types if t not in have.get(s, set()) and t not in allsvc))
 PY
 )
-  if [[ -z "$missing" ]]; then pass "switch 1: Data Access is generated for ${DA_SERVICES//,/, } ($DA_TYPES)"
+  if [[ -z "$missing" ]]; then pass "switch 1: Data Access is generated for ${switched//,/, } ($DA_TYPES)"
   else
     bad "switch 1 is off for: $missing"
     why "This changes ONLY the audit settings at the ${SCOPE:-chosen scope} (updateMask=auditConfigs); role bindings are untouched."
@@ -407,7 +422,7 @@ PY
     if ! $CHECK_ONLY && yes_no "Turn switch 1 on now?"; then
       local backup; backup="$PWD/abstract-audit-config-backup-$(date +%Y%m%d%H%M%S).json"
       printf '%s\n' "$cur" > "$backup"; say "  saved current settings to $backup"
-      local body; body=$(python3 - "$cur" "$DA_SERVICES" "$DA_TYPES" <<'PY'
+      local body; body=$(python3 - "$cur" "$switched" "$DA_TYPES" <<'PY'
 import json, sys
 cur = json.loads(sys.argv[1]); svcs = sys.argv[2].split(","); types = sys.argv[3].split(",")
 cfgs = {c["service"]: c for c in cur.get("auditConfigs", [])}
@@ -422,9 +437,17 @@ PY
       grep -q '"error"' <<<"$out" && bad "Google refused: $(python3 -c 'import json,sys;print(json.load(sys.stdin)["error"]["message"])' <<<"$out")" || pass "switch 1 on"
     fi
   fi
-  local sf; sf=$(scope_flag)
-  gcloud logging sinks describe "$SINK" "$sf" --format='value(filter)' 2>/dev/null | grep -q 'data_access' \
-    && pass "switch 2: the sink routes Data Access logs" || { bad "switch 2 is off: the sink filter does not include Data Access"; $CHECK_ONLY || { why "Step 4 updates the filter; running it now."; step4; }; }
+  local sf; sf=$(scope_flag); local routed; routed=$(routed_services "$DA_SERVICES")
+  local f dropped
+  if ! f=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(filter)' 2>/dev/null); then
+    bad "switch 2: sink $SINK was not found at the ${SCOPE:-chosen scope}; step 4 creates it"
+    $CHECK_ONLY || step4; return
+  fi
+  # Per service, per OR alternative: a data_access clause naming other services routes none of these.
+  local -a services; IFS=',' read -ra services <<<"$routed"
+  dropped=$(python3 "$HERE/sink_routes.py" "$f" "${services[@]}")
+  if [[ -z "$dropped" ]]; then pass "switch 2: the sink routes Data Access logs for ${routed//,/, }"
+  else bad "switch 2 is off for: $dropped"; $CHECK_ONLY || { why "Step 4 updates the filter; running it now."; step4; }; fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

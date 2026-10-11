@@ -46,7 +46,7 @@ BigQuery DATA_READ on a BigQuery-heavy estate can move total volume by one to tw
 | `folder_id` | string | no | Folder ID, when scope = folder. Find it with: gcloud resource-manager folders list --organization=&lt;org-id&gt; | `gcloud resource-manager folders list --organization=<org-id>` |
 | `project_id` | string | no | Project ID, when scope = project. |  |
 | `log_types` | array | no | ADMIN_READ \| DATA_WRITE \| DATA_READ. ADMIN_WRITE is rejected — that is Admin Activity, always on. |  |
-| `services` | array | no | Empty means allServices. With DATA_READ that is the expensive option and needs acknowledge_data_read. |  |
+| `services` | array | no | Empty means allServices. With DATA_READ that is the expensive option and needs acknowledge_data_read. Service account token minting and impersonation is recorded only through iam.googleapis.com (ADMIN_READ); listing iamcredentials.googleapis.com does nothing. Add sts.googleapis.com for Workload Identity Federation. |  |
 | `exempted_members` | array | no | Principals excluded. One chatty ETL service account can dominate DATA_READ volume while carrying no security signal — this is the most-missed cost lever. |  |
 | `acknowledge_data_read` | bool | no | Required for DATA_READ when services is empty (allServices). |  |
 | `acknowledge_authoritative_overwrite` | bool | no | Required for allServices. See tools/gcp-guided-setup/preflight.sh output first — this resource can REMOVE audit log types it does not list. |  |

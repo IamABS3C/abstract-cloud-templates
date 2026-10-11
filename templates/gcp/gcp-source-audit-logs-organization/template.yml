@@ -91,7 +91,10 @@ parameters:
   type: array
   required: false
   description: When data_access_all is in log_categories, restrict Data Access logs to these services
-    rather than the whole estate. Empty means allServices, the expensive option.
+    rather than the whole estate. Empty means allServices, the expensive option. Use the serviceName the
+    events carry - for service account token minting that is iamcredentials.googleapis.com, even though
+    gcp-foundation-data-access-audit-logs turns it on as iam.googleapis.com - and add sts.googleapis.com for
+    Workload Identity Federation.
   default:
   - bigquery.googleapis.com
   - storage.googleapis.com

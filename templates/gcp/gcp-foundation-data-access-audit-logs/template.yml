@@ -62,6 +62,8 @@ parameters:
   type: array
   required: false
   description: Empty means allServices. With DATA_READ that is the expensive option and needs acknowledge_data_read.
+    Service account token minting and impersonation is recorded only through iam.googleapis.com (ADMIN_READ);
+    listing iamcredentials.googleapis.com does nothing. Add sts.googleapis.com for Workload Identity Federation.
   default: []
 - name: exempted_members
   type: array

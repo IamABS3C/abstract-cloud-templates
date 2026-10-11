@@ -16,7 +16,9 @@
 # log_types = ["ADMIN_READ", "DATA_WRITE"]
 
 # Empty means allServices. With DATA_READ that is the expensive option and needs
-# acknowledge_data_read.
+# acknowledge_data_read. Service account token minting and impersonation is recorded only through
+# iam.googleapis.com (ADMIN_READ); listing iamcredentials.googleapis.com does nothing. Add
+# sts.googleapis.com for Workload Identity Federation.
 # services = []
 
 # Principals excluded. One chatty ETL service account can dominate DATA_READ volume while carrying

@@ -8,6 +8,7 @@
 #   Infrastructure Manager readiness.
 # =============================================================================
 set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Read-only: gcloud must never stop to ask (for example "enable the Compute API and retry?"). A prompt
 # here once left the audit waiting for hours on a project without the Compute API.
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
@@ -283,21 +284,65 @@ print(",".join(svcs))
     add_rec "Deploy templates/gcp/gcp-foundation-data-access-audit-logs to enable Data Access logging for BigQuery, Storage, KMS, and IAM."
   fi
 
-  # Granular Identity & Workload Authentication Telemetry Checks
-  if echo "$AUDIT_SERVICES" | grep -qE "(allServices|iamcredentials.googleapis.com)"; then
-    ! $JSON_OUTPUT && pass "Service Account Impersonation & Token Minting (iamcredentials.googleapis.com) is AUDITED"
+  # Identity telemetry. Google records token minting (GenerateAccessToken, SignBlob, SignJwt) and STS
+  # ExchangeToken as ADMIN_READ Data Access logs, and enables token minting ONLY through the IAM API
+  # (iam.googleapis.com) or allServices: an audit config naming iamcredentials.googleapis.com alone does
+  # nothing. https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-iamcreds
+  AUDIT_TYPES=$(echo "$ORG_AUDIT_CONFIG" | python3 -c '
+import json, sys
+for c in json.load(sys.stdin).get("auditConfigs", []):
+    print(c.get("service", ""), ",".join(l.get("logType", "") for l in c.get("auditLogConfigs", [])))
+' 2>/dev/null || true)
+  logs_admin_read() { echo "$AUDIT_TYPES" | awk -v s="$1" '($1 == s || $1 == "allServices") && $2 ~ /ADMIN_READ/ {f=1} END {exit !f}'; }
+
+  # The Abstract audit sink's filter decides which of those events ever leave Cloud Logging.
+  # SINK_STATE: found (with its filter) | none (the list was read; no Abstract sink) | unread.
+  SINK_STATE=unread; AUDIT_SINK_NAME=""; AUDIT_SINK_FILTER=""
+  if SINKS_JSON=$(gcloud logging sinks list --organization="$TARGET_ORG" --format=json 2>/dev/null); then
+    AUDIT_SINK=$(python3 -c '
+import json, sys
+for s in json.loads(sys.argv[1] or "[]"):
+    if s.get("name") == "abstract-org-audit-sink" or s.get("destination", "").endswith("/topics/abstract-audit-logs"):
+        print(s.get("name", "")); print(s.get("filter", "")); break
+' "$SINKS_JSON" 2>/dev/null) && SINK_STATE=none
+    if [[ -n "$AUDIT_SINK" ]]; then
+      SINK_STATE=found; AUDIT_SINK_NAME=$(head -n1 <<<"$AUDIT_SINK"); AUDIT_SINK_FILTER=$(tail -n +2 <<<"$AUDIT_SINK")
+    fi
+  fi
+  SINK_REPORTED=false
+  check_forwarded() {  # check_forwarded <serviceName the events carry>
+    case "$SINK_STATE" in
+      unread)
+        $SINK_REPORTED || { ! $JSON_OUTPUT && warn "Could not read the organization's sinks, so whether identity events reach Abstract is unknown."; }
+        SINK_REPORTED=true; return ;;
+      none)
+        $SINK_REPORTED || { ! $JSON_OUTPUT && warn "No Abstract audit sink was found at the organization, so identity events are not sent to Abstract."
+                            add_rec "Deploy templates/gcp/gcp-source-audit-logs-organization with data_access_all and these services in data_access_services."; }
+        SINK_REPORTED=true; return ;;
+    esac
+    # One shared reader (sink_routes.py) checks each OR alternative; an empty filter routes everything.
+    [[ -z $(python3 "$HERE/sink_routes.py" "$AUDIT_SINK_FILTER" "$1") ]] && return 0
+    ! $JSON_OUTPUT && warn "The Abstract sink $AUDIT_SINK_NAME does not forward $1 Data Access events: they stay in Cloud Logging and never reach Abstract."
+    add_rec "Add '$1' to data_access_services in templates/gcp/gcp-source-audit-logs-organization and apply, so the sink forwards those events."
+  }
+
+  if logs_admin_read iam.googleapis.com; then
+    ! $JSON_OUTPUT && pass "Service account token minting and impersonation is AUDITED (iam.googleapis.com, ADMIN_READ)"
+    check_forwarded iamcredentials.googleapis.com
   else
-    ! $JSON_OUTPUT && warn "Service Account Impersonation (iamcredentials.googleapis.com) is NOT audited in Data Access"
-    dim "Calls to GenerateAccessToken and SignBlob (e.g. gcloud --impersonate-service-account) will not produce audit events."
-    add_rec "Add 'iamcredentials.googleapis.com' to Data Access auditConfigs to monitor service account impersonation."
+    ! $JSON_OUTPUT && warn "Service account token minting and impersonation is NOT audited"
+    dim "GenerateAccessToken, SignBlob and SignJwt (e.g. gcloud --impersonate-service-account) produce no audit events."
+    dim "Google enables them only through the IAM API or allServices; listing iamcredentials.googleapis.com alone does nothing."
+    add_rec "Add 'iam.googleapis.com' with ADMIN_READ to Data Access audit configs (templates/gcp/gcp-foundation-data-access-audit-logs) to record service account token minting and impersonation."
   fi
 
-  if echo "$AUDIT_SERVICES" | grep -qE "(allServices|sts.googleapis.com)"; then
-    ! $JSON_OUTPUT && pass "Workload Identity Federation (sts.googleapis.com) token exchange is AUDITED"
+  if logs_admin_read sts.googleapis.com; then
+    ! $JSON_OUTPUT && pass "Workload Identity Federation (sts.googleapis.com) token exchange is AUDITED (ADMIN_READ)"
+    check_forwarded sts.googleapis.com
   else
-    ! $JSON_OUTPUT && warn "Workload Identity Federation (sts.googleapis.com) token exchange is NOT audited in Data Access"
+    ! $JSON_OUTPUT && warn "Workload Identity Federation (sts.googleapis.com) token exchange is NOT audited"
     dim "External identity token exchanges (GitHub Actions OIDC, AWS/Azure federation) will not produce audit events."
-    add_rec "Add 'sts.googleapis.com' to Data Access auditConfigs to monitor Workload Identity Federation exchanges."
+    add_rec "Add 'sts.googleapis.com' with ADMIN_READ to Data Access audit configs (templates/gcp/gcp-foundation-data-access-audit-logs) to record Workload Identity Federation exchanges."
   fi
 fi
 

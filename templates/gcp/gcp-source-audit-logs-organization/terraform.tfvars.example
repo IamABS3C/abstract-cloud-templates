@@ -12,7 +12,10 @@ log_project = "acme-security-logging"
 # log_categories = ["admin_activity", "system_event", "policy_denied", "gke_control_plane", "firewall", "dns_queries", "nat_flows", "load_balancer", "cloudsql"]
 
 # When data_access_all is in log_categories, restrict Data Access logs to these services rather than
-# the whole estate. Empty means allServices, the expensive option.
+# the whole estate. Empty means allServices, the expensive option. Use the serviceName the events
+# carry - for service account token minting that is iamcredentials.googleapis.com, even though
+# gcp-foundation-data-access-audit-logs turns it on as iam.googleapis.com - and add
+# sts.googleapis.com for Workload Identity Federation.
 # data_access_services = ["bigquery.googleapis.com", "storage.googleapis.com", "cloudkms.googleapis.com"]
 
 # Sink exclusion filters for known noise (health checks, chatty service accounts). Exclusions cost

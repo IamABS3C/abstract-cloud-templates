@@ -54,6 +54,27 @@ source ~/.abstract-gcp-setup.env
 ```
 <!-- /abstract:check -->
 
+## Record identity: token minting and federation
+
+Service account impersonation and token minting (`GenerateAccessToken`, `SignBlob`, `SignJwt`) and
+Workload Identity Federation token exchange are among the highest-signal identity events in Google Cloud,
+and they are Data Access logs: off until you turn them on. Two names matter, and they differ:
+
+| | Turn it on here (`services`) | The events carry (sink `data_access_services`) |
+|---|---|---|
+| Token minting | `iam.googleapis.com` | `iamcredentials.googleapis.com` |
+| Federation | `sts.googleapis.com` | `sts.googleapis.com` |
+
+- Google turns token-minting logs on **only** through `iam.googleapis.com` (or allServices). Listing
+  `iamcredentials.googleapis.com` in this template does nothing.
+- Both are `ADMIN_READ`, so the default log types already cover them. No `DATA_READ` is needed.
+- The sink in gcp-source-audit-logs-organization must route them too: add `iamcredentials.googleapis.com`
+  and `sts.googleapis.com` to its `data_access_services`, then apply it before this template.
+- `iam.googleapis.com` also records routine IAM reads. Those stay in Cloud Logging; the sink forwards only
+  the token events.
+
+The guided setup's script step 6 does all of this by default and checks both names.
+
 ## Decide the scope of DATA_READ
 
 This is the cost decision for the whole engagement.
