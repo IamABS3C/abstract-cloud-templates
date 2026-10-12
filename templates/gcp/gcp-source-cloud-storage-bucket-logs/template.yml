@@ -114,3 +114,9 @@ when_to_use: A vendor or internal system writes log files to a bucket and cannot
   needs backfilling.
 when_not_to_use: Anything that is already a Cloud Logging entry; use the organization sink instead.
 live_test: static
+references:
+- gcs-pubsub-notifications
+- pubsub-create-topic
+- pubsub-create-subscription
+- pubsub-access-control
+- tf-google_pubsub_subscription

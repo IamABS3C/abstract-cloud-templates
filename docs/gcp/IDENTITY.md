@@ -33,65 +33,76 @@ Reports API path for Workspace.
 
 ## Turn on what is off
 
-Admin Activity needs nothing. For impersonation and federation events, turn on Data Access for
-those two services only.
+Admin Activity needs nothing. Impersonation and federation events need two switches (unlike
+BigQuery, these services write no Data Access logs by default), and either alone does nothing,
+with no error:
 
-With the guided script, run step 6, and do not accept its defaults. The defaults are BigQuery,
-Cloud Storage and KMS with `ADMIN_READ,DATA_WRITE`, which log neither IAM Credentials nor STS:
+- **Switch 1, generate them.** Turn on Data Access in the audit settings for `iam.googleapis.com`
+  and `sts.googleapis.com`. Google turns token-minting logs on only through the IAM API, so listing
+  `iamcredentials.googleapis.com` in the audit settings does nothing. `ADMIN_READ` records
+  `GenerateAccessToken` (impersonation) and the STS `ExchangeToken` (federation). For the other
+  token methods Google's page disagrees with itself: Google's table of methods by permission type
+  lists `GenerateAccessToken` and `SignJwt` under `ADMIN_READ`, and `GenerateIdToken`, `SignBlob`
+  and `SignJwt` under `DATA_READ`, while its per-method entries give `SignBlob`, `SignJwt` and
+  `GenerateIdToken` one `ADMIN_READ` and one `DATA_READ` permission each. So add `DATA_READ` on
+  `iam.googleapis.com` to be sure of `SignBlob` and `GenerateIdToken`, and measure the volume.
+- **Switch 2, route them.** The sink filter must include Data Access entries whose service is
+  `iamcredentials.googleapis.com` (the name token-minting events carry) and `sts.googleapis.com`.
+
+### With the guided script
+
+Script step 6 does both by default. Its suggested services are BigQuery, Cloud Storage, Cloud KMS,
+`iam.googleapis.com` and `sts.googleapis.com`, with `ADMIN_READ,DATA_WRITE`. Keep the last two:
 
 ```bash
 ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6
 ```
 
-Answer the two prompts like this. Keep any services and log types you already have and add to
-them:
-
-| Prompt | Enter |
-|---|---|
-| `Services (comma-separated)` | `bigquery.googleapis.com,storage.googleapis.com,cloudkms.googleapis.com,iamcredentials.googleapis.com,sts.googleapis.com` (your existing list plus the last two) |
-| `Log types (ADMIN_READ, DATA_WRITE, DATA_READ)` | `ADMIN_READ,DATA_WRITE,DATA_READ` |
-
 The script lists what is missing, saves a copy of your current audit settings, and changes only the
-audit settings. Log types apply to every service you list, so `DATA_READ` is switched on for
-BigQuery, Storage and KMS too, which is the high-volume choice. If you only want identity events,
-enter only `iamcredentials.googleapis.com,sts.googleapis.com`.
+audit settings. If you only want identity events, answer the services prompt with
+`iam.googleapis.com,sts.googleapis.com`.
 
-Then check both switches. The script reports `switch 1` (audit config) and `switch 2` (sink
-filter). If the sink already routed some Data Access logs, switch 2 can pass without the new
-services in the filter, so re-run step 4 and read the filter yourself:
+It then reports `switch 1` (the audit settings) and `switch 2` (the sink filter), naming
+`iamcredentials.googleapis.com` and `sts.googleapis.com`. To read both yourself:
 
 ```bash
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4
-gcloud logging sinks describe abstract-org-audit-sink --organization=123456789012 \
-  --format="value(filter)" | grep -o "iamcredentials.googleapis.com\|sts.googleapis.com"
+gcloud logging sinks describe abstract-org-audit-sink --organization=123456789012 --format="value(filter)" | grep -o "iamcredentials.googleapis.com\|sts.googleapis.com"
 gcloud organizations get-iam-policy 123456789012 --format="yaml(auditConfigs)"
 ```
 
-Both service names must show in the filter, and the audit config must list both with `DATA_READ`.
-Use `--folder=<id>` or `--project=<id>` for those scopes.
+Both service names must show in the filter, and the audit settings must list `iam.googleapis.com`
+and `sts.googleapis.com` with `ADMIN_READ`. Use `--folder=<id>` or `--project=<id>` for those
+scopes.
 
-With Terraform, use [gcp-foundation-data-access-audit-logs](../../templates/gcp/gcp-foundation-data-access-audit-logs/README.md):
+### With Terraform
+
+Switch 1 is [gcp-foundation-data-access-audit-logs](../../templates/gcp/gcp-foundation-data-access-audit-logs/README.md).
+Set `scope` to your organization, folder or project, with its ID:
 
 ```hcl
 scope     = "organization"
 org_id    = "123456789012"
-log_types = ["ADMIN_READ", "DATA_WRITE", "DATA_READ"]
-services  = ["iamcredentials.googleapis.com", "sts.googleapis.com", "login.googleapis.com"]
+log_types = ["ADMIN_READ", "DATA_WRITE"]
+services  = ["iam.googleapis.com", "sts.googleapis.com"]
+acknowledge_authoritative_overwrite = true
 ```
 
-Naming the services keeps volume small. Leaving the list empty means every service, which is the
-expensive choice and needs an explicit acknowledgement.
+The audit settings this template writes replace what is already there for each service it names, and
+it applies ONE log_types list and ONE exempted_members list to every service it names. Before you set
+`acknowledge_authoritative_overwrite`, run `tools/gcp-guided-setup/preflight.sh`: it marks each service
+whose settings today differ from what the template sets. If `iam.googleapis.com` or `sts.googleapis.com`
+already has DATA_READ or exempted members, leave it out of `services` (or manage it only from a separate
+root with its own backend prefix, after removing it from this root's services) rather than copying those
+settings into the lists, which would apply them to every named service.
 
-There are two switches, and you need both. Turning Data Access on at the source makes Google write
-the logs. The sink filter then has to include them. In the audit-log templates, add the
-`identity_access` category to `log_categories`. It matches Data Access entries for
-`iamcredentials`, `sts`, `login` and Identity-Aware Proxy, and nothing else. A filter that names
-Data Access before it is on matches nothing and raises no error. See [Filters](FILTERS.md).
+Switch 2 is the audit-log sink template (organization, folder or project). Add `identity_access` to
+its `log_categories` and apply it. `identity_access` routes Data Access entries for
+`iamcredentials`, `sts`, `login` and Identity-Aware Proxy, and nothing else. Adding services to
+`data_access_services` alone does nothing without `data_access_all`, because the sink reads that
+list only for the `data_access_all` category. See [Filters](FILTERS.md).
 
-Audit settings are set per service and replace what is there for that service. Run
-`tools/gcp-guided-setup/preflight.sh` first to see what is already enabled. Do not edit the
-organization policy by hand to add them. If you must, change one binding at a time and keep a copy
-of the policy you started from.
+Do not edit the organization policy by hand to add audit settings. If you must, change one service
+at a time and keep a copy of the policy you started from.
 
 Cost: `iamcredentials` and `sts` are small next to BigQuery or Cloud Storage reads. Measure for seven
 days before widening.
@@ -173,10 +184,11 @@ that does not exist matches nothing and does not warn you.
 ## Check that it works
 
 Make an impersonation call on purpose and look for it on a probe subscription. This needs Data
-Access on for `iamcredentials.googleapis.com` (see above) and a sink whose filter includes it. The
-test grants you `roles/iam.serviceAccountTokenCreator` on a throwaway service account. The script
+Access on for `iam.googleapis.com` (see above) and a sink whose filter routes
+`iamcredentials.googleapis.com`. The test grants you `roles/iam.serviceAccountTokenCreator` on a throwaway service account. The script
 removes it on exit, even if you interrupt it. If the shell dies before it can, run the cleanup
-commands at the end by hand, because the grant stays until someone removes it.
+commands at the end by hand, because the grant stays until someone removes it. It checks every 30
+seconds, for up to 5 minutes.
 
 ```bash
 export LOG_PROJECT=acme-security-logging
@@ -199,15 +211,21 @@ gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs \
   --project=$LOG_PROJECT --expiration-period=1d --message-retention-duration=10m
 
 gcloud auth print-access-token --impersonate-service-account="$TEST_SA" >/dev/null
-for i in $(seq 1 10); do   # every 30 s, up to 5 minutes
+END=$(( $(date +%s) + 330 )); FOUND=
+for i in $(seq 1 10); do
   sleep 30
-  gcloud pubsub subscriptions pull "$PROBE" --project=$LOG_PROJECT --limit=50 --format=json 2>/dev/null \
-    | python3 -c '
+  while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
+    N=$(gcloud pubsub subscriptions pull "$PROBE" --project=$LOG_PROJECT --limit=1000 --auto-ack --format=json 2>/dev/null \
+      | python3 -c '
 import base64, json, sys
-for m in json.load(sys.stdin) or []:
-    d = base64.b64decode(m.get("message", {}).get("data", "")).decode("utf-8", "replace")
+m = json.load(sys.stdin) or []
+for x in m:
+    d = base64.b64decode(x.get("message", {}).get("data", "")).decode("utf-8", "replace")
     if "GenerateAccessToken" in d and sys.argv[1] in d: print("FOUND"); sys.exit(0)
-sys.exit(1)' "$TEST_SA" && break
+print(len(m))' "$TEST_SA" 2>/dev/null)
+    case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
+  done
+  [ -n "$FOUND" ] && { echo "FOUND"; break; }
 done
 ```
 

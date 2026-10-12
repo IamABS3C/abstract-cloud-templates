@@ -28,6 +28,8 @@ Or from a shell, in this folder:
 ./deploy.sh
 ```
 
+In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, step 1): the session's files, Terraform state included, are deleted when it ends, so `./deploy.sh` stops there without it.
+
 ## Prerequisites
 
 - Logging turned on at each source: per-rule firewall logging, a DNS server policy with logging, logging on the load balancer backend services, and a Cloud IDS endpoint with Packet Mirroring
@@ -100,3 +102,18 @@ DNS query and load balancer logs are high volume and are billed as Cloud Logging
 | Check | Command | Healthy when |
 |---|---|---|
 | The sink exists with the intended filter | `gcloud logging sinks describe abstract-network-threats-sink --organization=<org-id> --format="value(filter,destination)"` | The filter names the chosen categories and ids.googleapis.com%2Fthreat; the destination is the abstract-network-threats topic. |
+
+## Google documentation
+
+Google's own pages on what this template sets up:
+
+- [VPC firewall rules logging overview](https://docs.cloud.google.com/firewall/docs/vpc-firewall-rules-logging-overview)
+- [Manage VPC firewall rules logging](https://docs.cloud.google.com/firewall/docs/manage-vpc-firewall-rules-logging#enable-vpc-firewall-rule-logging)
+- [Firewall policy rules logging overview](https://docs.cloud.google.com/firewall/docs/firewall-policy-rules-logging-overview)
+- [Use logging and monitoring](https://docs.cloud.google.com/dns/docs/monitoring#using_logging)
+- [Global external Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/https/https-logging-monitoring)
+- [Regional external Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/https/https-reg-logging-monitoring)
+- [Internal Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/l7-internal/monitoring)
+- [Cloud IDS logging information](https://docs.cloud.google.com/intrusion-detection-system/docs/logging)
+- [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks)
+- [Logging query language](https://docs.cloud.google.com/logging/docs/view/logging-query-language)

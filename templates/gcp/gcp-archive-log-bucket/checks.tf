@@ -1,9 +1,9 @@
-# With remote state configured the filter is READ from 02-audit-logs-organization and cannot
+# With remote state configured the filter is READ from gcp-source-audit-logs-organization and cannot
 # diverge. Without it, this asserts the hand-copy still matches.
 check "archive_filter_matches_stream" {
   assert {
     condition     = local.archive_filter != ""
-    error_message = "No filter resolved. Set remote_state_bucket to read it from 02-audit-logs-organization, or pass `filter` explicitly."
+    error_message = "No filter resolved. Set remote_state_bucket to read it from gcp-source-audit-logs-organization, or pass `filter` explicitly."
   }
 }
 

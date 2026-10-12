@@ -17,11 +17,10 @@ green and there is simply no data.
 <!-- abstract:signin -->
 ## Sign in first
 
-Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in; `--update-adc` gives the scripts and Terraform the same sign-in:
 
 ```bash
-gcloud auth login
-gcloud auth application-default login
+gcloud auth login --update-adc
 ```
 <!-- /abstract:signin -->
 
@@ -159,15 +158,21 @@ to act rather than a post-mortem.
 <!-- abstract:cleanup -->
 ## Clean up
 
-Delete the integration in Abstract first, so it stops reading. The clean-up needs the answers file the guided setup saved; in a new Cloud Shell session, upload the copy you downloaded at the end of the setup. Then list what the clean-up would remove, and remove it:
+Delete the integration in Abstract first, so it stops reading. The clean-up needs the answers file the guided setup saved, `~/.abstract-gcp-setup.env`; in a new Cloud Shell session, upload the copy you downloaded at the end of the setup to your home folder. First list what the clean-up would remove. This deletes nothing:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove --confirm
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove
 ```
 
-It removes only what the guided setup recorded creating, and never the logging project. Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself. If you deployed with Terraform instead, run `terraform destroy` in this folder with the same `backend.tf`.
+When the list is right, remove it:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm
+```
+
+It removes only what the guided setup recorded creating, and never the logging project. Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself. If you deployed with Terraform instead, follow **To remove it later** at the end of [Terraform instead](#terraform-instead).
 <!-- /abstract:cleanup -->
 
 <!-- abstract:terraform -->
@@ -175,7 +180,7 @@ It removes only what the guided setup recorded creating, and never the logging p
 
 Run every command in this template's folder.
 
-**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it. The bucket goes in the logging project by default, and Google's Cloud Storage guides ask for billing on a project before you create a bucket in it (this repo has not tested a project without). If the logging project has no billing (the guided setup allows that), first run `export STATE_PROJECT=<project-id-with-billing>` to put the bucket in a project that has it.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-monitoring-pipeline-health-alerts"
@@ -205,6 +210,17 @@ terraform apply abstract.tfplan
 
 **To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
 <!-- /abstract:terraform -->
+
+<!-- abstract:references -->
+## Google documentation
+
+Google's own pages on what this template sets up:
+
+- [Alerting overview](https://docs.cloud.google.com/monitoring/alerts)
+- [Create metric-threshold alerting policies](https://docs.cloud.google.com/monitoring/alerts/using-alerting-ui)
+- [Monitor Pub/Sub in Cloud Monitoring](https://docs.cloud.google.com/pubsub/docs/monitoring#monitoring_the_backlog). We alert on the global oldest_unacked_message_age anyway: measured on a live subscription it reported every minute, while the regional metric wrote 8 points in 24 hours (docs/public/gcp/TROUBLESHOOTING.md, the backlog check).
+- [Google Cloud metrics: P through Z](https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z#gcp-pubsub)
+<!-- /abstract:references -->
 
 ---
 

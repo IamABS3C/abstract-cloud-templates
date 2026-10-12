@@ -32,7 +32,7 @@
      "icon": "gcp:billing",
      "x": 50,
      "y": 140,
-     "sublabel": "sits outside the\norganization hierarchy",
+     "sublabel": "a separate resource,\nwith its own sink",
      "existing": true
     },
     {

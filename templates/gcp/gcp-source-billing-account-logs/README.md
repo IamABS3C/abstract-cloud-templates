@@ -2,7 +2,7 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
-A Cloud Logging sink on the billing account, which sits outside the organization hierarchy, so no organization sink sees it. It routes the billing account's Admin Activity audit logs (IAM changes, project link and unlink, account changes) to Pub/Sub for Abstract. It is not a cost export.
+A Cloud Logging sink created on the billing account itself. An organization sink routes the organization and the folders and projects under it; a billing account is a separate resource with its own sink. It routes the billing account's Admin Activity audit logs (IAM changes, project link and unlink, account changes) to Pub/Sub for Abstract. It is not a cost export.
 
 **Cloud:** gcp · **Role:** source · **Scope:** billing-account
 
@@ -27,6 +27,8 @@ Or from a shell, in this folder:
 ```bash
 ./deploy.sh
 ```
+
+In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, step 1): the session's files, Terraform state included, are deleted when it ends, so `./deploy.sh` stops there without it.
 
 ## Prerequisites
 
@@ -91,3 +93,12 @@ Billing-account audit logs are low volume; Pub/Sub throughput is negligible.
 |---|---|---|
 | The sink exists and points at the topic | `gcloud logging sinks describe abstract-billing-audit-sink --billing-account=<billing-account-id> --format="value(name,destination,writerIdentity)"` | The destination is the abstract-billing-audit-logs topic. |
 | No sink errors | `gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project=<log-project-id>` | No sink_error entries. |
+
+## Google documentation
+
+Google's own pages on what this template sets up:
+
+- [gcloud logging sinks create](https://docs.cloud.google.com/sdk/gcloud/reference/logging/sinks/create#--billing-account)
+- [Cloud Billing audit logging](https://docs.cloud.google.com/billing/docs/audit-logging)
+- [Route logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/configure_export_v2#dest-auth)
+- [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)

@@ -1,7 +1,7 @@
 {
  "frame": {
   "title": "Turns on the Data Access audit logs",
-  "subtitle": "Off by default in Google Cloud; until they are on, a sink filter for data_access matches nothing",
+  "subtitle": "Off by default in Google Cloud except BigQuery's; until they are on, a data_access sink filter carries nothing for the other services",
   "cloud_label": "Your Google Cloud organization",
   "height": 420,
   "abstract_y": 80,

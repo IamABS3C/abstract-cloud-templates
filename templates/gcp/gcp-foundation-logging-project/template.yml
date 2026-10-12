@@ -25,7 +25,7 @@ never_touches:
 - 'An existing project''s IAM policy and resources: with create_project = false it only enables APIs'
 - Enabled APIs on destroy (disable_on_destroy = false)
 prerequisites:
-- A billing account, when creating the project; a project without one cannot publish to Pub/Sub
+- A billing account to link, when creating the project, if it will enable an API that requires billing
 parameters:
 - name: create_project
   type: bool
@@ -59,9 +59,9 @@ parameters:
 - name: billing_account_id
   type: string
   required: false
-  description: 'Required when create_project = true. A project with no billing account cannot publish
-    to Pub/Sub. Globally unique, 6-30 chars, lowercase. This is the ID you are creating, not one to look
-    up — confirm it is still free with: gcloud projects list'
+  description: 'Billing account to link when create_project = true. The log pipeline itself was measured
+    delivering on a project with billing disabled (docs/public/gcp/VERIFIED.md), but an API that requires
+    billing cannot be enabled without one. Find it with: gcloud billing accounts list'
   default: ''
   find_it: gcloud billing accounts list --filter=open=true
 - name: enable_workspace_api
@@ -92,3 +92,9 @@ when_to_use: Greenfield, or when the only candidate is a workload project.
 when_not_to_use: When a security or logging project already exists; point gcp-source-audit-logs-organization
   at it instead.
 live_test: static
+references:
+- create-project
+- link-billing
+- enable-apis
+- tf-google_project_service
+- terraform-on-gcp

@@ -16,6 +16,7 @@ Shell button.
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 6.0 |
 
 ## Modules
 
@@ -25,6 +26,7 @@ No modules.
 
 | Name | Type |
 | ---- | ---- |
+| [google-beta_google_project_service_identity.cai](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_project_service_identity) | resource |
 | [google_cloud_asset_organization_feed.abstract](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_asset_organization_feed) | resource |
 | [google_pubsub_subscription.assets](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_subscription) | resource |
 | [google_pubsub_subscription_iam_member.abstract](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_subscription_iam_member) | resource |
@@ -45,7 +47,7 @@ No modules.
 | <a name="input_log_project"></a> [log\_project](#input\_log\_project) | Project holding the topic and subscription, and the billing project for the feed. | `string` | n/a | yes |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | n/a | `string` | n/a | yes |
 | <a name="input_retention_days"></a> [retention\_days](#input\_retention\_days) | n/a | `number` | `7` | no |
-| <a name="input_subscriber_service_account_email"></a> [subscriber\_service\_account\_email](#input\_subscriber\_service\_account\_email) | Abstract's identity, from 02-audit-logs-organization's abstract\_onboarding output. | `string` | `""` | no |
+| <a name="input_subscriber_service_account_email"></a> [subscriber\_service\_account\_email](#input\_subscriber\_service\_account\_email) | Abstract's identity, from gcp-source-audit-logs-organization's abstract\_onboarding output. | `string` | `""` | no |
 | <a name="input_subscription_name"></a> [subscription\_name](#input\_subscription\_name) | n/a | `string` | `"abstract-asset-changes-sub"` | no |
 | <a name="input_topic_name"></a> [topic\_name](#input\_topic\_name) | n/a | `string` | `"abstract-asset-changes"` | no |
 

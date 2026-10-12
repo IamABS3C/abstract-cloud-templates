@@ -28,9 +28,12 @@ Or from a shell, in this folder:
 ./deploy.sh
 ```
 
+In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, step 1): the session's files, Terraform state included, are deleted when it ends, so `./deploy.sh` stops there without it.
+
 ## Prerequisites
 
 - The folder ID and a dedicated logging project
+- Deployed from an earlier version of this template? Apply it again. The default log_categories now routes only Cloud Audit Logs: firewall and DNS logs are dropped from the filter unless your terraform.tfvars lists them, and Abstract's managed GCP parser discards them anyway (collect them with gcp-source-network-threat-logs). The apply also adds the managed-by marker to the sink's description, which tells the guided setup to advise a tfvars change instead of editing the sink.
 
 ## Cost
 
@@ -43,10 +46,10 @@ Pub/Sub throughput for the folder's audit logs; Data Access logs, when enabled, 
 | `org_id` | string | no | Organization ID. Still required — the module resolves org context even for a folder sink. | `gcloud organizations list --format='value(ID)'` |
 | `folder_id` | string | yes | Folder ID the sink binds to. Find it with: gcloud resource-manager folders list --organization=ORG_ID | `gcloud resource-manager folders list --organization=<org-id>` |
 | `log_project` | string | yes | DEDICATED logging or security project holding the topic and subscription. Not a workload project — Pub/Sub publish quota is consumed here, and a workload owner should not be able to read or break the security pipeline. Find it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project = true) — do not point this at a workload project. | `gcloud projects list --format='value(projectId)'` |
-| `log_categories` | array | no | Named sources to route. See _modules/log-export/log_catalog.tf for the catalog. |  |
-| `data_access_services` | array | no | When data_access_all is in log_categories, restrict Data Access logs to these services rather than the whole estate. Empty means allServices, the expensive option. |  |
+| `log_categories` | array | no | Named sources to route, from the catalog in templates/gcp/_modules/log-export/log_catalog.tf. The default is the three Cloud Audit Logs that Abstract's managed GCP Pub/Sub parser stores (Admin Activity, System Event, Policy Denied); that parser drops every record that is not a Cloud Audit Log, so firewall, DNS, NAT, load-balancer and Cloud SQL logs routed here are pulled and discarded. Use gcp-source-network-threat-logs for those. To record service account token minting (iamcredentials.googleapis.com) and Workload Identity Federation (sts.googleapis.com), add identity_access and apply this before turning their Data Access logs on with gcp-foundation-data-access-audit-logs. It is low volume and needs no acknowledgement. |  |
+| `data_access_services` | array | no | Read only when data_access_all is in log_categories; on its own this list routes nothing, identity services included (for those, add identity_access to log_categories instead). With data_access_all, it restricts Data Access logs to these services rather than the whole estate; empty means every service, the expensive option. Use the serviceName the events carry - for service account token minting that is iamcredentials.googleapis.com, even though gcp-foundation-data-access-audit-logs turns it on as iam.googleapis.com - and sts.googleapis.com for Workload Identity Federation. |  |
 | `exclusions` | array | no | Sink exclusion filters for known noise (health checks, chatty service accounts). Exclusions cost nothing to evaluate while ingestion and Pub/Sub throughput are billed, so this is the cheapest cost lever. Max 50 per sink. |  |
-| `acknowledge_high_volume` | bool | no | Required to select any extreme-tier category (vpc_flows, gke_container_logs, data_access_all). These can dominate the bill; measure a 7-day baseline first. |  |
+| `acknowledge_high_volume` | bool | no | Required to select an extreme-tier category (vpc_flows, gke_container_logs), and for data_access_all only when data_access_services is empty. These can dominate the bill; measure a 7-day baseline first. |  |
 | `labels` | object | no | Labels applied to every resource this template creates. |  |
 | `retention_days` | int | no | Pub/Sub message retention, 1-31. THIS IS YOUR ENTIRE RECOVERY WINDOW: when the oldest unacked message reaches it, the data is deleted permanently with no error and no backfill. 7 gives you a long weekend. |  |
 | `ack_deadline_seconds` | int | no | Pub/Sub ack deadline for Abstract's subscription, in seconds. |  |
@@ -93,5 +96,38 @@ Pub/Sub throughput for the folder's audit logs; Data Access logs, when enabled, 
 | Check | Command | Healthy when |
 |---|---|---|
 | The plan shows what will be routed | `terraform plan -var folder_id=<folder-id> -var log_project=<log-project-id>` | effective_filter and volume_profile match what you intend to collect. |
-| A fresh event flows end to end | `PROBE=abstract-probe-$(date +%s) gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs --project=<log-project-id> --expiration-period=1d gcloud pubsub topics create abstract-probe-topic --project=<log-project-id> --quiet gcloud pubsub topics delete abstract-probe-topic --project=<log-project-id> --quiet sleep 75 gcloud pubsub subscriptions pull "$PROBE" --project=<log-project-id> --limit=5 --auto-ack gcloud pubsub subscriptions delete "$PROBE" --project=<log-project-id> --quiet` | Your own CreateTopic and DeleteTopic arrive on the probe subscription with principalEmail, resourceName and callerIp populated. Wait five minutes after creating the sink before testing. Never pull from Abstract's own subscription: --auto-ack there deletes events before Abstract reads them. |
+| A fresh event reaches the topic from the sink | see below | FOUND is printed within five minutes: your own CreateTopic and DeleteTopic reached the probe subscription. Wait five minutes after creating the sink before testing. Never pull from Abstract's own subscription: --auto-ack there deletes events before Abstract reads them. |
 | No sink errors | `gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project=<log-project-id>` | No sink_error entries. |
+
+**A fresh event reaches the topic from the sink:**
+
+```bash
+PROBE=abstract-probe-$(date +%s)
+gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs --project=<log-project-id> --expiration-period=1d
+gcloud pubsub topics create abstract-probe-topic --project=<log-project-id> --quiet
+gcloud pubsub topics delete abstract-probe-topic --project=<log-project-id> --quiet
+END=$(( $(date +%s) + 330 )); FOUND=
+for i in $(seq 1 20); do
+sleep 15
+while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
+N=$(gcloud pubsub subscriptions pull "$PROBE" --project=<log-project-id> --limit=1000 --auto-ack --format=json 2>/dev/null \
+| python3 -c 'import base64, json, sys; m = json.load(sys.stdin) or []; print("FOUND" if any(sys.argv[1].encode() in base64.b64decode(x.get("message", {}).get("data", "")) for x in m) else len(m))' abstract-probe-topic 2>/dev/null)
+case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
+done
+[ -n "$FOUND" ] && { echo "FOUND: the sink routes and the topic delivers"; break; }
+done
+gcloud pubsub subscriptions delete "$PROBE" --project=<log-project-id> --quiet
+```
+
+## Google documentation
+
+Google's own pages on what this template sets up, and the Terraform provider's pages for the resources it creates:
+
+- [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types)
+- [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks)
+- [Route logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/configure_export_v2#dest-auth)
+- [Logging query language](https://docs.cloud.google.com/logging/docs/view/logging-query-language)
+- [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)
+- [logging_folder_sink](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/logging_folder_sink)
+- [pubsub_topic_iam](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_topic_iam)
+- [google_service_account_key](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_service_account_key)

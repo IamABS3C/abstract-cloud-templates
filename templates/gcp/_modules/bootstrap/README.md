@@ -34,7 +34,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_additional_apis"></a> [additional\_apis](#input\_additional\_apis) | n/a | `list(string)` | `[]` | no |
-| <a name="input_billing_account_id"></a> [billing\_account\_id](#input\_billing\_account\_id) | Required when create\_project = true. A project with no billing account cannot publish to Pub/Sub. | `string` | `""` | no |
+| <a name="input_billing_account_id"></a> [billing\_account\_id](#input\_billing\_account\_id) | Billing account to link when create\_project = true. The log pipeline itself was measured delivering on a project with billing disabled (docs/public/gcp/VERIFIED.md), but an API that requires billing cannot be enabled without one, and Google's Cloud Storage guides ask for billing before a bucket, such as a Terraform state bucket, is created in the project. Find it with: gcloud billing accounts list | `string` | `""` | no |
 | <a name="input_create_project"></a> [create\_project](#input\_create\_project) | Create the logging project. FALSE (default) uses an existing one — which is the normal case. | `bool` | `false` | no |
 | <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | PREVENT (default) refuses to delete the project via Terraform. DELETE allows it. PREVENT is the right default for a project holding an audit pipeline. | `string` | `"PREVENT"` | no |
 | <a name="input_enable_scc_api"></a> [enable\_scc\_api](#input\_enable\_scc\_api) | n/a | `bool` | `false` | no |

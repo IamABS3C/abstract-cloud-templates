@@ -1,8 +1,8 @@
 # Billing account audit log export to Abstract Security.
 #
-# Billing accounts sit outside the GCP resource hierarchy (organization, folders,
-# projects do NOT capture them). An organization-wide aggregated sink will miss
-# billing account events like IAM policy changes and project billing link changes.
+# An organization sink routes the organization and the folders and projects under
+# it; a billing account is a separate resource, so its logs are collected with a
+# sink created on the billing account itself.
 #
 # Cloud Billing writes Admin Activity and Data Access audit logs, and no System
 # Event logs: https://docs.cloud.google.com/billing/docs/audit-logging
@@ -43,4 +43,6 @@ module "log_export" {
   sink_name            = var.sink_name
   service_account_id   = var.service_account_id
   custom_filter        = var.custom_filter
+
+  depends_on = [google_project_service.required]
 }

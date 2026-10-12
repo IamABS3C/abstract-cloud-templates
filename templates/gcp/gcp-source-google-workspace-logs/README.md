@@ -28,6 +28,8 @@ Or from a shell, in this folder:
 ./deploy.sh
 ```
 
+In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, step 1): the session's files, Terraform state included, are deleted when it ends, so `./deploy.sh` stops there without it.
+
 ## Prerequisites
 
 - A Workspace super admin available for the delegation step
@@ -53,7 +55,7 @@ The data application group (Gmail and Drive) dwarfs everything else; add it only
 
 - **roles/iam.serviceAccountAdmin** on The logging project: Deployer: Create the delegated service account.
 - **Grant domain-wide delegation** on admin.google.com: Workspace super admin: No API or Terraform provider exists for it; a Google Cloud Owner cannot grant it.
-- **The two admin.reports readonly scopes, through delegation only** on Google Workspace: Workspace service account: It holds nothing in GCP IAM.
+- **The admin.reports.audit.readonly scope, through delegation only** on Google Workspace: Workspace service account: It holds nothing in GCP IAM.
 
 ## Creates
 
@@ -75,3 +77,14 @@ The data application group (Gmail and Drive) dwarfs everything else; add it only
 | Check | Command | Healthy when |
 |---|---|---|
 | The Reports API answers |  | Events return; a 401 means delegation has not propagated or the admin email is not actually an admin. |
+
+## Google documentation
+
+Google's own pages on what this template sets up, and the Terraform provider's pages for the resources it creates:
+
+- [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create#creating)
+- [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation)
+- [Choose Reports API scopes](https://developers.google.com/workspace/admin/reports/auth#scopes)
+- [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
+- [google_service_account](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_service_account)
+- [google_project_service](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_service)

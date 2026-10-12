@@ -30,4 +30,6 @@ module "workspace" {
   workspace_service_account_id        = var.workspace_service_account_id
   acknowledge_high_volume             = var.acknowledge_high_volume
   include_directory_enrichment_scopes = var.include_directory_enrichment_scopes
+
+  depends_on = [google_project_service.required]
 }

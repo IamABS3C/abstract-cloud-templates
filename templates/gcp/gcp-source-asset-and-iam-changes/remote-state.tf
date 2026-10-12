@@ -1,4 +1,4 @@
-# Take Abstract's identity from 02-audit-logs-organization's STATE rather than a hand-copy.
+# Take Abstract's identity from gcp-source-audit-logs-organization's STATE rather than a hand-copy.
 #
 # Every cross-root value in this repo was previously a string a human retyped,
 # which drifts silently the moment either side changes. This reads it.
@@ -25,6 +25,6 @@ locals {
 check "subscriber_identity_resolved" {
   assert {
     condition     = local.subscriber_email != ""
-    error_message = "Could not resolve Abstract's service account.\nEither set remote_state_bucket + remote_state_prefix to read it from 02-audit-logs-organization's state, or paste subscriber_service_account_email directly."
+    error_message = "Could not resolve Abstract's service account.\nEither set remote_state_bucket + remote_state_prefix to read it from gcp-source-audit-logs-organization's state, or paste subscriber_service_account_email directly."
   }
 }

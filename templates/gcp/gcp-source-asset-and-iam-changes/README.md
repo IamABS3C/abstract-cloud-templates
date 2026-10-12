@@ -28,6 +28,8 @@ Or from a shell, in this folder:
 ./deploy.sh
 ```
 
+In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, step 1): the session's files, Terraform state included, are deleted when it ends, so `./deploy.sh` stops there without it.
+
 ## Prerequisites
 
 - Abstract's service account from gcp-source-audit-logs-organization, read from its state or pasted as subscriber_service_account_email
@@ -83,3 +85,12 @@ Asset feeds are free; Pub/Sub throughput follows the rate of IAM and resource ch
 | Check | Command | Healthy when |
 |---|---|---|
 | The service agent that must publish | `terraform output cai_service_agent` | The agent is listed and holds publisher on the topic. |
+
+## Google documentation
+
+Google's own pages on what this template sets up, and the Terraform provider's pages for the resources it creates:
+
+- [Monitor asset changes with Pub/Sub](https://docs.cloud.google.com/asset-inventory/docs/monitor-asset-changes#create_feeds)
+- [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription)
+- [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles)
+- [pubsub_subscription](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_subscription)

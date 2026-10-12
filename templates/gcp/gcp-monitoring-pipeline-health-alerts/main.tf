@@ -1,6 +1,6 @@
 # Alerting on the pipeline itself.
 #
-# Deploy this WITH 02-audit-logs-organization, not after. Every other deployment in this
+# Deploy this WITH gcp-source-audit-logs-organization, not after. Every other deployment in this
 # repo documents a silent failure; this is the one that catches them. Docs
 # without alerting create confidence the runtime has not earned.
 
@@ -28,4 +28,6 @@ module "monitoring" {
   unacked_age_threshold_seconds = var.unacked_age_threshold_seconds
   absence_threshold_seconds     = var.absence_threshold_seconds
   prefix                        = var.prefix
+
+  depends_on = [google_project_service.required]
 }

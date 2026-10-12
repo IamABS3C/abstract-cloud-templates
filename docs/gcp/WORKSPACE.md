@@ -5,7 +5,7 @@
 > A customer asking for **"GCP identity logs"** almost always means **Workspace sign-ins**.
 
 GCP console and `gcloud` logins **do** appear in Cloud Audit `admin_activity`. Workspace
-user authentication does **not**, and no sink filter at any scope will ever produce it.
+user authentication does **not**: Abstract collects it from the Workspace Reports API.
 
 Settle which they mean on the first call. Otherwise you deliver a working org-wide Pub/Sub
 pipeline and they still cannot answer *"who logged in?"* — and that reads as a product
@@ -22,8 +22,14 @@ failure rather than a scoping one.
 ## Why it is a separate pipeline
 
 Workspace audit data comes from the **Admin SDK Reports API**. It is a poll, not a stream,
-and it never touches Cloud Logging. Abstract's `default.google_workspace` integration is
-`PULL` with its own auth model.
+and Abstract's `default.google_workspace` integration reads it there, with its own auth model
+(`PULL`); it does not depend on Cloud Logging.
+
+Google can also share Workspace audit logs with Google Cloud: with [data sharing turned
+on](https://docs.cloud.google.com/logging/docs/audit/configure-gsuite-audit-logs#share_audit_logs), the shared Admin, Groups, Login, OAuth Token and SAML entries are written to
+Cloud Logging at the organization, and an organization sink with `identity_access` routes the
+`login.googleapis.com` entries among them. This repo has not verified that path end to end, so
+rely on the Reports API for Workspace. If both are on, the same sign-ins arrive twice.
 
 ```
 Workspace tenant ── Admin SDK Reports API ──> Abstract (polls, per-application checkpoints)
@@ -31,7 +37,7 @@ Workspace tenant ── Admin SDK Reports API ──> Abstract (polls, per-appli
                           │ impersonates admin_email
                    domain-wide delegation
                           ▲
-                          │ client ID + 2 scopes
+                          │ client ID + 1 scope
                    GCP service account   ← the only part Terraform can build
 ```
 
@@ -166,7 +172,7 @@ Domain-wide delegation → Add new**
 | Field | Value |
 |---|---|
 | Client ID | The **numeric** `unique_id` from the output — **not** the service-account email |
-| OAuth scopes | `https://www.googleapis.com/auth/admin.reports.audit.readonly,https://www.googleapis.com/auth/admin.reports.usage.readonly` |
+| OAuth scopes | `https://www.googleapis.com/auth/admin.reports.audit.readonly` |
 
 Comma-separated, **no spaces**. Both are read-only, and verified against Google's OAuth
 scope registry.
@@ -177,22 +183,33 @@ scope registry.
 
 ### 4. Create the key, out of band
 
+The key goes in `~/abstract-keys`, outside the repository, where only you can read it:
+
 ```bash
-gcloud iam service-accounts keys create ws-key.json \
-  --iam-account="$(terraform output -json workspace_onboarding | jq -r .service_account_email)"
+mkdir -p ~/abstract-keys && chmod 700 ~/abstract-keys
+(umask 077 && gcloud iam service-accounts keys create ~/abstract-keys/abstract-workspace-key.json --iam-account="$(terraform output -json workspace_onboarding | jq -r .service_account_email)")
 ```
 
 Deliberately **not** created by Terraform: it would put a private key in state.
 
-Upload to Abstract with `admin_email` and the application list, then `rm ws-key.json`.
+In Cloud Shell, download it to the computer you use for Abstract:
+
+```bash
+cloudshell download ~/abstract-keys/abstract-workspace-key.json
+```
+
+Upload it to Abstract with `admin_email` and the application list. Once Abstract has saved the
+integration, delete every copy: the downloaded file, and this one:
+
+```bash
+rm -f ~/abstract-keys/abstract-workspace-key.json
+```
 
 ### 5. Verify
 
-```bash
-gcloud auth activate-service-account --key-file=ws-key.json
-```
-
-Or simply watch for events in Abstract. Delegation can take a few minutes to propagate.
+Watch for Workspace events in Abstract. Delegation can take a few minutes to propagate, and Google
+publishes some Workspace reports hours late. Do not sign `gcloud` in as the reader account to test
+it: that switches your own session to the reader.
 
 ---
 
@@ -220,7 +237,7 @@ Or simply watch for events in Abstract. Delegation can take a few minutes to pro
 | Symptom | Cause | Fix |
 |---|---|---|
 | **401 unauthorized** | Delegation not propagated, or `admin_email` is not an admin | Wait a few minutes; confirm the account holds an admin role |
-| **403 forbidden** | Scopes in the Admin console do not exactly match | Re-paste both scopes, comma-separated, no spaces |
+| **403 forbidden** | Scopes in the Admin console do not exactly match | Re-paste the one scope, `https://www.googleapis.com/auth/admin.reports.audit.readonly`, exactly as the script prints it |
 | **Empty results, no error** | Right auth, wrong applications selected | Check `application_name` |
 | **Some apps return data, others nothing** | Normal — each is polled on its own checkpoint, and a quiet app is genuinely quiet | Confirm against the Admin console reports |
 | **Volume far above estimate** | `gmail` or `drive` selected | Remove them; measure with `identity` + `admin` first |

@@ -1,4 +1,4 @@
-# Enable what this deployment needs, here rather than in 01-logging-project.
+# Enable what this deployment needs, here rather than in gcp-foundation-logging-project.
 #
 # Terraform fails PARTWAY when an API is missing — after creating some resources
 # — and the error names the API rather than the fix. Enabling is idempotent and
@@ -10,6 +10,8 @@ resource "google_project_service" "required" {
   for_each = toset([
     "pubsub.googleapis.com",
     "logging.googleapis.com",
+    "iam.googleapis.com",
+    "cloudresourcemanager.googleapis.com",
   ])
   project            = var.log_project
   service            = each.value

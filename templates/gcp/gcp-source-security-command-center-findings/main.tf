@@ -30,4 +30,6 @@ module "scc" {
   subscriber_service_account_email = local.subscriber_email
   retention_days                   = var.retention_days
   labels                           = var.labels
+
+  depends_on = [google_project_service.required]
 }

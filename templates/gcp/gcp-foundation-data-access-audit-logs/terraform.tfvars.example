@@ -15,11 +15,16 @@
 # ADMIN_READ | DATA_WRITE | DATA_READ. ADMIN_WRITE is rejected — that is Admin Activity, always on.
 # log_types = ["ADMIN_READ", "DATA_WRITE"]
 
-# Empty means allServices. With DATA_READ that is the expensive option and needs
-# acknowledge_data_read. Service account token minting and impersonation is recorded only through
-# iam.googleapis.com (ADMIN_READ); listing iamcredentials.googleapis.com does nothing. Add
-# sts.googleapis.com for Workload Identity Federation.
-# services = []
+# Services to turn Data Access logs on for. Name them; the guided setup's five are the example.
+# Empty means allServices, which is authoritative for every service at this scope and, with
+# DATA_READ, the expensive option that needs acknowledge_data_read. Service account token minting
+# and impersonation is recorded only through iam.googleapis.com (ADMIN_READ);
+# iamcredentials.googleapis.com is refused at plan, because it does nothing. Add sts.googleapis.com
+# for Workload Identity Federation. The template applies ONE log_types list and ONE exempted_members
+# list to every service it names, so leave out any service that already has DATA_READ or exempted
+# members, or manage it only from a separate root with its own backend prefix, after removing it
+# from this root's services.
+# services = ["bigquery.googleapis.com", "storage.googleapis.com", "cloudkms.googleapis.com", "iam.googleapis.com", "sts.googleapis.com"]
 
 # Principals excluded. One chatty ETL service account can dominate DATA_READ volume while carrying
 # no security signal — this is the most-missed cost lever.
@@ -28,6 +33,8 @@
 # Required for DATA_READ when services is empty (allServices).
 # acknowledge_data_read = false
 
-# Required for allServices. See tools/gcp-guided-setup/preflight.sh output first — this resource can
-# REMOVE audit log types it does not list.
-# acknowledge_authoritative_overwrite = false
+# Required on every apply. The audit config is authoritative for every service it names, not only
+# allServices - applying REPLACES the log types and exempted members already set on those services,
+# and destroy REMOVES them. Read tools/gcp-guided-setup/preflight.sh output first. To offboard
+# without changing logging, run terraform state rm 'module.audit_config'.
+# acknowledge_authoritative_overwrite = true

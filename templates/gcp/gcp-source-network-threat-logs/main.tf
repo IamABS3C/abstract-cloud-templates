@@ -59,6 +59,8 @@ module "log_export" {
   custom_filter                     = var.custom_filter
   exclusions                        = var.exclusions
   labels                            = var.labels
+
+  depends_on = [google_project_service.required]
 }
 
 # Cost guard. The module itself only stops on extreme-tier categories; the defaults here

@@ -3,8 +3,8 @@ title: 'Billing account audit logs to Abstract: billing sink'
 cloud: gcp
 role: source
 scope: billing-account
-summary: A Cloud Logging sink on the billing account, which sits outside the organization hierarchy, so
-  no organization sink sees it. It routes the billing account's Admin Activity audit logs (IAM changes,
+summary: A Cloud Logging sink created on the billing account itself. An organization sink routes the organization and
+  the folders and projects under it; a billing account is a separate resource with its own sink. It routes the billing account's Admin Activity audit logs (IAM changes,
   project link and unlink, account changes) to Pub/Sub for Abstract. It is not a cost export.
 formats:
 - terraform
@@ -142,3 +142,8 @@ cost: Billing-account audit logs are low volume; Pub/Sub throughput is negligibl
 when_to_use: Detecting billing-account takeover, project link changes and billing IAM changes.
 when_not_to_use: 'Cost or usage data: that is the Cloud Billing export to BigQuery, not a log sink.'
 live_test: static
+references:
+- billing-account-sinks
+- billing-audit-logs
+- sink-writer-identity
+- pubsub-subscription-properties

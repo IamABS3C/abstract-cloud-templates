@@ -72,12 +72,15 @@ resource "google_pubsub_subscription" "notifications" {
 #    identity, and just as silent.
 # ---------------------------------------------------------------------------
 resource "google_pubsub_topic_iam_member" "gcs_publisher" {
-  for_each = data.google_storage_project_service_account.gcs
+  # Keyed on the input projects, never on the data source: the template waits for its APIs
+  # (module depends_on), which defers this module's data sources to apply on a first run, and a
+  # for_each over a deferred data source is unknown at plan.
+  for_each = toset(local.distinct_projects)
 
   project = var.log_project
   topic   = google_pubsub_topic.notifications.id
   role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${each.value.email_address}"
+  member  = "serviceAccount:${data.google_storage_project_service_account.gcs[each.key].email_address}"
 }
 
 # ---------------------------------------------------------------------------

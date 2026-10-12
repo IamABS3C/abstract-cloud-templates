@@ -4,19 +4,20 @@ variable "org_id" {
 }
 
 variable "log_project" {
-  description = "DEDICATED logging or security project holding the topic and subscription. Not a workload project — Pub/Sub publish quota is consumed here, and a workload owner should not be able to read or break the security pipeline. Find it with: gcloud projects list. If no dedicated logging project exists yet, create one first with deployments/01-logging-project (set create_project = true) — do not point this at a workload project."
+  description = "DEDICATED logging or security project holding the topic and subscription. Not a workload project — Pub/Sub publish quota is consumed here, and a workload owner should not be able to read or break the security pipeline. Find it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project = true) — do not point this at a workload project."
   type        = string
 }
 
 variable "log_categories" {
-  description = "Named sources to route. See modules/log-export/log_catalog.tf for the catalog."
+  description = "Named sources to route, from templates/gcp/_modules/log-export/log_catalog.tf. The default is the three Cloud Audit Logs Abstract's managed GCP Pub/Sub parser stores; it drops every record that is not a Cloud Audit Log, so use gcp-source-network-threat-logs for firewall, DNS and load-balancer logs. Add identity_access to route service account token minting (iamcredentials) and Workload Identity Federation (sts)."
   type        = list(string)
-  default     = ["admin_activity", "system_event", "policy_denied", "gke_control_plane", "firewall", "dns_queries"]
+  default     = ["admin_activity", "system_event", "policy_denied"]
 }
 
 variable "data_access_services" {
-  type    = list(string)
-  default = ["bigquery.googleapis.com", "storage.googleapis.com", "cloudkms.googleapis.com"]
+  description = "Read only when data_access_all is in log_categories; on its own it routes nothing (for identity events add identity_access to log_categories). Use the serviceName the events carry: iamcredentials.googleapis.com for token minting, sts.googleapis.com for federation. Empty means every service."
+  type        = list(string)
+  default     = ["bigquery.googleapis.com", "storage.googleapis.com", "cloudkms.googleapis.com", "iamcredentials.googleapis.com", "sts.googleapis.com"]
 }
 
 variable "exclusions" {
@@ -55,7 +56,7 @@ variable "ack_deadline_seconds" {
 }
 
 variable "enable_dead_letter" {
-  description = "Send repeatedly-failing messages to a dead-letter topic instead of retrying forever. Pair it with 05-health-alerts — a dead-letter topic nobody watches converts a loud failure into a silent one."
+  description = "Send repeatedly-failing messages to a dead-letter topic instead of retrying forever. Pair it with gcp-monitoring-pipeline-health-alerts — a dead-letter topic nobody watches converts a loud failure into a silent one."
   type        = bool
   default     = false
 }

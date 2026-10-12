@@ -37,6 +37,8 @@ locals {
   required_apis = distinct(concat([
     "pubsub.googleapis.com",
     "logging.googleapis.com",
+    "iam.googleapis.com",
+    "cloudresourcemanager.googleapis.com",
     ], var.enable_workspace_api ? ["admin.googleapis.com"] : [],
     var.enable_scc_api ? ["securitycenter.googleapis.com"] : [],
   var.additional_apis))
@@ -63,6 +65,17 @@ resource "google_project_service" "required" {
 
 data "google_client_openid_userinfo" "me" {}
 
+# The scope preflight.sh checks, from what this module was given. An empty org_id once rendered
+# `--org-id  --project X`, which preflight read as an org id of "--project" and refused (exit 2).
+# BEGIN preflight scope
+locals {
+  preflight_scope_flags = (var.folder_id != "" ? "--folder-id ${var.folder_id}"
+  : var.org_id != "" ? "--org-id ${var.org_id}" : "--scope project")
+  config_writer_where = (var.folder_id != "" ? "the FOLDER ${var.folder_id}"
+  : var.org_id != "" ? "the ORGANIZATION" : "the PROJECT")
+}
+# END preflight scope
+
 
 output "preflight" {
   description = "Who Terraform is running as, and what that identity still needs."
@@ -71,11 +84,11 @@ output "preflight" {
     project    = local.project_id
     apis       = local.required_apis
     still_verify_by_hand = [
-      "roles/logging.configWriter at the ORGANIZATION — the blocking prerequisite, and usually held by someone other than the project owner",
+      "roles/logging.configWriter at ${local.config_writer_where} — the blocking prerequisite, and usually held by someone other than the project owner. That is where this project sits; if your sink is at another scope, check that scope instead (preflight.sh --org-id, --folder-id or --scope project)",
       "roles/pubsub.admin on the logging project",
-      "Organization Admin — ONLY if you are also enabling Data Access audit logs",
+      "Organization Admin, Folder Admin or Project IAM Admin (or Security Admin) at that scope — ONLY if you are also enabling Data Access audit logs",
       "Workspace SUPER ADMIN in admin.google.com — ONLY for Workspace domain-wide delegation. A GCP Owner cannot do this",
     ]
-    check_command = "bash scripts/preflight.sh --org-id ${var.org_id} --project ${local.project_id}"
+    check_command = "cd \"$(git rev-parse --show-toplevel)\" && bash tools/gcp-guided-setup/preflight.sh ${local.preflight_scope_flags} --project ${local.project_id}"
   }
 }

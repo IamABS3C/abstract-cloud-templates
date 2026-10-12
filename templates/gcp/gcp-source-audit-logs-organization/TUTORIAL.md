@@ -41,11 +41,10 @@ owner.</walkthrough-info-message>
 <!-- abstract:signin -->
 ## Sign in first
 
-Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in; `--update-adc` gives the scripts and Terraform the same sign-in:
 
 ```bash
-gcloud auth login
-gcloud auth application-default login
+gcloud auth login --update-adc
 ```
 <!-- /abstract:signin -->
 
@@ -82,7 +81,7 @@ tighten.</walkthrough-info-message>
 <!-- abstract:deploy -->
 ## Deploy
 
-Run script steps 3, 4 and 5 of the guided setup: the logging project, then the pipeline, then the account Abstract reads with. Script step 9 then sends a test event end to end, and script step 10 prints the values to enter in Abstract and the commands that download the key from this temporary session. Delete every copy of the key once Abstract has it. Each step prints its commands, asks before it changes anything, and checks the result. Run it again at any time: it only adds what is missing.
+Run script steps 3, 4 and 5 of the guided setup: the logging project, then the pipeline, then the account Abstract reads with. Script step 9 then sends a test event and checks it reaches the topic from the sink, and script step 10 prints the values to enter in Abstract and the commands that download the key from this temporary session. Delete every copy of the key once Abstract has it. Each step prints its commands, asks before it changes anything, and checks the result. Run it again at any time: it only adds what is missing.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
@@ -116,8 +115,7 @@ apply, immediately generate a test event, see nothing, and start pulling the dep
 apart. Give it **five minutes**, then generate a *fresh* event — do not keep re-checking
 for the one you fired at t+0, because it was never routed and never will be.
 
-Microsoft-style "allow 90 minutes" is the conservative published figure. In practice
-steady-state delivery here was around a minute.
+In steady state, delivery here took around a minute.
 
 ### Verify, cloud side first
 
@@ -153,15 +151,26 @@ gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs \
   --project="$LOG_PROJECT" --expiration-period=1d
 gcloud pubsub topics create abstract-probe-topic --project="$LOG_PROJECT" --quiet
 gcloud pubsub topics delete abstract-probe-topic --project="$LOG_PROJECT" --quiet
-sleep 75
-gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=5 --auto-ack
+END=$(( $(date +%s) + 330 )); FOUND=
+for i in $(seq 1 20); do
+  sleep 15
+  while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
+    N=$(gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=1000 --auto-ack --format=json 2>/dev/null \
+      | python3 -c 'import base64, json, sys; m = json.load(sys.stdin) or []; print("FOUND" if any(sys.argv[1].encode() in base64.b64decode(x.get("message", {}).get("data", "")) for x in m) else len(m))' abstract-probe-topic 2>/dev/null)
+    case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
+  done
+  [ -n "$FOUND" ] && { echo "FOUND: the sink routes and the topic delivers"; break; }
+done
 gcloud pubsub subscriptions delete "$PROBE" --project="$LOG_PROJECT" --quiet
 ```
 
 Never pull from `abstract-audit-logs-sub`: Abstract reads that subscription, and `--auto-ack` there deletes events before Abstract sees them. The probe subscription above is yours and expires in a day.
 
-You should see your own `CreateTopic` and `DeleteTopic`, with `principalEmail`,
-`resourceName` and `callerIp` populated. That is the whole pipeline proven.
+`FOUND` within five minutes means your own `CreateTopic` and `DeleteTopic` reached the probe
+subscription. The loop reads up to 1,000 messages a pull, and keeps pulling within each round until
+a pull comes back empty, as script step 9 does, because the probe subscription sees the whole audit
+stream and Pub/Sub may return short batches while a backlog remains. That proves the sink routes and the topic delivers. It does not
+prove Abstract stores the events: check that in Abstract once the integration is connected.
 
 <walkthrough-info-message>GCP is the only major cloud with a **first-class health signal
 for its own main failure mode**. A sink whose writer identity lacks `pubsub.publisher`
@@ -189,22 +198,29 @@ gcloud pubsub subscriptions list --project="$LOG_PROJECT" --format='value(name.b
 Your whole organization now exports audit logs to Abstract, and **any project created
 from now on is covered the moment it exists**.
 
-**One thing this did not do:** Data Access audit logs are off by default and must be
-enabled separately in **IAM & Admin → Audit Logs** at the organization. Until then, a
-filter referencing `data_access` matches nothing — which looks exactly like a broken sink.
+**One thing this did not do:** Data Access audit logs are off by default for every service except
+BigQuery, which writes its Data Access logs by default; the others must be enabled separately in
+**IAM & Admin → Audit Logs** at the organization. Until then, a filter referencing `data_access`
+matches nothing for them — which looks exactly like a broken sink.
 
 <!-- abstract:cleanup -->
 ## Clean up
 
-Delete the integration in Abstract first, so it stops reading. The clean-up needs the answers file the guided setup saved; in a new Cloud Shell session, upload the copy you downloaded at the end of the setup. Then list what the clean-up would remove, and remove it:
+Delete the integration in Abstract first, so it stops reading. The clean-up needs the answers file the guided setup saved, `~/.abstract-gcp-setup.env`; in a new Cloud Shell session, upload the copy you downloaded at the end of the setup to your home folder. First list what the clean-up would remove. This deletes nothing:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove --confirm
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove
 ```
 
-It removes only what the guided setup recorded creating, and never the logging project. Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself. If you deployed with Terraform instead, run `terraform destroy` in this folder with the same `backend.tf`.
+When the list is right, remove it:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm
+```
+
+It removes only what the guided setup recorded creating, and never the logging project. Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself. If you deployed with Terraform instead, follow **To remove it later** at the end of [Terraform instead](#terraform-instead).
 <!-- /abstract:cleanup -->
 
 <!-- abstract:terraform -->
@@ -212,7 +228,7 @@ It removes only what the guided setup recorded creating, and never the logging p
 
 Run every command in this template's folder.
 
-**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it. The bucket goes in the logging project by default, and Google's Cloud Storage guides ask for billing on a project before you create a bucket in it (this repo has not tested a project without). If the logging project has no billing (the guided setup allows that), first run `export STATE_PROJECT=<project-id-with-billing>` to put the bucket in a project that has it.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-audit-logs-organization"
@@ -240,8 +256,32 @@ terraform plan -out=abstract.tfplan
 terraform apply abstract.tfplan
 ```
 
-**To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
+**To remove it later**, delete the integration in Abstract first. The topic, the subscription and the sink carry `prevent_destroy`, so a stray `terraform destroy`, or a rename that would replace them, cannot drop security logs Abstract has not read yet; `terraform destroy` on its own is refused. Take them out of the state, destroy the rest, then delete them with gcloud, the sink first so nothing is written to a topic that is about to go, then the subscription, then the topic. Use your own names if you changed them in terraform.tfvars:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-audit-logs-organization"
+terraform state rm 'module.log_export.google_pubsub_topic.abstract' 'module.log_export.google_pubsub_subscription.abstract' 'module.log_export.google_logging_organization_sink.abstract[0]'
+terraform destroy
+gcloud logging sinks delete abstract-org-audit-sink --organization=<org-id>
+gcloud pubsub subscriptions delete abstract-audit-logs-sub --project=<log-project-id>
+gcloud pubsub topics delete abstract-audit-logs --project=<log-project-id>
+```
 <!-- /abstract:terraform -->
+
+<!-- abstract:references -->
+## Google documentation
+
+Google's own pages on what this template sets up, and the Terraform provider's pages for the resources it creates:
+
+- [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types)
+- [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks)
+- [Route logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/configure_export_v2#dest-auth)
+- [Logging query language](https://docs.cloud.google.com/logging/docs/view/logging-query-language)
+- [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)
+- [logging_organization_sink](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/logging_organization_sink)
+- [pubsub_topic_iam](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_topic_iam)
+- [google_service_account_key](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_service_account_key)
+<!-- /abstract:references -->
 
 ---
 

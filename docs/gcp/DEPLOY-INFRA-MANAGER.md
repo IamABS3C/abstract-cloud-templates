@@ -77,14 +77,13 @@ Run [`tools/gcp-guided-setup/preflight.sh`](../../tools/gcp-guided-setup/preflig
 
 ## Step 1 — Enable the APIs
 
+`LOCATION` is a standard Google Cloud region. `gcloud infra-manager locations list` does not
+exist; check the Infra Manager locations page if you need the authoritative list.
+
 ```bash
 export LOG_PROJECT=acme-security-logging
 export ORG_ID=123456789012
-export LOCATION=us-central1        # a standard GCP region
-
-# NOTE: `gcloud infra-manager locations list` does NOT exist — an earlier draft of
-# this document said to run it. Use a standard region; check the Infra Manager
-# locations page if you need the authoritative list.
+export LOCATION=us-central1
 export SA=infra-manager-abstract
 
 gcloud config set project "$LOG_PROJECT"
@@ -109,12 +108,11 @@ export SA_EMAIL="$SA@$LOG_PROJECT.iam.gserviceaccount.com"
 
 ## Step 3 — Grant it, at the project
 
+The first grant is for Infra Manager itself; the rest cover what the module creates in this project.
+
 ```bash
-# Infra Manager itself
 gcloud projects add-iam-policy-binding "$LOG_PROJECT" \
   --member="serviceAccount:$SA_EMAIL" --role="roles/config.agent"
-
-# What the module creates in this project
 gcloud projects add-iam-policy-binding "$LOG_PROJECT" \
   --member="serviceAccount:$SA_EMAIL" --role="roles/pubsub.admin"
 gcloud projects add-iam-policy-binding "$LOG_PROJECT" \
@@ -200,13 +198,32 @@ So `log_categories`, `data_access_services`, `workspace_app_groups` and `exclusi
 
 **Commit a `terraform.tfvars` into the deployment directory instead.** Terraform
 auto-loads it from the working directory, and `--input-values` still overrides scalars on
-top. Verified working against these modules.
+top. This repo has not run the Infra Manager path end to end (it needs a project with
+billing; see [VERIFIED.md](VERIFIED.md)), so treat your first preview as the test.
 
 ```hcl
 # templates/gcp/gcp-source-audit-logs-organization/terraform.tfvars
-log_categories       = ["admin_activity", "system_event", "firewall", "dns_queries"]
-data_access_services = ["bigquery.googleapis.com", "storage.googleapis.com"]
+log_categories = ["admin_activity", "system_event", "policy_denied", "identity_access"]
 ```
+
+That is the default three Cloud Audit Logs plus `identity_access` (service account token
+minting and Workload Identity Federation). To route BigQuery, Cloud Storage and Cloud KMS Data
+Access logs as well, add `data_access_all`:
+
+```hcl
+log_categories = ["admin_activity", "system_event", "policy_denied", "identity_access", "data_access_all"]
+```
+
+Leave `data_access_services` out: its default already names `bigquery.googleapis.com`,
+`storage.googleapis.com` and `cloudkms.googleapis.com` (with the identity services), the same
+services `gcp-foundation-data-access-audit-logs` recommends turning on. If you set it, keep it matched to the
+foundation's `services`, or Google writes and bills Data Access logs this sink never routes. It is
+read only with `data_access_all`, and on its own routes nothing.
+
+Either way, turn the Data Access logs on at the source too, with
+`gcp-foundation-data-access-audit-logs`. Firewall and DNS logs do not belong in this root:
+Abstract's managed GCP parser keeps only Cloud Audit Log records, so they would be pulled and
+discarded. Deploy `gcp-source-network-threat-logs` for them.
 
 ```bash
 gcloud infra-manager deployments apply ... \
@@ -267,11 +284,31 @@ compatibility test.
 
 ## Teardown
 
+Delete the integration in Abstract first, so it stops reading the subscription.
+
+A plain `gcloud infra-manager deployments delete` asks Infra Manager to delete what the
+deployment made, which is a Terraform destroy. The topic, the subscription and the sink carry
+`prevent_destroy` in `_modules/log-export`, so that destroy is refused, and the sink keeps
+exporting. This is inferred, not run against Infra Manager: [VERIFIED.md](VERIFIED.md)
+measured the same refusal for a plain `terraform destroy`. The guard is deliberate: a stray
+destroy cannot drop security logs Abstract has not read yet.
+
+So delete the deployment with `--delete-policy=abandon`, which removes only Infra Manager's
+record and leaves every resource in place, then delete the resources with gcloud: the sink
+first, so nothing is written to a topic that is about to go, then the subscription, then the
+topic, then Abstract's service account. Use your own names if you changed them:
+
 ```bash
-gcloud infra-manager deployments delete \
-  "projects/$LOG_PROJECT/locations/$LOCATION/deployments/abstract-log-export"
+gcloud infra-manager deployments delete "projects/$LOG_PROJECT/locations/$LOCATION/deployments/abstract-log-export" --delete-policy=abandon
+gcloud logging sinks delete abstract-org-audit-sink --organization="$ORG_ID"
+gcloud pubsub subscriptions delete abstract-audit-logs-sub --project="$LOG_PROJECT"
+gcloud pubsub topics delete abstract-audit-logs --project="$LOG_PROJECT"
+gcloud iam service-accounts delete "abstract-pubsub-reader@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT"
 ```
 
-This destroys the resources it created. It **cannot** touch `gcp-foundation-data-access-audit-logs`, which is a
-separate deployment with separate state — that separation exists precisely so that
-deleting a collector can never strip an organization's Data Access audit logging.
+If you turned on `enable_dead_letter`, delete the dead-letter topic too. The topic's
+publisher grant to the sink goes with the topic.
+
+None of this touches `gcp-foundation-data-access-audit-logs`, which is a separate deployment
+with separate state. That separation exists precisely so that deleting a collector can never
+strip an organization's Data Access audit logging.

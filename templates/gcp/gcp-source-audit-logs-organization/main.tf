@@ -34,4 +34,6 @@ module "log_export" {
   service_account_id                = var.service_account_id
   custom_filter                     = var.custom_filter
   platform_log_filters              = var.platform_log_filters
+
+  depends_on = [google_project_service.required]
 }

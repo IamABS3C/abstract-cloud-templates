@@ -102,7 +102,7 @@ resource "terraform_data" "guards" {
     }
     precondition {
       condition     = var.subscriber_service_account_email != ""
-      error_message = "subscriber_service_account_email is required. Pass the identity 02-audit-logs-organization created, so ONE service account reads every feed rather than several to rotate."
+      error_message = "subscriber_service_account_email is required. Pass the identity gcp-source-audit-logs-organization created, so ONE service account reads every feed rather than several to rotate."
     }
     precondition {
       condition     = length(var.asset_types) > 0 || var.acknowledge_all_asset_types

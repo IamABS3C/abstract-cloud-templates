@@ -32,7 +32,7 @@ file in a home directory.
 ## Least privilege
 
 - `roles/pubsub.subscriber` on **one subscription**, never project-wide
-- Workspace scopes are the two `admin.reports.*.readonly` and nothing else
+- The Google Workspace scope is the one read-only `admin.reports.audit.readonly` and nothing else
 - Every binding is `_iam_member` (additive), never `_iam_policy` (authoritative), so nothing
   here can silently remove a grant somebody else made
 - `03-data-access` **refuses** `allServices` without explicit acknowledgement, because that

@@ -28,6 +28,8 @@ Or from a shell, in this folder:
 ./deploy.sh
 ```
 
+In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, step 1): the session's files, Terraform state included, are deleted when it ends, so `./deploy.sh` stops there without it.
+
 ## Prerequisites
 
 - Use the streaming deployment's effective_filter exactly, or read it through remote_state_bucket
@@ -83,3 +85,12 @@ Cloud Storage at Standard, then Nearline after archive_nearline_after_days; no r
 | Check | Command | Healthy when |
 |---|---|---|
 | Objects are landing in the bucket |  | The bucket fills; if it stays empty, check the archive writer identity's binding. |
+
+## Google documentation
+
+Google's own pages on what this template sets up, and the Terraform provider's pages for the resources it creates:
+
+- [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks)
+- [Route log entries](https://docs.cloud.google.com/logging/docs/routing/overview#destinations)
+- [Bucket Lock](https://docs.cloud.google.com/storage/docs/bucket-lock)
+- [logging_organization_sink](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/logging_organization_sink)

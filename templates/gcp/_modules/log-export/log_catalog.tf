@@ -126,8 +126,9 @@ locals {
   }
 
   # ---- Data Access, kept separate because it is the cost decision ---------
-  # Off by default in GCP and enabled in the org IAM audit config, NOT here.
-  # A clause referencing it matches nothing until that is done.
+  # Off by default in GCP for every service except BigQuery (which writes its Data
+  # Access logs by default), and enabled in the org IAM audit config, NOT here. For
+  # the other services a clause referencing it matches nothing until that is done.
   wants_data_access = contains(distinct(concat(var.log_categories, local.audit_derived_categories)), "data_access_all")
 
   # Data Access is emitted ONLY when explicitly requested. Keying this off

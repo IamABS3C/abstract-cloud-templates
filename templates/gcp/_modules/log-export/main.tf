@@ -141,9 +141,10 @@ data "google_project" "log" {
 resource "google_logging_organization_sink" "abstract" {
   lifecycle { prevent_destroy = true }
 
-  count  = var.sink_scope == "organization" ? 1 : 0
-  name   = var.sink_name
-  org_id = var.org_id
+  count       = var.sink_scope == "organization" ? 1 : 0
+  name        = var.sink_name
+  description = "managed-by: abstract-cloud-templates (terraform)"
+  org_id      = var.org_id
 
   destination      = "pubsub.googleapis.com/${google_pubsub_topic.abstract.id}"
   include_children = true
@@ -162,9 +163,10 @@ resource "google_logging_organization_sink" "abstract" {
 resource "google_logging_folder_sink" "abstract" {
   lifecycle { prevent_destroy = true }
 
-  count  = var.sink_scope == "folder" ? 1 : 0
-  name   = var.sink_name
-  folder = var.folder_id
+  count       = var.sink_scope == "folder" ? 1 : 0
+  name        = var.sink_name
+  description = "managed-by: abstract-cloud-templates (terraform)"
+  folder      = var.folder_id
 
   destination      = "pubsub.googleapis.com/${google_pubsub_topic.abstract.id}"
   include_children = true
@@ -183,9 +185,10 @@ resource "google_logging_folder_sink" "abstract" {
 resource "google_logging_project_sink" "abstract" {
   lifecycle { prevent_destroy = true }
 
-  count   = var.sink_scope == "project" ? 1 : 0
-  name    = var.sink_name
-  project = var.sink_project != "" ? var.sink_project : var.log_project
+  count       = var.sink_scope == "project" ? 1 : 0
+  name        = var.sink_name
+  description = "managed-by: abstract-cloud-templates (terraform)"
+  project     = var.sink_project != "" ? var.sink_project : var.log_project
 
   destination = "pubsub.googleapis.com/${google_pubsub_topic.abstract.id}"
   filter      = local.effective_filter
@@ -205,14 +208,15 @@ resource "google_logging_project_sink" "abstract" {
   }
 }
 
-# Billing account logs live OUTSIDE the resource hierarchy entirely -- an org
-# sink does not capture them, which surprises people who assume org scope means
-# everything. Separate resource, separate writer identity.
+# An organization sink routes the organization and the folders and projects under
+# it; a billing account is a separate resource, so its logs are collected with a
+# sink created on the billing account itself. Separate resource, separate writer identity.
 resource "google_logging_billing_account_sink" "abstract" {
   lifecycle { prevent_destroy = true }
 
   count           = var.sink_scope == "billing_account" ? 1 : 0
   name            = var.sink_name
+  description     = "managed-by: abstract-cloud-templates (terraform)"
   billing_account = var.billing_account_id
 
   destination = "pubsub.googleapis.com/${google_pubsub_topic.abstract.id}"

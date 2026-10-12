@@ -118,3 +118,8 @@ when_to_use: Alongside gcp-source-audit-logs-organization, for policy diffs and 
 when_not_to_use: As a replacement for the audit-log sink; the two answer different questions. Configure
   it as a separate source in Abstract.
 live_test: canary
+references:
+- asset-feeds
+- pubsub-create-subscription
+- pubsub-access-control
+- tf-google_pubsub_subscription

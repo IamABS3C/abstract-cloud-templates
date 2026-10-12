@@ -103,3 +103,7 @@ when_to_use: Security Command Center Premium or Enterprise is on and its finding
 when_not_to_use: As a way to collect audit logs; configure findings as a separate source in Abstract,
   because their shape differs.
 live_test: static
+references:
+- scc-notifications
+- pubsub-create-subscription
+- pubsub-access-control

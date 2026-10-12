@@ -75,6 +75,9 @@ Neither of these is in Google's documentation in a form you would find before hi
 
 ### Data Access needs TWO switches, and one alone does nothing
 
+Google documents one exception this run did not exercise: BigQuery writes its Data Access logs by
+default, so BigQuery needs only the routing switch.
+
 Enabling Data Access in the IAM audit config makes the log **generated**. It does not make
 it **routed** — the sink filter must also include it.
 

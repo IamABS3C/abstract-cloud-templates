@@ -31,14 +31,15 @@ output "effective_filter" {
 output "abstract_onboarding" {
   description = "Everything needed to configure the Abstract GCP Pub/Sub Source, in one object."
   value = {
-    integration     = "default.google_cloud_pub_sub.0_0_11"
-    project_id      = var.log_project
-    subscription_id = google_pubsub_subscription.abstract.name
-    credentials     = var.create_service_account_key ? "see terraform output -raw service_account_key (WARNING: also in state)" : "create out of band, outside the repo clone: mkdir -p ~/abstract-keys && chmod 700 ~/abstract-keys && gcloud iam service-accounts keys create ~/abstract-keys/abstract-pubsub-key.json --iam-account=${google_service_account.abstract.email} && chmod 600 ~/abstract-keys/abstract-pubsub-key.json"
+    integration           = "GCP Pub/Sub Source"
+    project_id            = var.log_project
+    subscription_id       = google_pubsub_subscription.abstract.name
+    service_account_email = google_service_account.abstract.email
+    credentials           = var.create_service_account_key ? "see terraform output -raw service_account_key (WARNING: also in state)" : "create out of band, outside the repo clone: mkdir -p ~/abstract-keys && chmod 700 ~/abstract-keys && gcloud iam service-accounts keys create ~/abstract-keys/abstract-pubsub-key.json --iam-account=${google_service_account.abstract.email} && chmod 600 ~/abstract-keys/abstract-pubsub-key.json"
     next_steps = [
       "1. Verify the sink publishes: check logging.googleapis.com/exports/error_count and look for sink_error entries.",
       "2. Confirm topic/send_request_count is rising. Zero here is the sink or the publisher binding, NOT Abstract.",
-      "3. Enable Data Access audit logs in the org IAM audit config if data_access is in audit_streams — the filter matches NOTHING until you do, and that reads exactly like a broken sink.",
+      "3. If identity_access or data_access_all is in log_categories, turn on Data Access audit logs at the source (gcp-foundation-data-access-audit-logs): for identity_access name iam.googleapis.com (token minting; not iamcredentials.googleapis.com, which Google does not record on its own) and sts.googleapis.com (federation); for data_access_all, the services in data_access_services. Except for BigQuery, whose Data Access logs Google writes by default, the filter matches NOTHING until you do, and that reads exactly like a broken sink.",
       "4. Configure the Abstract integration with project_id + subscription_id + the key file.",
       "5. Spot-check that user_name, related.user and cloud.project_id are populated. That proves value, not just plumbing."
     ]

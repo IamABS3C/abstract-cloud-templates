@@ -28,6 +28,8 @@ Or from a shell, in this folder:
 ./deploy.sh
 ```
 
+In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, step 1): the session's files, Terraform state included, are deleted when it ends, so `./deploy.sh` stops there without it.
+
 ## Prerequisites
 
 - The bucket already exists and is receiving objects
@@ -85,3 +87,13 @@ Object count rather than size: each object is a notification plus at least one C
 | The notification config exists and is scoped as intended | `gsutil notification list gs://<bucket>` | One config for the expected topic, event type OBJECT_FINALIZE, and the expected prefix. |
 | The service agents that must publish | `terraform output gcs_service_agents` | Each bucket-owning project's agent is listed and granted. |
 | A real producer file parses end to end | `gsutil cp <real-sample-file> gs://<bucket>/logs/` | Its contents appear as correctly parsed events in Abstract. |
+
+## Google documentation
+
+Google's own pages on what this template sets up, and the Terraform provider's pages for the resources it creates:
+
+- [Pub/Sub notifications for Cloud Storage](https://docs.cloud.google.com/storage/docs/pubsub-notifications)
+- [Create a topic](https://docs.cloud.google.com/pubsub/docs/create-topic)
+- [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription)
+- [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles)
+- [pubsub_subscription](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_subscription)

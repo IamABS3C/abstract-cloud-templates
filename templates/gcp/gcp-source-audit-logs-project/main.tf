@@ -1,9 +1,9 @@
 # SINGLE-PROJECT PILOT.
 #
 # THIS DOES NOT COVER FUTURE PROJECTS. A project sink has no include_children
-# because nothing exists below a project. It is the cheapest way to prove the
-# whole pipeline end to end before asking for organization-scope IAM — which is
-# usually the real blocker — and it should be REPLACED by 02-audit-logs-organization, not
+# because nothing exists below a project. It is the cheapest way to show the
+# pipeline working, from the sink to Abstract, before asking for organization-scope IAM — which is
+# usually the real blocker — and it should be REPLACED by gcp-source-audit-logs-organization, not
 # repeated per project.
 #
 # acknowledge_pilot_scope is set here deliberately: choosing this directory IS
@@ -44,4 +44,6 @@ module "log_export" {
   service_account_id                = var.service_account_id
   custom_filter                     = var.custom_filter
   platform_log_filters              = var.platform_log_filters
+
+  depends_on = [google_project_service.required]
 }

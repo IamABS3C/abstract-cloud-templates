@@ -28,6 +28,8 @@ Or from a shell, in this folder:
 ./deploy.sh
 ```
 
+In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, step 1): the session's files, Terraform state included, are deleted when it ends, so `./deploy.sh` stops there without it.
+
 ## Prerequisites
 
 - Security Command Center Premium or Enterprise
@@ -77,4 +79,19 @@ SCC notifications are free; Pub/Sub throughput is small (findings, not logs).
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The notification config and subscription exist | `gcloud scc notifications list --organization=<org-id> gcloud pubsub subscriptions describe abstract-audit-logs-sub-scc --project=<log-project-id>` | The config is listed and the subscription exists. |
+| The notification config and subscription exist | see below | The config is listed and the subscription exists. |
+
+**The notification config and subscription exist:**
+
+```bash
+gcloud scc notifications list --organization=<org-id>
+gcloud pubsub subscriptions describe abstract-audit-logs-sub-scc --project=<log-project-id>
+```
+
+## Google documentation
+
+Google's own pages on what this template sets up:
+
+- [Enable finding notifications for Pub/Sub](https://docs.cloud.google.com/security-command-center/docs/how-to-notifications)
+- [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription)
+- [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles)

@@ -6,7 +6,7 @@ variable "log_project" {
 }
 
 variable "subscriber_service_account_email" {
-  description = "Abstract's identity, from 02-audit-logs-organization's abstract_onboarding output."
+  description = "Abstract's identity, from gcp-source-audit-logs-organization's abstract_onboarding output."
   type        = string
   # Defaulted to "" deliberately so the PRECONDITION fires with an explanation,
   # rather than Terraform's generic "No value for required variable" — which is

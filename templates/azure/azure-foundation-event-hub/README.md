@@ -147,7 +147,15 @@ Throughput or processing units are a step charge for provisioned capacity. Auto-
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The namespace is active and the hubs and consumer group exist | `az eventhubs namespace show -g <resource-group> -n <namespace> --query "{status:status,sku:sku.name,tls:minimumTlsVersion}" az eventhubs eventhub list -g <resource-group> --namespace-name <namespace> --query "[].name" az eventhubs eventhub consumer-group list -g <resource-group> --namespace-name <namespace> --eventhub-name <hub> --query "[].name"` | Status Active, SKU Standard, and a consumer group named abstract alongside $Default. |
+| The namespace is active and the hubs and consumer group exist | see below | Status Active, SKU Standard, and a consumer group named abstract alongside $Default. |
 | Messages are arriving in the hub (the producer side works) |  | Namespace metrics show a continuous non-zero Incoming Messages line after a diagnostic setting points at the hub. |
 | Abstract is consuming (the consumer side works) |  | Outgoing Messages tracks Incoming Messages with no persistent gap. |
 | Events are landing in Abstract and parsing into ACS |  | A non-zero count for the Azure integration over the last 15 minutes, with cloud.project_id, cloud.origin.account_id, related.user and cloud.region populated. |
+
+**The namespace is active and the hubs and consumer group exist:**
+
+```bash
+az eventhubs namespace show -g <resource-group> -n <namespace> --query "{status:status,sku:sku.name,tls:minimumTlsVersion}"
+az eventhubs eventhub list -g <resource-group> --namespace-name <namespace> --query "[].name"
+az eventhubs eventhub consumer-group list -g <resource-group> --namespace-name <namespace> --eventhub-name <hub> --query "[].name"
+```

@@ -37,7 +37,7 @@ access to your network.
 What to know about each hop:
 
 1. **The log entry is written.** Admin Activity audit logs are always on. Data Access logs are off
-   until you turn them on. Firewall, DNS and load balancer logs are off until you enable them on
+   until you turn them on, except BigQuery's, which Google writes by default. Firewall, DNS and load balancer logs are off until you enable them on
    the resource. A sink can only route what is already being generated.
 2. **The sink matches it.** The sink sits at one scope and, with child inclusion, sees everything
    below it. The filter is evaluated at write time. There is no backfill, so a filter that was too
@@ -111,8 +111,8 @@ Workspace sign-ins do not travel the log sink path. See [Google Workspace](WORKS
 
 | Not carried | Why | Where to look |
 |---|---|---|
-| Billing account logs through an organization sink | Billing accounts sit outside the resource hierarchy | `templates/gcp/gcp-source-billing-account-logs` |
-| Data Access logs, until enabled | Off by default. A filter that names them matches nothing and raises no error | [Filters](FILTERS.md) |
+| Billing account logs through an organization sink | An organization sink routes the organization and the folders and projects under it; a billing account is a separate resource, so its logs are collected with a sink created on the billing account itself | `templates/gcp/gcp-source-billing-account-logs` |
+| Data Access logs, until enabled | Off by default for every service except BigQuery, which writes its Data Access logs by default. For the others a filter that names them matches nothing and raises no error | [Filters](FILTERS.md) |
 | Logs from another organization | A sink cannot route across organizations | One deployment per organization |
 | Anything inside a VPC Service Controls perimeter, if Abstract reads from outside it | The perimeter blocks the pull | [VPC Service Controls](VPC-SC.md) |
 

@@ -16,8 +16,9 @@ The guided setup is the one way to deploy without Terraform. Two read-only helpe
 Terraform fails at **apply** when a permission is missing — after it has already created
 some resources, leaving you with half a pipeline and a confusing error. This checks first.
 
-Every command it runs is a `get` or a `list`. It changes nothing, and it is safe to run
-against production during a customer call.
+Every call it makes only reads: a `get`, a `list`, or `testIamPermissions`, which asks Google
+whether you hold a permission and changes nothing. It is safe to run against production during a
+customer call.
 
 ```bash
 ./tools/gcp-guided-setup/preflight.sh --project acme-security-logging --org-id 123456789012
@@ -28,8 +29,8 @@ against production during a customer call.
 | Flag | Meaning |
 |---|---|
 | `--project <id>` | **Required.** The logging project holding the topic and subscription |
-| `--org-id <id>` | Organization ID. Without it the org-scope checks are skipped |
-| `--folder-id <id>` | Folder ID. Implies `--scope folder` |
+| `--org-id <id>` | Organization ID. Required at organization scope, the default: without it nothing at the organization is checked, and that is a blocker |
+| `--folder-id <id>` | Folder ID. Implies `--scope folder`, and is required there |
 | `--scope <organization\|folder\|project>` | Which scope to check. Default `organization` |
 
 Exit code is **1** if there is a blocker, **0** otherwise — so it works as a CI gate.
@@ -45,16 +46,22 @@ Whether `pubsub.googleapis.com` and `logging.googleapis.com` are on. A warning, 
 blocker — `gcp-foundation-logging-project` turns them on.
 
 ### Permission at scope
-**The check that matters.** It reads the IAM policy at the chosen scope and looks for
-`roles/logging.configWriter`, `roles/logging.admin` or `roles/owner` bound to you.
+**The check that matters.** It asks Google, with `testIamPermissions` at the chosen scope, whether
+you can create sinks there: `logging.sinks.create`, which `roles/logging.configWriter` grants.
+Google answers for every route to the permission, so a grant through a group, a custom role or a
+parent folder counts.
 
-If it comes back red:
+If Google answers no, it is a blocker:
 
 ```
-✗ you do NOT hold roles/logging.configWriter at the ORGANIZATION.
+✗ you cannot create sinks at the organization (123456789012): logging.sinks.create (roles/logging.configWriter) is not held.
 ```
 
-**Stop.** This is the blocking prerequisite for an aggregated sink, and it is rarely held
+If you can change the IAM policy at that scope, it also prints the command that grants you the
+role. If Google's answer cannot be read (no sign-in, a network error, or an error reply), it says
+"could not check" as a warning, never a blocker, and names who to ask.
+
+**Stop at a blocker.** This is the blocking prerequisite for an aggregated sink, and it is rarely held
 by whoever owns the project. It is the single most common reason a GCP onboarding produces
 a decision list instead of a working feed. Find the person who holds it before going any
 further.
@@ -69,7 +76,8 @@ Two states, and the difference matters:
 
 ```
 v  allServices: ADMIN_READ, DATA_WRITE
-v  bigquery.googleapis.com: DATA_READ  (exempt: 1)
+v  bigquery.googleapis.com: DATA_READ
+     exempted: serviceAccount:etl@acme-data.iam.gserviceaccount.com
 ```
 
 The first state is the trap this whole section exists for: filter for `data_access`
@@ -86,7 +94,7 @@ for both.
 
 ## Testing it without a GCP account
 
-Every call goes through `gcloud`, so a stub on `PATH` exercises the whole script:
+A stub `gcloud` on `PATH` exercises the script without a Google Cloud account:
 
 ```bash
 mkdir -p /tmp/stub && cat > /tmp/stub/gcloud <<'EOF'
@@ -101,7 +109,10 @@ chmod +x /tmp/stub/gcloud
 PATH=/tmp/stub:$PATH ./tools/gcp-guided-setup/preflight.sh --project p --org-id 1
 ```
 
-That is how the blocker path and both Data Access states were verified.
+With `--org-id 1` it shows the Data Access "NOT enabled" state, and "could not check" for the
+permission: that check asks Google directly, and the stub gives it no access token. It ends
+"Ready to deploy" with exit code 0, because a check that could not run never blocks. Without
+`--org-id` it shows the blocker path: "no --org-id given", and exit code 1.
 
 ---
 
@@ -111,14 +122,17 @@ Walks through every piece in order and checks each one. Nothing changes without 
 command is printed before it runs, and your answers are kept in `~/.abstract-gcp-setup.env`, so
 you can stop and resume.
 
-```bash
-./tools/gcp-guided-setup/abstract-gcp-setup.sh              # every step, asking before each change
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4     # one step
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --check      # check everything, change nothing
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove     # list what clean-up would delete
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove --confirm
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove --project <logging-project-id>  # no answers file: list by name
-```
+| Command | What it does |
+|---|---|
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh` | Every step, asking before each change |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4` | One step |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --check` | Checks everything and changes nothing |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove` | Lists what the clean-up would delete, and deletes nothing |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm` | Deletes that list. Run it only after you have read the list |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove --project <logging-project-id>` | With no answers file: lists by name what carries the setup's names, and deletes nothing |
+
+`--state` names the answers file. In a new Cloud Shell session, upload the copy you downloaded
+(More, then Upload), and if it is saved under another name, put that path after `--state`.
 
 A Cloud Shell session opened from the templates button is temporary, so download the answers
 file (`cloudshell download ~/.abstract-gcp-setup.env`) when the setup finishes. The clean-up
@@ -134,7 +148,7 @@ needs it to know what the setup made.
 | 6 | Data Access audit logs (optional): both switches |
 | 7 | Google Workspace reader (optional) |
 | 8 | Health alerts (optional) |
-| 9 | A fresh test event, end to end, on a probe subscription of its own |
+| 9 | A fresh test event from the sink to the topic, on a probe subscription of its own |
 | 10 | The exact values to enter in Abstract |
 
 **Clean-up removes only what the setup created.** It records each thing it creates, so
@@ -169,8 +183,16 @@ gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs \
   --project=P --expiration-period=1d
 gcloud pubsub topics create abstract-probe-topic --project=P --quiet
 gcloud pubsub topics delete abstract-probe-topic --project=P --quiet
-sleep 75
-gcloud pubsub subscriptions pull "$PROBE" --project=P --limit=5 --auto-ack
+END=$(( $(date +%s) + 330 )); FOUND=
+for i in $(seq 1 20); do
+  sleep 15
+  while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
+    N=$(gcloud pubsub subscriptions pull "$PROBE" --project=P --limit=1000 --auto-ack --format=json 2>/dev/null \
+      | python3 -c 'import base64, json, sys; m = json.load(sys.stdin) or []; print("FOUND" if any(sys.argv[1].encode() in base64.b64decode(x.get("message", {}).get("data", "")) for x in m) else len(m))' abstract-probe-topic 2>/dev/null)
+    case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
+  done
+  [ -n "$FOUND" ] && { echo "FOUND: the sink routes and the topic delivers"; break; }
+done
 gcloud pubsub subscriptions delete "$PROBE" --project=P --quiet
 ```
 
@@ -185,5 +207,5 @@ Always first:        audit-gcp-estate.sh, then abstract-gcp-setup.sh --step 1 an
 Deploy:              abstract-gcp-setup.sh (or the Terraform appendix, if you keep IaC)
 Detail on a project: preflight.sh
 Later, any time:     abstract-gcp-setup.sh --check
-To remove it:        abstract-gcp-setup.sh --state <answers-file> --remove, then add --confirm
+To remove it:        abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove, read the list, then add --confirm
 ```

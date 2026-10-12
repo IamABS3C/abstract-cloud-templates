@@ -199,3 +199,14 @@ when_to_use: Network detections need firewall, DNS, Cloud Armor or Cloud IDS log
 when_not_to_use: 'Expecting these logs to be searchable in Abstract today: the managed parser does not
   store them.'
 live_test: static
+references:
+- firewall-rules-logging
+- firewall-rules-logging-enable
+- firewall-policy-rules-logging
+- cloud-dns-logging
+- lb-logging-global
+- lb-logging-regional
+- lb-logging-internal
+- cloud-ids-logging
+- aggregated-sinks
+- logging-query-language

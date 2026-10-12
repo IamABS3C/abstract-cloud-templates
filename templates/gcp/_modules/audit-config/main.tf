@@ -14,8 +14,9 @@
 #      of intermittent.
 #
 # Admin Activity is ALWAYS ON and cannot be disabled — there is nothing to
-# enable and nothing here can turn it off. Only Data Access is off by default,
-# which is why this module exists at all.
+# enable and nothing here can turn it off. Data Access is off by default for every
+# service except BigQuery (which writes its Data Access logs by default), which is
+# why this module exists at all.
 #
 # Inheritance is ONE-WAY: a project can ADD Data Access logging but cannot
 # disable what an organization enabled. Scope deliberately.
@@ -103,16 +104,18 @@ resource "terraform_data" "guards" {
       condition     = var.scope != "project" || var.project_id != ""
       error_message = "scope = project requires project_id."
     }
-    # google_*_iam_audit_config is AUTHORITATIVE PER SERVICE. If the org already
-    # has an allServices config with DATA_READ — set by a platform team, a CIS
-    # benchmark, or a landing zone — applying a narrower set here REMOVES it.
+    # google_*_iam_audit_config is AUTHORITATIVE PER SERVICE, for every service it names, not only
+    # allServices. If a service already has DATA_READ, or exempted members, set by a platform team, a CIS
+    # benchmark or a landing zone, applying a narrower set here REMOVES them; and destroy removes the
+    # whole config, including what existed before. The plan shows only a create.
     #
-    # A security tool silently switching off audit logging is the worst failure
-    # this repo could have, and it would be loud in neither the plan summary nor
-    # the docs. So targeting allServices requires saying so out loud.
+    # A security tool silently switching off audit logging is the worst failure this repo could have,
+    # and it would be loud in neither the plan summary nor the docs. So applying requires saying so.
+    # (No prevent_destroy on the configs: removing one service from `services` is a destroy of that
+    # service's config, and turning logging off on purpose must stay possible without editing code.)
     precondition {
-      condition     = !contains(local.services, "allServices") || var.acknowledge_authoritative_overwrite
-      error_message = "services resolves to `allServices`, and google_*_iam_audit_config is AUTHORITATIVE for the service it names.\nIf this scope ALREADY has an allServices audit config with log types you are not listing, THIS APPLY REMOVES THEM.\n\nRun `scripts/preflight.sh` first and read the 'Data Access audit logging' section — it prints what is enabled today.\nThen either list every log type you intend to keep, target named services instead, or set acknowledge_authoritative_overwrite = true."
+      condition     = var.acknowledge_authoritative_overwrite
+      error_message = "google_*_iam_audit_config is AUTHORITATIVE for each service it names, and this module applies ONE log_types list and ONE exempted_members list to every service it names:\n  ${join(", ", local.services)}\nTHIS APPLY REPLACES every Data Access log type and exempted member already set on those services at this scope with those two lists, and `terraform destroy` REMOVES them, including settings that predate this template.\n\nRun tools/gcp-guided-setup/preflight.sh first and read its 'Data Access audit logging' section: it marks each service whose settings today differ from what this template sets. Name only services whose existing settings you accept being replaced by these lists. Leave out of services any service that already has DATA_READ or exempted members, or manage it only from a separate root with its own backend prefix, after removing it from this root's services: copying them into log_types or exempted_members applies them to every named service. Then set acknowledge_authoritative_overwrite = true.\nTo stop managing these settings without changing them (offboarding), run: terraform state rm 'module.audit_config'. Use terraform destroy only to turn this logging off on purpose."
     }
     precondition {
       condition     = !contains(local.log_types, "ADMIN_WRITE")

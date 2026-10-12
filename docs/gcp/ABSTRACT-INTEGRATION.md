@@ -26,8 +26,9 @@ terraform output -json abstract_onboarding
 | **Subscription ID** | the **short name** only | Not `projects/…/subscriptions/…`. Pasting the full path produces an auth-shaped error, not a validation one |
 | **Credentials** | service-account JSON key, **under 1 MB** | Must be the key for the SA that holds `roles/pubsub.subscriber` **on the subscription** |
 
+To print the short name:
+
 ```bash
-# The short name, explicitly
 gcloud pubsub subscriptions list --project="$LOG_PROJECT" \
   --format='value(name.basename())'
 ```
@@ -37,11 +38,25 @@ gcloud pubsub subscriptions list --project="$LOG_PROJECT" \
 Deliberately **not** created by Terraform — it would put a private key in state, and on the
 Cloud Shell path that state is a file in a home directory.
 
+The key goes in `~/abstract-keys`, outside the repository, where only you can read it:
+
 ```bash
 SA=$(terraform output -json abstract_onboarding | jq -r .service_account_email)
-gcloud iam service-accounts keys create abstract-key.json --iam-account="$SA"
-# upload to Abstract, then:
-rm abstract-key.json
+mkdir -p ~/abstract-keys && chmod 700 ~/abstract-keys
+(umask 077 && gcloud iam service-accounts keys create ~/abstract-keys/abstract-pubsub-key.json --iam-account="$SA")
+```
+
+In Cloud Shell, download it to the computer you use for Abstract:
+
+```bash
+cloudshell download ~/abstract-keys/abstract-pubsub-key.json
+```
+
+Upload it to Abstract. Once Abstract has saved the integration, delete every copy: the downloaded
+file, and this one:
+
+```bash
+rm -f ~/abstract-keys/abstract-pubsub-key.json
 ```
 
 > **Abstract PULLS.** It needs `roles/pubsub.subscriber` on the **subscription** — not
@@ -56,8 +71,16 @@ gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs \
   --project="$LOG_PROJECT" --expiration-period=1d
 gcloud pubsub topics create abstract-probe-topic --project="$LOG_PROJECT" --quiet
 gcloud pubsub topics delete abstract-probe-topic --project="$LOG_PROJECT" --quiet
-sleep 75
-gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=5 --auto-ack
+END=$(( $(date +%s) + 330 )); FOUND=
+for i in $(seq 1 20); do
+  sleep 15
+  while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
+    N=$(gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=1000 --auto-ack --format=json 2>/dev/null \
+      | python3 -c 'import base64, json, sys; m = json.load(sys.stdin) or []; print("FOUND" if any(sys.argv[1].encode() in base64.b64decode(x.get("message", {}).get("data", "")) for x in m) else len(m))' abstract-probe-topic 2>/dev/null)
+    case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
+  done
+  [ -n "$FOUND" ] && { echo "FOUND: the sink routes and the topic delivers"; break; }
+done
 gcloud pubsub subscriptions delete "$PROBE" --project="$LOG_PROJECT" --quiet
 ```
 

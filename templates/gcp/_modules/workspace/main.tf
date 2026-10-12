@@ -37,10 +37,10 @@ terraform {
 }
 
 locals {
-  # Verified against Google's OAuth 2.0 scope registry 2026-08-26.
+  # Verified against Google's OAuth 2.0 scope registry 2026-08-26. Only the audit scope: it is the one
+  # scope Abstract's Google Workspace integration requests. Delegating more grants access nothing uses.
   workspace_base_scopes = [
     "https://www.googleapis.com/auth/admin.reports.audit.readonly",
-    "https://www.googleapis.com/auth/admin.reports.usage.readonly",
   ]
   # Printed only when include_directory_enrichment_scopes = true. Abstract's
   # Google Workspace integration does not request these today.

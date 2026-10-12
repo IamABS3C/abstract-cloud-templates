@@ -3,7 +3,7 @@ variable "org_id" {
   type        = string
 }
 variable "log_project" {
-  description = "DEDICATED logging or security project holding the archive sink. Find it with: gcloud projects list. If no dedicated logging project exists yet, create one first with deployments/01-logging-project (set create_project = true) — do not point this at a workload project."
+  description = "DEDICATED logging or security project holding the archive sink. Find it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project = true) — do not point this at a workload project."
   type        = string
 }
 
@@ -63,19 +63,19 @@ variable "archive_cmek_key" {
 }
 
 variable "stream_filter" {
-  description = "Optional. Paste `terraform output -raw effective_filter` from 02-audit-logs-organization here and a check block asserts the archive matches the stream. Empty skips the check — but then nothing stops the two diverging."
+  description = "Optional. Paste `terraform output -raw effective_filter` from gcp-source-audit-logs-organization here and a check block asserts the archive matches the stream. Empty skips the check — but then nothing stops the two diverging."
   type        = string
   default     = ""
 }
 
 variable "remote_state_bucket" {
-  description = "GCS bucket holding 02-audit-logs-organization's state. Set it and the value below is READ rather than retyped. Empty uses the literal."
+  description = "GCS bucket holding gcp-source-audit-logs-organization's state. Set it and the value below is READ rather than retyped. Empty uses the literal."
   type        = string
   default     = ""
 }
 
 variable "remote_state_prefix" {
-  description = "State key of 02-audit-logs-organization. It keeps that folder's original name, 01-organization, so existing state is found."
+  description = "State key of gcp-source-audit-logs-organization. It keeps that folder's original name, 01-organization, so existing state is found."
   type        = string
   default     = "01-organization"
 }

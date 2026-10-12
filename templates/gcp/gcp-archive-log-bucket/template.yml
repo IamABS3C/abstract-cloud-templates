@@ -128,3 +128,8 @@ cost: Cloud Storage at Standard, then Nearline after archive_nearline_after_days
 when_to_use: Evidence retention and backfill alongside the Pub/Sub stream.
 when_not_to_use: Anything you alert on; keep Pub/Sub for detection.
 live_test: static
+references:
+- aggregated-sinks
+- route-to-pubsub-destinations
+- gcs-bucket-lock
+- tf-google_logging_organization_sink

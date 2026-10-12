@@ -21,8 +21,9 @@ variable "sink_scope" {
       project         ONE project. Does NOT cover future projects, and there is no
                       include_children below a project. Pilot only -- requires
                       acknowledge_pilot_scope = true so nobody ships it by accident.
-      billing_account Billing account logs, which live OUTSIDE the resource hierarchy
-                      and are NOT captured by an organization sink.
+      billing_account Billing account logs. A billing account is a separate resource,
+                      so its logs are collected with a sink created on the billing
+                      account itself.
   EOT
   type        = string
   default     = "organization"
@@ -70,7 +71,8 @@ variable "audit_streams" {
                     and every resource create/delete/modify. Carries most control-plane detections.
       system_event  Always on, low volume.
       policy        Policy Denied. Always on, and charged.
-      data_access   OFF BY DEFAULT and dominated by DATA_READ. BigQuery query bytes and GCS
+      data_access   OFF BY DEFAULT except BigQuery's, which Google writes by default.
+                    Dominated by DATA_READ. BigQuery query bytes and GCS
                     object-level access — the exfiltration signal — exist nowhere else. On a
                     BigQuery-heavy estate this moves volume by 1-2 ORDERS OF MAGNITUDE.
 
@@ -88,8 +90,9 @@ variable "audit_streams" {
 
 variable "data_access_services" {
   description = <<-EOT
-    When data_access is in audit_streams, restrict it to these services rather than the whole
-    estate. Recommended opening position: bigquery.googleapis.com, storage.googleapis.com,
+    When data_access is in audit_streams, or data_access_all is in log_categories, restrict it
+    to these services rather than the whole estate. Read ONLY then: on its own this list routes
+    nothing, so for identity events use the identity_access category instead. Recommended opening position: bigquery.googleapis.com, storage.googleapis.com,
     cloudkms.googleapis.com, iamcredentials.googleapis.com, sts.googleapis.com, login.googleapis.com —
     captures data exfiltration and identity/auth token events without ingesting every routine read.
     Empty list means ALL services, which is the expensive option. Choose it deliberately.
@@ -211,15 +214,19 @@ variable "log_categories" {
     Databases          : cloudsql
     Data plane         : data_access_all (prefer data_access_services to scope it)
 
-    Default is the Tier-1 security set: control plane, Kubernetes admin, firewall
-    and DNS. Small, high signal, and it delivers most detections on its own.
+    Default is the three Cloud Audit Logs that Abstract's managed GCP Pub/Sub parser
+    stores: Admin Activity, System Event and Policy Denied. That parser drops every
+    record that is not a Cloud Audit Log, so the networking, compute and database
+    categories are routed, pulled and then discarded until a parser for them ships.
+    identity_access is a Cloud Audit Log too, and the way to route token minting
+    and federation events.
   EOT
   type        = list(string)
-  default     = ["admin_activity", "system_event", "gke_control_plane", "firewall", "dns_queries"]
+  default     = ["admin_activity", "system_event", "policy_denied"]
 }
 
 variable "acknowledge_high_volume" {
-  description = "Required to select any 'extreme' tier category (vpc_flows, gke_container_logs, data_access_all). These can dominate the entire bill; measure a 7-day baseline first."
+  description = "Required to select any 'extreme' tier category (vpc_flows, gke_container_logs), and for data_access_all only when data_access_services is empty. These can dominate the entire bill; measure a 7-day baseline first."
   type        = bool
   default     = false
 }

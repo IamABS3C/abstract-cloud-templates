@@ -5,7 +5,7 @@
 #
 #   bucket → OBJECT_FINALIZE notification → Pub/Sub → Abstract fetches the object
 #
-# If the logs are Google's own, use 02-audit-logs-organization instead. An aggregated sink
+# If the logs are Google's own, use gcp-source-audit-logs-organization instead. An aggregated sink
 # is strictly better than watching buckets.
 
 terraform {
@@ -32,4 +32,6 @@ module "gcs_notifications" {
   existing_service_account_email = var.existing_service_account_email
   acknowledge_bucket_sprawl      = var.acknowledge_bucket_sprawl
   labels                         = var.labels
+
+  depends_on = [google_project_service.required]
 }

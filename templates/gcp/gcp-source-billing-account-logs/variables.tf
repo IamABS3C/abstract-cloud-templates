@@ -4,7 +4,7 @@ variable "billing_account_id" {
 }
 
 variable "log_project" {
-  description = "DEDICATED logging or security project holding the topic and subscription. Not a workload project — Pub/Sub publish quota is consumed here, and a workload owner should not be able to read or break the security pipeline. Find it with: gcloud projects list. If no dedicated logging project exists yet, create one first with deployments/01-logging-project (set create_project = true) — do not point this at a workload project."
+  description = "DEDICATED logging or security project holding the topic and subscription. Not a workload project — Pub/Sub publish quota is consumed here, and a workload owner should not be able to read or break the security pipeline. Find it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project = true) — do not point this at a workload project."
   type        = string
 }
 
@@ -51,7 +51,7 @@ variable "labels" {
 }
 
 variable "log_categories" {
-  description = "Named sources to route. Cloud Billing writes Admin Activity audit logs (IAM policy changes, project billing links and unlinks, account create, close, reopen, rename and move) and Data Access audit logs, and no System Event logs (https://docs.cloud.google.com/billing/docs/audit-logging). Defaults to admin_activity. See modules/log-export/log_catalog.tf for the catalog."
+  description = "Named sources to route. Cloud Billing writes Admin Activity audit logs (IAM policy changes, project billing links and unlinks, account create, close, reopen, rename and move) and Data Access audit logs, and no System Event logs (https://docs.cloud.google.com/billing/docs/audit-logging). Defaults to admin_activity. See templates/gcp/_modules/log-export/log_catalog.tf for the catalog."
   type        = list(string)
   default     = ["admin_activity"]
 }

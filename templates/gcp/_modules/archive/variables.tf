@@ -54,8 +54,14 @@ variable "sink_scope" {
 }
 
 variable "filter" {
-  description = "The Cloud Logging filter. Passed in from log-export so archive and stream cannot silently diverge."
+  description = "The Cloud Logging filter. Passed in from log-export so archive and stream cannot silently diverge. Must not be empty: an organization sink with include_children and an empty filter archives every log in the organization."
   type        = string
+
+  # A check block only warns, so an empty filter would still create the sink. Refuse it at plan.
+  validation {
+    condition     = trimspace(var.filter) != ""
+    error_message = "The archive filter is empty, and an organization sink with an empty filter archives EVERY log in the organization.\nSet remote_state_bucket (with remote_state_prefix) to read the filter from gcp-source-audit-logs-organization's state, or set stream_filter or filter to the filter to archive."
+  }
 }
 
 variable "archive_retention_locked" {

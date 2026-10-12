@@ -16,8 +16,12 @@ in this repo and the easiest to get quietly wrong.
 ## You pick categories, the module writes the filter
 
 ```hcl
-log_categories = ["admin_activity", "system_event", "policy_denied", "firewall"]
+log_categories = ["admin_activity", "system_event", "policy_denied", "identity_access"]
 ```
+
+The audit-log roots route Cloud Audit Logs: Abstract's managed GCP parser keeps only those, and
+discards anything else the sink sends. Firewall, DNS and other platform logs go through
+`gcp-source-network-threat-logs`, with a parser attached to their own Abstract configuration.
 
 A name not in the catalog **fails at plan** with the valid list printed. That is
 deliberate: a hand-written Cloud Logging filter fails *silently* — a typo matches nothing,
@@ -76,7 +80,7 @@ raises nothing, and is indistinguishable from a broken sink.
 
 ## Data Access — the cost decision for the whole engagement
 
-**Admin Activity is always on and cannot be disabled. Only Data Access is off by default.**
+**Admin Activity is always on and cannot be disabled. Data Access is off by default for every service except BigQuery, which writes its Data Access logs by default.**
 
 ```hcl
 log_categories       = [..., "data_access_all"]

@@ -6,7 +6,7 @@
 
 This sets up a **dedicated Cloud Logging sink on your GCP Cloud Billing Account**.
 
-**GCP Billing Account audit logs sit outside the resource hierarchy entirely.** Organization, folder, and project sinks do **NOT** capture them. If you only deploy an organization sink, you will completely miss billing IAM changes and project billing associations.
+**An organization sink routes the organization and the folders and projects under it; a billing account is a separate resource, so its logs are collected with a sink created on the billing account itself.**
 
 **What gets created:**
 
@@ -32,11 +32,10 @@ If the list is empty you do not have access to any billing accounts. Stop here a
 <!-- abstract:signin -->
 ## Sign in first
 
-Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in; `--update-adc` gives the scripts and Terraform the same sign-in:
 
 ```bash
-gcloud auth login
-gcloud auth application-default login
+gcloud auth login --update-adc
 ```
 <!-- /abstract:signin -->
 
@@ -163,8 +162,11 @@ gcloud pubsub subscriptions create "$PROBE" --topic=abstract-billing-audit-logs 
 # Billing events are rare: make one on the billing account (for example rename it in
 # the console, which writes an UpdateBillingAccountDisplayName Admin Activity entry),
 # then wait.
-sleep 120
-gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=5 --auto-ack
+for i in $(seq 1 20); do
+  sleep 15
+  N=$(gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=1000 --auto-ack --format="value(ackId)" 2>/dev/null | grep -c .)
+  [ "${N:-0}" -gt 0 ] && { echo "FOUND: $N message(s) reached the topic"; break; }
+done
 gcloud pubsub subscriptions delete "$PROBE" --project="$LOG_PROJECT" --quiet
 ```
 
@@ -202,12 +204,7 @@ Your Cloud Billing Account now exports audit logs to Abstract Security via Pub/S
 <!-- abstract:cleanup -->
 ## Clean up
 
-Delete the integration in Abstract first, if this piece feeds one. Then, with the same `backend.tf`:
-
-```bash
-cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-billing-account-logs"
-terraform destroy
-```
+Delete the integration in Abstract first, if this piece feeds one. Then follow **To remove it later** at the end of [Deploy with Terraform](#deploy-with-terraform), with the same `backend.tf`.
 <!-- /abstract:cleanup -->
 
 <!-- abstract:terraform -->
@@ -215,7 +212,7 @@ terraform destroy
 
 Run every command in this template's folder.
 
-**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it. The bucket goes in the logging project by default, and Google's Cloud Storage guides ask for billing on a project before you create a bucket in it (this repo has not tested a project without). If the logging project has no billing (the guided setup allows that), first run `export STATE_PROJECT=<project-id-with-billing>` to put the bucket in a project that has it.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-billing-account-logs"
@@ -243,8 +240,28 @@ terraform plan -out=abstract.tfplan
 terraform apply abstract.tfplan
 ```
 
-**To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
+**To remove it later**, delete the integration in Abstract first. The topic, the subscription and the sink carry `prevent_destroy`, so a stray `terraform destroy`, or a rename that would replace them, cannot drop security logs Abstract has not read yet; `terraform destroy` on its own is refused. Take them out of the state, destroy the rest, then delete them with gcloud, the sink first so nothing is written to a topic that is about to go, then the subscription, then the topic. Use your own names if you changed them in terraform.tfvars:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-billing-account-logs"
+terraform state rm 'module.log_export.google_pubsub_topic.abstract' 'module.log_export.google_pubsub_subscription.abstract' 'module.log_export.google_logging_billing_account_sink.abstract[0]'
+terraform destroy
+gcloud logging sinks delete abstract-billing-audit-sink --billing-account=<billing-account-id>
+gcloud pubsub subscriptions delete abstract-billing-audit-logs-sub --project=<log-project-id>
+gcloud pubsub topics delete abstract-billing-audit-logs --project=<log-project-id>
+```
 <!-- /abstract:terraform -->
+
+<!-- abstract:references -->
+## Google documentation
+
+Google's own pages on what this template sets up:
+
+- [gcloud logging sinks create](https://docs.cloud.google.com/sdk/gcloud/reference/logging/sinks/create#--billing-account)
+- [Cloud Billing audit logging](https://docs.cloud.google.com/billing/docs/audit-logging)
+- [Route logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/configure_export_v2#dest-auth)
+- [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)
+<!-- /abstract:references -->
 
 ---
 

@@ -3,7 +3,7 @@
 # The third thing a log sink cannot carry. CAI has its own feed straight to
 # Pub/Sub: not a sink, not a filter, and no widening of log_categories reaches it.
 #
-# Worth deploying alongside 02-audit-logs-organization rather than instead of it. They
+# Worth deploying alongside gcp-source-audit-logs-organization rather than instead of it. They
 # answer different questions:
 #
 #   admin_activity  who called which API
@@ -46,4 +46,6 @@ module "asset_inventory" {
   acknowledge_all_asset_types      = var.acknowledge_all_asset_types
   retention_days                   = var.retention_days
   labels                           = var.labels
+
+  depends_on = [google_project_service.required]
 }

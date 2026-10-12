@@ -31,11 +31,10 @@ You need the following permissions:
 <!-- abstract:signin -->
 ## Sign in first
 
-Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in; `--update-adc` gives the scripts and Terraform the same sign-in:
 
 ```bash
-gcloud auth login
-gcloud auth application-default login
+gcloud auth login --update-adc
 ```
 <!-- /abstract:signin -->
 
@@ -260,8 +259,11 @@ PROBE="abstract-probe-$(date +%s)"
 gcloud pubsub subscriptions create "$PROBE" --topic=abstract-network-threats \
   --project="$LOG_PROJECT" --expiration-period=1d --message-retention-duration=10m
 # Now make a DNS query or trigger a logged firewall rule from a VM, then wait.
-sleep 60
-gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=5 --auto-ack
+for i in $(seq 1 20); do
+  sleep 15
+  N=$(gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=1000 --auto-ack --format="value(ackId)" 2>/dev/null | grep -c .)
+  [ "${N:-0}" -gt 0 ] && { echo "FOUND: $N message(s) reached the topic"; break; }
+done
 gcloud pubsub subscriptions delete "$PROBE" --project="$LOG_PROJECT" --quiet
 ```
 
@@ -304,12 +306,7 @@ The pipeline delivers Cloud Armor, Cloud IDS, DNS and firewall logs to the `abst
 <!-- abstract:cleanup -->
 ## Clean up
 
-Delete the integration in Abstract first, if this piece feeds one. Then, with the same `backend.tf`:
-
-```bash
-cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-network-threat-logs"
-terraform destroy
-```
+Delete the integration in Abstract first, if this piece feeds one. Then follow **To remove it later** at the end of [Deploy with Terraform](#deploy-with-terraform), with the same `backend.tf`.
 <!-- /abstract:cleanup -->
 
 <!-- abstract:terraform -->
@@ -317,7 +314,7 @@ terraform destroy
 
 Run every command in this template's folder.
 
-**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it. The bucket goes in the logging project by default, and Google's Cloud Storage guides ask for billing on a project before you create a bucket in it (this repo has not tested a project without). If the logging project has no billing (the guided setup allows that), first run `export STATE_PROJECT=<project-id-with-billing>` to put the bucket in a project that has it.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-network-threat-logs"
@@ -345,8 +342,36 @@ terraform plan -out=abstract.tfplan
 terraform apply abstract.tfplan
 ```
 
-**To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
+**To remove it later**, delete the integration in Abstract first. The topic, the subscription and the sink carry `prevent_destroy`, so a stray `terraform destroy`, or a rename that would replace them, cannot drop security logs Abstract has not read yet; `terraform destroy` on its own is refused. Take them out of the state, destroy the rest, then delete them with gcloud, the sink first so nothing is written to a topic that is about to go, then the subscription, then the topic. Use your own names if you changed them in terraform.tfvars:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-network-threat-logs"
+terraform state rm 'module.log_export.google_pubsub_topic.abstract' 'module.log_export.google_pubsub_subscription.abstract' 'module.log_export.google_logging_organization_sink.abstract[0]'
+terraform destroy
+gcloud logging sinks delete abstract-network-threats-sink --organization=<org-id>
+gcloud pubsub subscriptions delete abstract-network-threats-sub --project=<log-project-id>
+gcloud pubsub topics delete abstract-network-threats --project=<log-project-id>
+```
+
+These commands are for the default `sink_scope`, `organization`. With another scope, use that scope's sink in both places: `'module.log_export.google_logging_folder_sink.abstract[0]'` and `--folder=<folder-id>`; `'module.log_export.google_logging_project_sink.abstract[0]'` and `--project=<sink-project-id>`.
 <!-- /abstract:terraform -->
+
+<!-- abstract:references -->
+## Google documentation
+
+Google's own pages on what this template sets up:
+
+- [VPC firewall rules logging overview](https://docs.cloud.google.com/firewall/docs/vpc-firewall-rules-logging-overview)
+- [Manage VPC firewall rules logging](https://docs.cloud.google.com/firewall/docs/manage-vpc-firewall-rules-logging#enable-vpc-firewall-rule-logging)
+- [Firewall policy rules logging overview](https://docs.cloud.google.com/firewall/docs/firewall-policy-rules-logging-overview)
+- [Use logging and monitoring](https://docs.cloud.google.com/dns/docs/monitoring#using_logging)
+- [Global external Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/https/https-logging-monitoring)
+- [Regional external Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/https/https-reg-logging-monitoring)
+- [Internal Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/l7-internal/monitoring)
+- [Cloud IDS logging information](https://docs.cloud.google.com/intrusion-detection-system/docs/logging)
+- [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks)
+- [Logging query language](https://docs.cloud.google.com/logging/docs/view/logging-query-language)
+<!-- /abstract:references -->
 
 ---
 

@@ -24,7 +24,7 @@ variable "log_types" {
 }
 
 variable "services" {
-  description = "Empty means allServices. With DATA_READ that is the expensive option and needs acknowledge_data_read."
+  description = "Services to turn Data Access logs on for, e.g. the guided setup's five: bigquery, storage, cloudkms, iam and sts (.googleapis.com). Empty means allServices: authoritative for every service, and with DATA_READ the expensive option that needs acknowledge_data_read. The template applies ONE log_types list and ONE exempted_members list to every service it names: name only services whose existing settings you accept being replaced by those, and leave out any service that already has DATA_READ or exempted members, or manage it only from a separate root with its own backend prefix, after removing it from this root's services."
   type        = list(string)
   default     = []
 }
@@ -41,7 +41,7 @@ variable "acknowledge_data_read" {
 }
 
 variable "acknowledge_authoritative_overwrite" {
-  description = "Required for allServices. See scripts/preflight.sh output first — this resource can REMOVE audit log types it does not list."
+  description = "Required for every apply: the audit config is authoritative for EVERY service it names, so applying replaces the log types and exempted members already set on them, and destroy removes them. Read tools/gcp-guided-setup/preflight.sh output first. To offboard without changing logging, run terraform state rm 'module.audit_config'."
   type        = bool
   default     = false
 }

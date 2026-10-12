@@ -1,4 +1,4 @@
-# Enable what this deployment needs, here rather than in 01-logging-project.
+# Enable what this deployment needs, here rather than in gcp-foundation-logging-project.
 #
 # Terraform fails PARTWAY when an API is missing — after creating some resources
 # — and the error names the API rather than the fix. Enabling is idempotent and

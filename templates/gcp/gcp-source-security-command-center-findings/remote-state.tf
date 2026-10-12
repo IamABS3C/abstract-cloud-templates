@@ -1,4 +1,4 @@
-# Read cross-root values from 02-audit-logs-organization's STATE rather than a hand-copy.
+# Read cross-root values from gcp-source-audit-logs-organization's STATE rather than a hand-copy.
 # A retyped string drifts silently the moment either side changes; this cannot.
 # Optional: leave remote_state_bucket empty and the literal is used instead, so a
 # customer without a shared backend is not blocked — they just carry the risk

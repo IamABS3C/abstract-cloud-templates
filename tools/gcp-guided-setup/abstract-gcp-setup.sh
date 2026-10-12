@@ -12,7 +12,7 @@
 #    6  Data Access logs     (optional) generate them AND route them — both switches
 #    7  Google Workspace     (optional) identity logs: service account + delegation
 #    8  Health alerts        (optional) tell you when the pipeline stops
-#    9  Test and verify                 a fresh event, end to end
+#    9  Test and verify                 a fresh event, from the sink to the topic
 #   10  Connect Abstract                the exact values to enter
 #
 #  Usage
@@ -34,15 +34,26 @@ STATE="${ABSTRACT_GCP_STATE:-$HOME/.abstract-gcp-setup.env}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"   # the repository root: this script lives in tools/gcp-guided-setup
 
+# The step 6 answers offered first, and offered again when allServices + DATA_READ is declined.
+# iam and sts record service-account token minting and Workload Identity Federation token exchange.
+DA_DEFAULT_SERVICES="bigquery.googleapis.com,storage.googleapis.com,cloudkms.googleapis.com,iam.googleapis.com,sts.googleapis.com"
+DA_DEFAULT_TYPES="ADMIN_READ,DATA_WRITE"
 # Defaults; anything in the state file wins. A function, so "start over" can put every answer back.
 defaults() {
   TOPIC="abstract-audit-logs"; SUB="abstract-audit-logs-sub"; SINK="abstract-org-audit-sink"  # the Terraform and deploy-script default
   SA="abstract-pubsub-reader"; WS_SA="abstract-workspace-reader"; RETENTION_DAYS=7
-  # iam and sts record service-account token minting and Workload Identity Federation token exchange.
-  DA_SERVICES="bigquery.googleapis.com,storage.googleapis.com,cloudkms.googleapis.com,iam.googleapis.com,sts.googleapis.com"; DA_TYPES="ADMIN_READ,DATA_WRITE"
+  DA_SERVICES="$DA_DEFAULT_SERVICES"; DA_TYPES="$DA_DEFAULT_TYPES"
+  # 1 once a person said yes to DATA_READ on allServices (step 6). Until then step 4 routes no Data Access
+  # clause for it, so a saved answer alone can never send every service's reads to Abstract.
+  DA_ALL_READ_ACK=0
   DATA_ACCESS=no; WORKSPACE=no; ALERTS=no
   ORG_ID=""; SCOPE=""; SCOPE_ID=""; LOG_PROJECT=""; BILLING=""; WS_ADMIN=""; ALERT_EMAIL=""
   ALERT_POLICIES=""; ALERT_CHANNELS=""   # the alerts step 8 made, recorded by name
+  # Step 6: 1 once Google confirmed the audit-settings change, 0 when this script decided not to change them,
+  # empty when unknown (an answers file written before this was recorded). DA_BACKUP is the copy taken first.
+  DA_CHANGED=""; DA_BACKUP=""; DA_ADDED=""
+  # The private_key_id of the key each step made for Abstract, so step 10 never offers to delete it.
+  KEY_ID=""; WS_KEY_ID=""
   SINK_CREATED_AT=0
   # Set to 1 only when THIS script creates the piece, so --remove never deletes something it found.
   TOPIC_CREATED=0; SUB_CREATED=0; SA_CREATED=0; WS_SA_CREATED=0
@@ -51,8 +62,33 @@ defaults; FIND_PROJECT=""
 # Keys go outside any checkout, in a folder only you can read, so they cannot be committed by accident.
 KEY_DIR="${ABSTRACT_KEY_DIR:-$HOME/abstract-keys}"
 KEY_FILE="$KEY_DIR/abstract-pubsub-key.json"; WS_KEY_FILE="$KEY_DIR/abstract-workspace-key.json"
-# shellcheck disable=SC1090
-[[ -f "$STATE" ]] && source "$STATE"
+# The answers this script saves, in this order. Nothing else may appear in an answers file.
+ANSWER_KEYS="ORG_ID SCOPE SCOPE_ID LOG_PROJECT BILLING TOPIC SUB SINK SA RETENTION_DAYS DATA_ACCESS DA_SERVICES DA_TYPES
+  WORKSPACE WS_SA WS_ADMIN ALERTS ALERT_EMAIL SINK_CREATED_AT TOPIC_CREATED SUB_CREATED SA_CREATED WS_SA_CREATED
+  ALERT_POLICIES ALERT_CHANNELS DA_CHANGED DA_BACKUP DA_ADDED DA_ALL_READ_ACK KEY_ID WS_KEY_ID"
+
+# Load an answers file only if every line is one this script could have written: a comment, a blank line, or
+# KEY=value for a key above, with the value as printf %q writes it (plain characters, or one character escaped
+# with a backslash, or ''). Such a line only assigns text. Anything else - a command, $(...), backticks, an
+# unknown key - and the file is refused, never run: the docs tell people to upload an answers file and pass
+# --state, so the file may not be the one this script wrote (PR #55 review).
+load_answers() {
+  local f="$1" line n=0 key val
+  local value_re="^(''|([A-Za-z0-9_.:@/+=%,-]|\\\\.)*)$"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    n=$((n + 1))
+    [[ -z "${line//[[:space:]]/}" || "$line" == \#* ]] && continue
+    key="${line%%=*}"; val="${line#*=}"
+    if [[ "$line" != *=* || " $(echo $ANSWER_KEYS) " != *" $key "* || ! "$val" =~ $value_re ]]; then
+      printf 'The answers file %s has a line this script did not write (line %d), so it was not loaded and nothing in it was run.\n' "$f" "$n" >&2
+      printf 'Look at that line, or start over without it:  %s --reset\n' "$0" >&2
+      exit 2
+    fi
+  done <"$f"
+  # shellcheck disable=SC1090  # every line was checked above: only KEY=escaped-text assignments remain
+  source "$f"
+}
+[[ -f "$STATE" ]] && load_answers "$STATE"
 
 B=$'\033[1m'; P=$'\033[38;5;198m'; G=$'\033[0;32m'; Y=$'\033[0;33m'; R=$'\033[0;31m'; D=$'\033[2m'; O=$'\033[0m'
 title() { printf '\n%s━━ %s %s━━%s\n' "$P" "$1" "$2" "$O"; }
@@ -69,10 +105,16 @@ save() {
   umask 077
   # %q escapes every value, so an answer containing shell syntax is stored as text, never run.
   { echo "# Abstract GCP guided setup — your answers. Safe to delete; nothing secret is kept here."
-    local v; for v in ORG_ID SCOPE SCOPE_ID LOG_PROJECT BILLING TOPIC SUB SINK SA RETENTION_DAYS DATA_ACCESS DA_SERVICES DA_TYPES \
-      WORKSPACE WS_SA WS_ADMIN ALERTS ALERT_EMAIL SINK_CREATED_AT TOPIC_CREATED SUB_CREATED SA_CREATED WS_SA_CREATED \
-      ALERT_POLICIES ALERT_CHANNELS; do printf '%s=%q\n' "$v" "${!v}"; done; } > "$STATE"
+    local v; for v in $ANSWER_KEYS; do printf '%s=%q\n' "$v" "${!v}"; done; } > "$STATE"
+  # A temporary Cloud Shell session deletes this file with it, and clean-up needs it. A copy downloaded at step 1
+  # holds none of what later steps create, so it is offered again whenever a save records something clean-up
+  # reads: what was created, the logging project, a key id, a change to the audit settings.
+  local rec; rec="$LOG_PROJECT|$SINK_CREATED_AT|$TOPIC_CREATED|$SUB_CREATED|$SA_CREATED|$WS_SA_CREATED|$KEY_ID|$WS_KEY_ID|$DA_CHANGED|$DA_BACKUP|$ALERT_POLICIES|$ALERT_CHANNELS"
+  if [[ "${CLOUD_SHELL:-}" == true && "$rec" != "$ANSWERS_OFFERED" ]]; then
+    ANSWERS_OFFERED="$rec"; offer_download "$STATE" "your answers file (again: it now records more)"
+  fi
 }
+ANSWERS_OFFERED=""
 
 # gcloud must never stop to ask something itself: its questions go to stderr, which the lookups below hide,
 # so a hidden "enable this API and retry? (y/N)" would freeze the script (measured 2026-10-08 in the estate
@@ -198,10 +240,17 @@ token() { gcloud auth print-access-token 2>/dev/null; }
 held() {  # held <resource-url> perm...
   local url="$1"; shift
   local body; body=$(python3 -c 'import json,sys;print(json.dumps({"permissions":sys.argv[1:]}))' "$@")
+  # Only the "permissions" list is an answer ({} = none held). An error reply, an empty or non-JSON body says
+  # nothing about what is held: print why and return 1, so callers say "could not check", never "you cannot".
   curl -s -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" -d "$body" "$url:testIamPermissions" \
     | python3 -c 'import json,sys
-try: print(" ".join(json.load(sys.stdin).get("permissions",[])))
-except Exception: print("")'
+raw = sys.stdin.read().strip()
+try: d = json.loads(raw)
+except ValueError: sys.exit(print("no readable answer from Google" if not raw else "the answer was not JSON") or 1)
+if not isinstance(d, dict): sys.exit(print("the answer was not a permissions list") or 1)
+if "error" in d:
+    e = d["error"]; sys.exit(print((e.get("message") if isinstance(e, dict) else "") or "Google returned an error") or 1)
+print(" ".join(d.get("permissions", [])))'
 }
 scope_url() { case "$SCOPE" in
   organization) echo "https://cloudresourcemanager.googleapis.com/v3/organizations/$SCOPE_ID" ;;
@@ -210,19 +259,40 @@ scope_url() { case "$SCOPE" in
 scope_flag() { case "$SCOPE" in organization) echo "--organization=$SCOPE_ID" ;; folder) echo "--folder=$SCOPE_ID" ;; project) echo "--project=$SCOPE_ID" ;; esac; }
 has() { [[ " $1 " == *" $2 "* ]]; }
 
+# The command that runs this script again on the same answers: --state is named whenever it is not the default,
+# so a hint copied into another session reads the same file.
+again() { if [[ "$STATE" == "$HOME/.abstract-gcp-setup.env" ]]; then printf '%s %s' "$0" "$*"; else printf '%s --state %q %s' "$0" "$STATE" "$*"; fi; }
+
 # ── Launch: who you are, what is saved, and a way to change either ──────────────────
 MIRROR_URL="https://github.com/IamABS3C/abstract-cloud-templates"
 
 # A listed account is not a working sign-in: gcloud keeps showing an account as active after its sign-in
-# has expired (measured 2026-10-09). Only a token proves it.
-signed_in() { [[ -n "$(gcloud config get-value account 2>/dev/null)" ]] && gcloud auth print-access-token >/dev/null 2>&1; }
+# has expired (measured 2026-10-09). Only a token proves it, and only Google (tokeninfo) says whose it is.
+# gcloud-identity.sh decides that alike for all three scripts, impersonation and token files included.
+# shellcheck source=gcloud-identity.sh
+source "$HERE/gcloud-identity.sh"
+token_email() { gid_token_email "$(gcloud auth print-access-token 2>/dev/null)"; }
+# Signed in = the configured account can mint a token AND the token acts as that account, or as the service
+# account gcloud is set to impersonate (when Google says). GID_LINE then says who acts, for the person.
+signed_in() {
+  local acct; acct=$(gcloud config get-value account 2>/dev/null)
+  [[ -n "$acct" ]] && gcloud auth print-access-token >/dev/null 2>&1 || return 1
+  gid_check "$acct" "$(token_email)"
+}
+# Why signed_in failed, for the person: a wrong account is told apart from no sign-in at all.
+signed_in_problem() {
+  local acct; acct=$(gcloud config get-value account 2>/dev/null)
+  if [[ -z "$acct" ]]; then echo "not signed in to gcloud. Sign in: gcloud auth login --update-adc"
+  elif ! gcloud auth print-access-token >/dev/null 2>&1; then echo "$acct must sign in again: gcloud auth login $acct --update-adc"
+  else gid_check "$acct" "$(token_email)"; echo "$GID_LINE"; fi
+}
 
 sign_in() {
   say "  Signing in. A browser opens, or gcloud prints a link to open; finish there and come back."
   why "--update-adc also refreshes the credentials Terraform uses, for the template path."
   # The one command allowed to ask questions: it may need a code pasted back.
   CLOUDSDK_CORE_DISABLE_PROMPTS=0 gcloud auth login --update-adc </dev/tty >/dev/tty 2>&1 \
-    && signed_in && pass "signed in as $(gcloud config get-value account 2>/dev/null)" || bad "sign-in did not finish"
+    && signed_in && pass "$GID_LINE" || bad "sign-in did not finish"
 }
 
 switch_account() {
@@ -264,26 +334,33 @@ explain_cloud_shell() {
   [[ "${CLOUD_SHELL:-}" == true ]] || return 0
   say ""
   say "  ${B}Cloud Shell:${O} a repository opened from a link that is not Google's runs in a temporary session,"
-  say "  without your credentials, and its home folder (saved answers, and the key file step 5 makes) is"
-  say "  deleted when the session ends. Either:"
-  say "    - sign in here, and download the key in step 5 before you close Cloud Shell, or"
+  say "  without your credentials, and its home folder (saved answers, the key file step 5 makes, the copy of"
+  say "  the audit settings step 6 saves) is deleted when the session ends. Either:"
+  say "    - sign in here, download the key as soon as step 5 makes it, and download each file this script"
+  say "      offers before you close Cloud Shell, or"
   say "    - open Cloud Shell from the Google Cloud console (the >_ button, top right) and run:"
   say "        git clone $MIRROR_URL && cd abstract-cloud-templates && ./tools/gcp-guided-setup/abstract-gcp-setup.sh"
+}
+
+# In Cloud Shell, a file that must outlive the session is downloaded as soon as it exists.
+offer_download() {  # offer_download <file> <what it is>
+  [[ "${CLOUD_SHELL:-}" == true && -f "$1" ]] || return 0
+  say "  ${B}Download $2 now${O} (this Cloud Shell session may be temporary):  cloudshell download $1"
 }
 
 launch() {
   local acct st=() ok=false a
   acct=$(gcloud config get-value account 2>/dev/null)
   signed_in && ok=true
-  if $ok; then st+=("ok|signed in as $acct")
-  elif [[ -n "$acct" ]]; then st+=("bad|$acct must sign in again")
-  else st+=("bad|not signed in to gcloud"); fi
+  if $ok; then st+=("ok|$GID_LINE")
+  else st+=("bad|$(signed_in_problem)"); fi
   [[ -n "$ORG_ID$SCOPE$LOG_PROJECT" ]] && st+=("info|saved: organization ${ORG_ID:-?}, scope ${SCOPE:-?} ${SCOPE_ID}, logging project ${LOG_PROJECT:-not chosen}")
   python3 "$HERE/brand.py" header "Google Cloud setup" "$($CHECK_ONLY && echo 'check only - nothing will change' || echo 'guided setup')" ${st[@]+"${st[@]}"}
+  # Shown whenever this is Cloud Shell, signed in or not: the session may be the temporary kind either way.
+  explain_cloud_shell
   interactive || return 0
   while true; do
     if ! signed_in; then
-      explain_cloud_shell
       say ""; say "  ${B}Sign in to continue:${O}  1) sign in now   2) switch to another account gcloud knows   q) quit"
       a=$(ask "Choose" 1)
       case "$a" in 1) sign_in ;; 2) switch_account ;; q|Q) exit 0 ;; *) warn "choose 1, 2 or q" ;; esac
@@ -306,7 +383,7 @@ step1() {
   title 1 "Sign-in and organization"
   why "Everything below is checked for the account you are signed in as."
   local acct; acct=$(gcloud config get-value account 2>/dev/null)
-  signed_in && pass "signed in as $acct" || { bad "not signed in, or the sign-in has expired. Start the script again and choose to sign in, or run: gcloud auth login --update-adc"; return; }
+  signed_in && pass "$GID_LINE" || { bad "$(signed_in_problem) (or start the script again and choose to sign in)"; return; }
 
   local orgs; orgs=$(listing gcloud organizations list --format='value(ID,displayName)')
   if [[ -z "$orgs" ]]; then bad "no organization visible to $acct. An organization is needed for org or folder scope; a project pilot still works."
@@ -351,21 +428,46 @@ listing() {
 }
 project_list() { listing gcloud projects list --format='value(projectId,name)' --sort-by=projectId; }
 
+# Who can change the audit settings at the scope. A function: bash 3.2 cannot parse a case inside $(...).
+audit_admins() {
+  case "$SCOPE" in
+    organization) echo "Organization Admin or Security Admin" ;;
+    folder) echo "Folder Admin or Security Admin on the folder" ;;
+    *) echo "Owner, Project IAM Admin or Security Admin on the project" ;;
+  esac
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 step2() {
   title 2 "What you can change"
   why "Each later step needs a specific permission. This asks Google directly which ones you hold."
   [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { bad "choose a scope first (step 1)"; return; }
-  local h; h=$(held "$(scope_url)" logging.sinks.create "resourcemanager.$( [[ $SCOPE == organization ]] && echo organizations || echo "${SCOPE}s" ).setIamPolicy")
+  local h
+  if ! h=$(held "$(scope_url)" logging.sinks.create "resourcemanager.$( [[ $SCOPE == organization ]] && echo organizations || echo "${SCOPE}s" ).setIamPolicy"); then
+    warn "could not check your rights at the $SCOPE: $h. Steps 4 and 6 report a missing permission when they reach it."
+  else
   has "$h" logging.sinks.create && pass "create the log sink at the $SCOPE (step 4)" \
-    || { bad "you cannot create a sink at the $SCOPE. You need roles/logging.configWriter there — not included in Organization Admin."
-         why "An Organization Admin can grant it:  gcloud organizations add-iam-policy-binding $ORG_ID --member=user:$(gcloud config get-value account 2>/dev/null) --role=roles/logging.configWriter"; }
+    || { local me; me=$(gcloud config get-value account 2>/dev/null)
+         # The grant goes on the scope itself, never wider than the sink needs.
+         case "$SCOPE" in
+           organization) bad "you cannot create a sink at the organization. You need roles/logging.configWriter there — not included in Organization Admin."
+                         why "An Organization Admin can grant it:  gcloud organizations add-iam-policy-binding $SCOPE_ID --member=user:$me --role=roles/logging.configWriter" ;;
+           folder) bad "you cannot create a sink at the folder. You need roles/logging.configWriter on folder $SCOPE_ID."
+                   why "A Folder Admin (or anyone who can set the folder's IAM policy) can grant it:  gcloud resource-manager folders add-iam-policy-binding $SCOPE_ID --member=user:$me --role=roles/logging.configWriter" ;;
+           project) bad "you cannot create a sink in the project. You need roles/logging.configWriter on project $SCOPE_ID."
+                    why "A project Owner or Project IAM Admin can grant it:  gcloud projects add-iam-policy-binding $SCOPE_ID --member=user:$me --role=roles/logging.configWriter" ;;
+         esac; }
   has "$h" "resourcemanager.$( [[ $SCOPE == organization ]] && echo organizations || echo "${SCOPE}s" ).setIamPolicy" \
     && pass "turn on Data Access logs at the $SCOPE (step 6, optional)" \
-    || warn "you cannot turn on Data Access logs at the $SCOPE (needs Organization Admin or Security Admin). Skip step 6 or ask them."
+    || warn "you cannot turn on Data Access logs at the $SCOPE (needs $(audit_admins)). Skip step 6 or ask them."
+  fi
   if [[ -n "$ORG_ID" ]]; then
-    local o; o=$(held "https://cloudresourcemanager.googleapis.com/v3/organizations/$ORG_ID" resourcemanager.projects.create)
-    has "$o" resourcemanager.projects.create && pass "create a new logging project (step 3)" || warn "you cannot create projects in the organization; pick an existing logging project in step 3"
+    local o
+    if ! o=$(held "https://cloudresourcemanager.googleapis.com/v3/organizations/$ORG_ID" resourcemanager.projects.create); then
+      warn "could not check whether you can create projects in the organization: $o"
+    else
+      has "$o" resourcemanager.projects.create && pass "create a new logging project (step 3)" || warn "you cannot create projects in the organization; pick an existing logging project in step 3"
+    fi
   fi
   if [[ -n "$LOG_PROJECT" ]]; then project_checks
   else
@@ -377,21 +479,37 @@ step2() {
 # and step 3 runs it again, so a blocked key shows up before step 4 creates the sink, not after.
 # Called directly, never through $(...): a subshell would lose the pass and fail counts.
 project_checks() {
-  local p; p=$(held "https://cloudresourcemanager.googleapis.com/v3/projects/$LOG_PROJECT" pubsub.topics.create pubsub.subscriptions.create iam.serviceAccounts.create iam.serviceAccountKeys.create serviceusage.services.enable pubsub.topics.setIamPolicy)
-  local miss=""; for x in pubsub.topics.create pubsub.subscriptions.create pubsub.topics.setIamPolicy iam.serviceAccounts.create iam.serviceAccountKeys.create serviceusage.services.enable; do
-    has "$p" "$x" || miss+=" $x"; done
-  [[ -z "$miss" ]] && pass "build the pipeline in $LOG_PROJECT (steps 3-5)" \
-    || bad "missing in $LOG_PROJECT:$miss — Owner, or Pub/Sub Admin + Service Account Admin + Service Account Key Admin + Service Usage Admin"
-  # The org policy that most often blocks the key in step 5.
-  # A lookup that fails is not an answer: it is reported as unknown, never as "allowed".
-  local kp
-  if ! kp=$(gcloud resource-manager org-policies describe iam.disableServiceAccountKeyCreation --project="$LOG_PROJECT" --effective --format='value(booleanPolicy.enforced)' 2>/dev/null); then
-    warn "could not read the org policy iam.disableServiceAccountKeyCreation on $LOG_PROJECT (it needs Organization Policy Viewer). If it is enforced, step 5 cannot create a key; ask your organization admin before step 4."
-  elif [[ "$kp" == "True" ]]; then
-    bad "org policy iam.disableServiceAccountKeyCreation is enforced on $LOG_PROJECT: step 5 cannot create a key. Ask for an exception on this project before step 4."
+  local p
+  if ! p=$(held "https://cloudresourcemanager.googleapis.com/v3/projects/$LOG_PROJECT" pubsub.topics.create pubsub.subscriptions.create iam.serviceAccounts.create iam.serviceAccountKeys.create serviceusage.services.enable pubsub.topics.setIamPolicy); then
+    warn "could not check your rights in $LOG_PROJECT: $p. Steps 4 and 5 report a missing permission when they reach it."
   else
-    pass "service-account keys are allowed on $LOG_PROJECT (org policy iam.disableServiceAccountKeyCreation is not enforced)"
+    local miss=""; for x in pubsub.topics.create pubsub.subscriptions.create pubsub.topics.setIamPolicy iam.serviceAccounts.create iam.serviceAccountKeys.create serviceusage.services.enable; do
+      has "$p" "$x" || miss+=" $x"; done
+    [[ -z "$miss" ]] && pass "build the pipeline in $LOG_PROJECT (steps 3-5)" \
+      || bad "missing in $LOG_PROJECT:$miss — Owner, or Pub/Sub Admin + Service Account Admin + Service Account Key Admin + Service Usage Admin"
   fi
+  # The org policies that block the key in step 5: the legacy boolean constraint and its managed successor
+  # (iam.managed.*, read through the Org Policy v2 API). A lookup that fails is not an answer: it is reported
+  # as unknown, never as "allowed". Keys are allowed only when BOTH were read and neither is enforced.
+  local kp km legacy=unknown managed=unknown
+  if kp=$(gcloud resource-manager org-policies describe iam.disableServiceAccountKeyCreation --project="$LOG_PROJECT" --effective --format='value(booleanPolicy.enforced)' 2>/dev/null); then
+    [[ "$kp" == True ]] && legacy=on || legacy=off
+  fi
+  if km=$(gcloud org-policies describe iam.managed.disableServiceAccountKeyCreation --project="$LOG_PROJECT" --effective --format=json 2>/dev/null); then
+    managed=$(python3 -c 'import json, sys
+d = json.loads(sys.stdin.read())
+print("on" if any(r.get("enforce") is True for r in (d.get("spec") or {}).get("rules", [])) else "off")' <<<"$km" 2>/dev/null) || managed=unknown
+  fi
+  local c
+  for c in legacy managed; do
+    local name=iam.disableServiceAccountKeyCreation; [[ $c == managed ]] && name=iam.managed.disableServiceAccountKeyCreation
+    case "${!c}" in
+      on) bad "org policy $name is enforced on $LOG_PROJECT: step 5 cannot create a key. Ask for an exception on this project before step 4." ;;
+      unknown) warn "could not read the org policy $name on $LOG_PROJECT (it needs Organization Policy Viewer). If it is enforced, step 5 cannot create a key; ask your organization admin before step 4." ;;
+    esac
+  done
+  [[ $legacy == off && $managed == off ]] && \
+    pass "service-account keys are allowed on $LOG_PROJECT (org policies iam.disableServiceAccountKeyCreation and iam.managed.disableServiceAccountKeyCreation are not enforced)"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -401,15 +519,19 @@ step3() {
   why "Not a workload project: whoever owns that project could read or break the pipeline."
   while [[ -z "$LOG_PROJECT" ]] && interactive; do
     # Suggest the project an existing Abstract sink already sends to, as the estate audit does.
-    local sent; sent=$(gcloud logging sinks list "$(scope_flag)" --format='value(destination)' 2>/dev/null \
+    local sent=""; [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] && sent=$(gcloud logging sinks list "$(scope_flag)" --format='value(destination)' 2>/dev/null \
       | sed -n "s|^pubsub.googleapis.com/projects/\([^/]*\)/topics/$TOPIC\$|\1|p" | head -n1)
     [[ -n "$sent" ]] && say "  The existing sink already sends to $sent: choosing it keeps one pipeline."
     local pick; pick=$(choose_existing project "gcloud projects describe {}" "Which project holds the pipeline?" "$(project_list)" "create a new project for Abstract (recommended when none exists)" "$sent" '^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
     if [[ "$pick" == +new ]]; then
+      # Where a new project goes comes from step 1. Without it, choosing an existing project still works.
+      [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { warn "creating a project needs step 1 first (or --state <answers file>), to know where it goes; or choose an existing project"; continue; }
       local new; new=$(ask "New project ID (globally unique, e.g. <company>-security-logging)" "" valid_project_id)
-      local parent="--organization=$ORG_ID"; [[ "$SCOPE" == folder ]] && parent="--folder=$SCOPE_ID"
+      local -a parent=()
+      if [[ "$SCOPE" == folder ]]; then parent=("--folder=$SCOPE_ID")
+      elif [[ -n "$ORG_ID" ]]; then parent=("--organization=$ORG_ID"); fi
       # Saved only once it exists: an ID Google refused (taken, quota, no right) must not be kept.
-      if run gcloud projects create "$new" "$parent" --name="Abstract security logging"; then LOG_PROJECT="$new"
+      if run gcloud projects create "$new" ${parent[@]+"${parent[@]}"} --name="Abstract security logging"; then LOG_PROJECT="$new"
       else warn "project $new was not created; choose again"; fi
     else LOG_PROJECT="$pick"; fi
   done
@@ -422,7 +544,7 @@ step3() {
   if [[ "$be" == True ]]; then pass "billing is linked"
   else
     warn "no billing linked. That is fine for this path: Pub/Sub and Logging free tiers cover an audit feed."
-    why "Link billing only if you will use Infrastructure Manager or high-volume logs."
+    why "Link billing only if you will use Infrastructure Manager, high-volume logs, or a Terraform state bucket in this project."
     if ! $CHECK_ONLY && yes_no "Link a billing account now?"; then
       local accounts; accounts=$(listing gcloud billing accounts list --filter=open=true --format='value(name.basename(),displayName)')
       if [[ -z "$accounts" ]]; then warn "no open billing account is visible to you; ask your billing admin to link one to $LOG_PROJECT"
@@ -460,11 +582,23 @@ routed_services() {  # the serviceName values the events carry, for the sink fil
   tr ',' '\n' <<<"$1" | sed 's/^iam\.googleapis\.com$/iamcredentials.googleapis.com/' | awk 'NF && !seen[$0]++' | paste -sd, -
 }
 
+# DATA_READ on allServices: every read of every service. One predicate for step 4, step 6 and the question.
+all_services_read() { [[ ",$DA_SERVICES," == *,allServices,* && ",$DA_TYPES," == *,DATA_READ,* ]]; }
+# ...and not yet confirmed by a person, so nothing may route it (step 4) or turn it on (step 6).
+all_services_read_unconfirmed() { all_services_read && [[ "${DA_ALL_READ_ACK:-0}" != 1 ]]; }
+
 filter() {
   local f='logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy"'
-  if [[ "$DATA_ACCESS" == yes ]]; then
-    local c=""; IFS=',' read -ra S <<<"$(routed_services "$DA_SERVICES")"; for s in "${S[@]}"; do c+="${c:+ OR }\"$s\""; done
-    f+=" OR (logName:\"cloudaudit.googleapis.com%2Fdata_access\" AND protoPayload.serviceName=($c))"
+  # Unconfirmed allServices + DATA_READ gets no Data Access clause at all: the unrestricted one would carry
+  # every service's reads, BigQuery's default-on logs among them, even with switch 1 unchanged. Step 4 says so.
+  if [[ "$DATA_ACCESS" == yes ]] && ! all_services_read_unconfirmed; then
+    # allServices is the audit-config wildcard: no entry carries it as a serviceName, so it is routed by a
+    # Data Access clause that names no service at all.
+    if [[ ",$DA_SERVICES," == *,allServices,* ]]; then f+=' OR logName:"cloudaudit.googleapis.com%2Fdata_access"'
+    else
+      local c=""; IFS=',' read -ra S <<<"$(routed_services "$DA_SERVICES")"; for s in "${S[@]}"; do c+="${c:+ OR }\"$s\""; done
+      f+=" OR (logName:\"cloudaudit.googleapis.com%2Fdata_access\" AND protoPayload.serviceName=($c))"
+    fi
   fi
   printf '%s' "$f"
 }
@@ -510,11 +644,15 @@ step4() {
   else
     warn "subscription $SUB does not exist"
     why "--expiration-period=never matters: by default an idle subscription is deleted after 31 days."
+    why "The retry delays match the Terraform template, so a refused message is redelivered the same way on both paths."
     run gcloud pubsub subscriptions create "$SUB" --topic="$TOPIC" --project="$LOG_PROJECT" \
-      --ack-deadline=60 --message-retention-duration="${RETENTION_DAYS}d" --expiration-period=never && { pass "subscription created"; SUB_CREATED=1; save; }
+      --ack-deadline=60 --message-retention-duration="${RETENTION_DAYS}d" --expiration-period=never \
+      --min-retry-delay=10s --max-retry-delay=600s && { pass "subscription created"; SUB_CREATED=1; save; }
   fi
 
   local sf; sf=$(scope_flag); local want; want=$(filter)
+  [[ "$DATA_ACCESS" == yes ]] && all_services_read_unconfirmed && \
+    warn "these answers ask for DATA_READ on allServices, which was never confirmed, so this filter routes no Data Access logs for it. Step 6 asks: $(again --step 6)"
   local dest="pubsub.googleapis.com/projects/$LOG_PROJECT/topics/$TOPIC"
   # A sink already sending to this topic under another name is adopted, never duplicated:
   # two sinks to one topic deliver every event twice.
@@ -523,26 +661,63 @@ step4() {
     [[ -n "$other" ]] && { say "  found sink $other already sending to $TOPIC; using it"; SINK="$other"; SINK_CREATED_AT=0; save; }
   fi
   if gcloud logging sinks describe "$SINK" "$sf" >/dev/null 2>&1; then
-    local d f ic; d=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(destination)'); f=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(filter)')
+    local d f ic desc ex; d=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(destination)')
     ic=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(includeChildren)')
     [[ "$d" == "$dest" ]] && pass "sink $SINK sends to $TOPIC" || bad "sink $SINK sends to $d, not $dest"
     if [[ "$SCOPE" != project ]]; then
       [[ "$ic" == True ]] && pass "sink covers every project under the $SCOPE (includeChildren)" \
         || bad "sink $SINK does not include child projects: logs from projects under the $SCOPE never reach Abstract. Recreate it with --include-children (or set include_children in Terraform)."
     fi
-    # Only ever ADD what is missing. An existing sink may route more (firewall, DNS…); that is kept.
-    local missing_clauses; missing_clauses=$(python3 - "$f" "$want" <<'PY'
-import re, sys
-have, want = sys.argv[1], sys.argv[2]
-parts = [p.strip() for p in re.split(r"\s+OR\s+(?![^()]*\))", want) if p.strip()]
-norm = lambda x: re.sub(r"\s+", " ", x)
-print(" OR ".join(p for p in parts if norm(p) not in norm(have)))
-PY
-)
-    if [[ -z "$missing_clauses" ]]; then pass "sink filter routes everything these answers need"
-    else warn "the sink does not yet route: $missing_clauses"
-         why "Its existing filter is kept; only the missing part is added. If Terraform manages this sink, add it there and answer no."
-         run gcloud logging sinks update "$SINK" "$sf" --log-filter="($f) OR $missing_clauses" && pass "sink filter extended"; fi
+    # An exclusion drops matching entries even when the filter routes them.
+    if ex=$(gcloud logging sinks describe "$SINK" "$sf" --format='json(exclusions)' 2>/dev/null); then
+      ex=$(python3 -c 'import json,sys
+d=json.loads(sys.stdin.read() or "null") or {}   # no exclusions: Google prints null
+print(" ".join(e.get("name","?") for e in d.get("exclusions",[]) if not e.get("disabled")))' <<<"$ex" 2>/dev/null) \
+        || ex="(unreadable)"
+      [[ -n "$ex" ]] && warn "sink $SINK has exclusions that drop entries before they reach Abstract: $ex. Check none of them matches audit logs: gcloud logging sinks describe $SINK $sf"
+    else warn "could not read the exclusions on sink $SINK; check them: gcloud logging sinks describe $SINK $sf"; fi
+    # A filter that could not be read is not an empty filter: empty would mean "routes everything".
+    local ferr; ferr=$(mktemp)
+    if ! f=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(filter)' 2>"$ferr"); then
+      bad "could not read the filter of sink $SINK ($(grep -v '^[[:space:]]*$' "$ferr" | head -n1)); nothing was compared or changed"
+    elif [[ -z "$f" ]]; then
+      # Everything these answers need is routed, but so is every other log at the scope: a warning, not a pass.
+      warn "sink $SINK has no filter: it routes every log entry at the $SCOPE, application and network logs too, not only the audit logs these answers need. Abstract's managed GCP parser keeps only Cloud Audit Log records, so the rest is pulled and discarded."
+      why "Narrow it by replacing its filter with this step's, not by adding to it. This step never removes what a"
+      why "sink routes, so it does not make that change; if Terraform manages this sink, set its log_categories instead."
+      say "   replace its filter with: $want"
+    else
+      # Only ever ADD what is missing, clause by clause (sink_routes.py). An existing sink may route more
+      # (firewall, DNS…); that is kept, and named: Abstract's managed parser discards what is not an audit log.
+      local other_logs; other_logs=$(python3 "$HERE/sink_routes.py" --non-audit "$f" 2>/dev/null)
+      [[ -n "$other_logs" ]] && warn "sink $SINK also routes logs that are not Cloud Audit Logs: $other_logs. Abstract's managed GCP parser keeps only Cloud Audit Log records, so these are pulled and discarded. This step never removes a clause: take them out of the sink (its tfvars, if Terraform manages it) and collect them with templates/gcp/gcp-source-network-threat-logs."
+      local missing_clauses; missing_clauses=$(python3 "$HERE/sink_routes.py" --missing "$f" "$want") || missing_clauses="?"
+      desc=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(description)' 2>/dev/null)
+      # A sink Terraform built before the managed-by marker existed has no marker, but its filter carries the
+      # module's "\n  OR " join, or it has the template's default name and this setup did not create it.
+      local maybe_tf=false
+      [[ "$f" == *$'\n  OR '* ]] && maybe_tf=true
+      [[ "$SINK" == abstract-org-audit-sink && "${SINK_CREATED_AT:-0}" == 0 ]] && maybe_tf=true
+      if [[ "$missing_clauses" == "?" ]]; then bad "could not compare the filter of sink $SINK with what these answers need"
+      elif [[ -z "$missing_clauses" ]]; then pass "sink filter routes everything these answers need"
+      elif [[ "$desc" == *"managed-by: abstract-cloud-templates (terraform)"* ]]; then
+        # The next terraform apply would undo a change made here, silently.
+        warn "the sink does not yet route: $missing_clauses"
+        say "   This sink is managed by Terraform (its description says so): change its tfvars and apply, not the sink:"
+        python3 "$HERE/sink_routes.py" --tfvars "$f" "$want" | sed 's/^/     /'
+      else
+        warn "the sink does not yet route: $missing_clauses"
+        if $maybe_tf; then
+          say "   This sink may be managed by Terraform (the template's filter layout or default name, and this setup did not"
+          say "   create it). If it is, change its tfvars and apply instead, and answer no below: the next apply would undo"
+          say "   an update made here. One apply also adds the managed-by marker to its description, so this is not asked again:"
+          python3 "$HERE/sink_routes.py" --tfvars "$f" "$want" | sed 's/^/     /'
+        fi
+        why "Its existing filter is kept; only the missing part is added. If Terraform manages this sink, add it there and answer no."
+        run gcloud logging sinks update "$SINK" "$sf" --log-filter="($f) OR $missing_clauses" && pass "sink filter extended"
+      fi
+    fi
+    rm -f "$ferr"
   else
     warn "sink $SINK does not exist at the $SCOPE"
     existing_audit_sinks "$sf" "$dest"
@@ -574,34 +749,143 @@ step5() {
   else warn "service account $email does not exist"
        run gcloud iam service-accounts create "$SA" --project="$LOG_PROJECT" --display-name="Abstract Security log reader" && { pass "service account created"; SA_CREATED=1; save; }; fi
 
-  if gcloud pubsub subscriptions get-iam-policy "$SUB" --project="$LOG_PROJECT" --format=json 2>/dev/null | grep -q "serviceAccount:$email"; then
-    pass "it can read $SUB (roles/pubsub.subscriber on the subscription)"
+  # Least privilege: roles/pubsub.subscriber on the one subscription, and nothing else it can be checked for.
+  local pol roles
+  if ! pol=$(gcloud pubsub subscriptions get-iam-policy "$SUB" --project="$LOG_PROJECT" --format=json 2>&1) \
+     || ! roles=$(member_roles "serviceAccount:$email" <<<"$pol"); then
+    warn "could not read the access policy of $SUB ($(first_line "$pol")); whether $email can read it was not checked"
+  elif [[ "$roles" == roles/pubsub.subscriber ]]; then
+    pass "it can read $SUB (roles/pubsub.subscriber on the subscription, and no other role there)"
   else
-    bad "it cannot read $SUB yet"
-    run gcloud pubsub subscriptions add-iam-policy-binding "$SUB" --project="$LOG_PROJECT" --member="serviceAccount:$email" --role=roles/pubsub.subscriber >/dev/null && pass "subscriber granted"
+    if [[ " $roles " == *" roles/pubsub.subscriber "* ]]; then pass "it can read $SUB (roles/pubsub.subscriber on the subscription)"
+    else
+      bad "it cannot read $SUB yet"
+      run gcloud pubsub subscriptions add-iam-policy-binding "$SUB" --project="$LOG_PROJECT" --member="serviceAccount:$email" --role=roles/pubsub.subscriber >/dev/null && pass "subscriber granted"
+    fi
+    local extra; extra=$(tr ' ' '\n' <<<"$roles" | grep -vx 'roles/pubsub.subscriber' | grep . | paste -sd' ' -)
+    [[ -n "$extra" ]] && warn "$email also holds $extra on $SUB. It needs only roles/pubsub.subscriber; remove the others."
+  fi
+  # A grant on the topic (publisher above all) would let the Abstract credential write events into the feed.
+  if ! pol=$(gcloud pubsub topics get-iam-policy "$TOPIC" --project="$LOG_PROJECT" --format=json 2>&1) \
+     || ! roles=$(member_roles "serviceAccount:$email" <<<"$pol"); then
+    warn "could not read the access policy of the topic $TOPIC ($(first_line "$pol")); grants there were not checked"
+  elif [[ -n "$roles" ]]; then
+    warn "$email holds ${roles// /, } on the topic $TOPIC. It needs none there; remove it."
   fi
   # Anything broader than that one subscription is a finding, not a convenience.
-  if gcloud projects get-iam-policy "$LOG_PROJECT" --flatten='bindings[].members' --filter="bindings.members:serviceAccount:$email" --format='value(bindings.role)' 2>/dev/null | grep -q .; then
-    warn "$email also holds project-wide roles on $LOG_PROJECT. It needs none; remove them."
-  else pass "no project-wide roles (least privilege)"; fi
+  local proj
+  if ! proj=$(gcloud projects get-iam-policy "$LOG_PROJECT" --flatten='bindings[].members' --filter="bindings.members:serviceAccount:$email" --format='value(bindings.role)' 2>&1); then
+    warn "could not read the IAM policy of project $LOG_PROJECT (${proj%%$'\n'*}); project-wide roles were not checked"
+  elif grep -q . <<<"$proj"; then
+    warn "$email also holds project-wide roles on $LOG_PROJECT ($(paste -sd' ' - <<<"$proj")). It needs none; remove them."
+  else pass "no roles granted directly on project $LOG_PROJECT (roles inherited from a folder or the organization are not checked here)"; fi
 
-  local n; n=$(gcloud iam service-accounts keys list --iam-account="$email" --managed-by=user --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')
-  if [[ -f "$KEY_FILE" ]]; then pass "key file ready to upload: $KEY_FILE"
-  elif [[ "${n:-0}" -gt 0 ]]; then pass "$n key(s) already exist; Abstract uses the one you uploaded. Make another only if it was lost."
-    ! $CHECK_ONLY && yes_no "Create a new key anyway?" && make_key "$email" "$KEY_FILE"
-  else warn "no key yet. Abstract needs one to sign in."; ! $CHECK_ONLY && make_key "$email" "$KEY_FILE"; fi
+  # The key. A file for another account (an earlier logging project, a start-over) would sign Abstract in as
+  # an account with no grant on this subscription, so the feed would never start.
+  if [[ -f "$KEY_FILE" ]] && key_for "$KEY_FILE" "$email"; then pass "key file ready to upload: $KEY_FILE"
+  elif [[ -f "$KEY_FILE" ]]; then
+    if $CHECK_ONLY; then bad "key file $KEY_FILE belongs to $(key_field "$KEY_FILE" client_email || echo 'an unreadable account'), not $email. Run --step 5 to replace it."
+    else
+      local aside rv; aside="$KEY_FILE.other-$(date +%Y%m%d%H%M%S)"; rv=$(revoke_hint "$KEY_FILE") || rv=""
+      warn "key file $KEY_FILE belongs to $(key_field "$KEY_FILE" client_email || echo 'an unreadable account'), not $email. Moving it to $aside (delete it once you know nothing uses it) and making a key for $email."
+      [[ -n "$rv" ]] && why "Its key stays valid in Google after the file is deleted. Once you know nothing uses it: $rv"
+      mv "$KEY_FILE" "$aside" && make_key "$email" "$KEY_FILE" KEY_ID
+    fi
+  else
+    local ids n
+    if ! ids=$(gcloud iam service-accounts keys list --iam-account="$email" --managed-by=user --format='value(name.basename())' 2>&1); then
+      warn "could not list the keys of $email (${ids%%$'\n'*}). No key was made: run this step again."
+      return
+    fi
+    n=$(grep -c . <<<"$ids")
+    if (( n > 1 )); then
+      warn "$n keys exist for $email. Abstract needs one; every other key is one more credential to the subscription. Step 10 shows ${KEY_ID:+which one ($KEY_ID) was made for Abstract and }the ones you can delete."
+    elif (( n == 1 )); then pass "1 key already exists; Abstract uses the one you uploaded. Make another only if it was lost."; fi
+    if (( n > 0 )); then ! $CHECK_ONLY && yes_no "Create a new key anyway?" && make_key "$email" "$KEY_FILE" KEY_ID
+    else warn "no key yet. Abstract needs one to sign in."; ! $CHECK_ONLY && make_key "$email" "$KEY_FILE" KEY_ID; fi
+  fi
 }
 
-make_key() {
+first_line() { local l="${1%%$'\n'*}"; printf '%s' "${l:-an empty or unreadable reply}"; }
+# member_roles <member>: the roles a policy (JSON on stdin) grants that member directly; status 1 if unreadable.
+member_roles() {
+  python3 -c 'import json, sys
+d = json.loads(sys.stdin.read())
+print(" ".join(sorted({b["role"] for b in d.get("bindings", []) if sys.argv[1] in b.get("members", [])})))' "$1" 2>/dev/null
+}
+# key_field <file> <field>: one field of a key file, never the private key itself.
+key_field() { python3 -c 'import json, sys
+v = json.load(open(sys.argv[1])).get(sys.argv[2], "")
+print(v) if v else sys.exit(1)' "$1" "$2" 2>/dev/null; }
+# Key files steps 5 and 7 moved aside (they belonged to another account): still live private keys until deleted.
+aside_keys() { local f; for f in "$KEY_FILE".other-* "$WS_KEY_FILE".other-*; do [[ -f "$f" ]] && printf '%s\n' "$f"; done; }
+key_for() { [[ "$(key_field "$1" client_email)" == "$2" ]]; }   # key_for <file> <service-account email>
+# revoke_hint <key file>: the command that deletes, in Google, the key a file holds. Deleting the file leaves
+# the key valid, and the file is the only record of which key it was, so this is read before it goes.
+revoke_hint() {
+  local id email; id=$(key_field "$1" private_key_id) && email=$(key_field "$1" client_email) || return 1
+  printf 'gcloud iam service-accounts keys delete %s --iam-account=%s' "$id" "$email"
+}
+
+make_key() {  # make_key <service-account email> <file> <variable that records its id>
   why "The key is written to a file only you can read. Upload it to Abstract, then delete it."
   mkdir -p "$KEY_DIR" && chmod 700 "$KEY_DIR"
-  run gcloud iam service-accounts keys create "$2" --iam-account="$1" && { chmod 600 "$2"; pass "key written to $2 (not printed)"; }
+  if run gcloud iam service-accounts keys create "$2" --iam-account="$1"; then
+    chmod 600 "$2"
+    # The key id is not a secret (Google lists it); recording it is what lets step 10 tell keys apart.
+    local id; id=$(key_field "$2" private_key_id) || id=""
+    printf -v "$3" '%s' "$id"; save
+    pass "key written to $2 (not printed)${id:+; its id is $id}"
+    offer_download "$2" "the key"
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-audit_config_json() {  # the current auditConfigs at the scope, as JSON
-  curl -s -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" -d '{}' "$(scope_url):getIamPolicy" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({"etag":d.get("etag"),"auditConfigs":d.get("auditConfigs",[])}))'
+audit_config_json() {  # the current auditConfigs at the scope, as JSON; on failure, why, and status 1
+  [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { printf 'no scope chosen'; return 1; }
+  local body; body=$(curl -s -w '\n%{http_code}' -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" \
+    -d '{}' "$(scope_url):getIamPolicy") || { printf 'the request did not complete'; return 1; }
+  # An error, an empty body or a policy with no etag is never read as "no audit settings": a write built on
+  # it would replace every audit config at the scope, unguarded by an etag.
+  python3 -c 'import json, sys
+code, raw = sys.argv[1], sys.stdin.read()
+try: d = json.loads(raw)
+except Exception: print(f"HTTP {code}, " + ("an empty reply" if not raw.strip() else "a reply that is not JSON")); sys.exit(1)
+if not isinstance(d, dict) or "error" in d or code != "200" or not d.get("etag"):
+    e = d.get("error", {}) if isinstance(d, dict) else {}
+    print(f"HTTP {code}: " + ((e.get("message") if isinstance(e, dict) else str(e)) or "no etag in the reply")); sys.exit(1)
+print(json.dumps({"etag": d["etag"], "auditConfigs": d.get("auditConfigs", [])}))' "${body##*$'\n'}" <<<"${body%$'\n'*}"
+}
+
+# allServices with DATA_READ logs every read of every service at the scope, and step 4 routes an unrestricted
+# Data Access clause for it, so all of it goes to Pub/Sub and Abstract. The Terraform module refuses it without
+# acknowledge_data_read; here it needs a yes of its own, recorded as DA_ALL_READ_ACK=1, before step 4 routes it
+# or step 6 turns it on. Returns 0 when there is nothing to confirm, or it was confirmed (now or before).
+ack_all_services_read() {
+  all_services_read_unconfirmed || return 0
+  warn "DATA_READ on allServices records every read of every service across the $SCOPE $SCOPE_ID (BigQuery queries,"
+  why "Cloud Storage object reads, and the rest), and the sink routes all of it to Pub/Sub and Abstract. On a busy"
+  why "estate that moves total volume, and the Pub/Sub and Abstract cost, by one to two orders of magnitude."
+  why "Name the services instead, or say yes knowingly."
+  if yes_no "Log and route DATA_READ for every service across the $SCOPE, with that volume and cost?"; then
+    DA_ALL_READ_ACK=1; return 0
+  fi
+  say "  switch 1 not changed, and switch 2 not changed either: DATA_READ on allServices was not confirmed"
+  return 1
+}
+
+# The services and log types step 6 turns on. A no to allServices + DATA_READ asks again at once, offering the
+# default services, so a declined answer is never saved and the next run never meets it again.
+ask_data_access_services() {
+  DA_ALL_READ_ACK=0
+  while :; do
+    DA_SERVICES=$(csv "$(ask "Services (comma-separated)" "$DA_SERVICES" valid_services)")
+    DA_TYPES=$(csv "$(ask "Log types (ADMIN_READ, DATA_WRITE, DATA_READ)" "$DA_TYPES" valid_log_types)")
+    ack_all_services_read && break
+    say "  Name the services instead (the default services are offered):"
+    DA_SERVICES="$DA_DEFAULT_SERVICES"; DA_TYPES="$DA_DEFAULT_TYPES"
+  done
+  save
 }
 
 step6() {
@@ -611,20 +895,40 @@ step6() {
   why "are OFF until you turn them on. It takes TWO switches:"
   why "  switch 1 — generate them: the audit config at the ${SCOPE:-chosen scope}"
   why "  switch 2 — route them:    the sink filter (step 4 adds them when this is on)"
-  why "Either alone does nothing, silently. DATA_READ is high volume; it is off by default here."
+  why "For most services either alone does nothing, silently. BigQuery writes its Data Access logs by default,"
+  why "so it needs only the routing switch. DATA_READ is high volume; it is off by default here."
   if [[ "$DATA_ACCESS" != yes ]] && ! $CHECK_ONLY; then
     yes_no "Turn on Data Access logs?" || { say "  skipped — Admin Activity still flows"; return; }
-    DATA_ACCESS=yes
+    DATA_ACCESS=yes; DA_CHANGED=0
     why "iam.googleapis.com records service-account impersonation and token minting; sts.googleapis.com"
     why "records Workload Identity Federation (GitHub Actions, AWS, Azure). Keep both unless you have a reason."
-    DA_SERVICES=$(csv "$(ask "Services (comma-separated)" "$DA_SERVICES" valid_services)")
-    DA_TYPES=$(csv "$(ask "Log types (ADMIN_READ, DATA_WRITE, DATA_READ)" "$DA_TYPES" valid_log_types)")
-    save
+    ask_data_access_services
   fi
   [[ "$DATA_ACCESS" == yes ]] || { say "  off (your choice)"; return; }
+  [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { bad "choose a scope first (step 1)"; return; }
+  # Saved answers (an older file, or a run left at the services prompt) are confirmed here, before switch 1 or
+  # switch 2 is looked at, whether switch 1 is already on or not. A no asks for the services at once.
+  if all_services_read_unconfirmed; then
+    if ! interactive; then
+      warn "these answers ask for DATA_READ on allServices, which was never confirmed: step 4 routes no Data Access logs for it, and this step changes nothing. Confirm it, or name the services: $(again --step 6)"
+      return
+    fi
+    if ack_all_services_read; then save
+    else
+      say "  Name the services instead (the default services are offered):"
+      DA_SERVICES="$DA_DEFAULT_SERVICES"; DA_TYPES="$DA_DEFAULT_TYPES"
+      ask_data_access_services
+    fi
+  fi
 
-  local cur; cur=$(audit_config_json); local switched; switched=$(audit_services "$DA_SERVICES")
-  local missing; missing=$(python3 - "$cur" "$switched" "$DA_TYPES" <<'PY'
+  local cur missing switched; switched=$(audit_services "$DA_SERVICES")
+  if ! cur=$(audit_config_json); then
+    bad "could not read the audit settings at the $SCOPE ($cur). Switch 1 was not checked, and nothing was changed."
+    # Switch 2 decides what leaves Google; with switch 1 unknown, adding a route could start exporting logs
+    # nobody checked (BigQuery's are on by default). Report and stop (PR #55 review).
+    warn "routing was not changed either. Run step 6 again once the audit settings can be read."
+    return
+  elif ! missing=$(python3 - "$cur" "$switched" "$DA_TYPES" <<'PY'
 import json, sys
 cur = json.loads(sys.argv[1]); svcs = sys.argv[2].split(","); types = sys.argv[3].split(",")
 have = {}
@@ -633,18 +937,25 @@ for c in cur.get("auditConfigs", []):
 allsvc = have.get("allServices", set())
 print(" ".join(f"{s}:{t}" for s in svcs for t in types if t not in have.get(s, set()) and t not in allsvc))
 PY
-)
-  if [[ -z "$missing" ]]; then pass "switch 1: Data Access is generated for ${switched//,/, } ($DA_TYPES)"
+); then
+    bad "could not compare the audit settings at the $SCOPE with these answers. Nothing was changed."
+  elif [[ -z "$missing" ]]; then pass "switch 1: Data Access is generated for ${switched//,/, } ($DA_TYPES)"
   else
     bad "switch 1 is off for: $missing"
     why "This changes ONLY the audit settings at the ${SCOPE:-chosen scope} (updateMask=auditConfigs); role bindings are untouched."
     why "A copy of the current settings is saved first."
+    # allServices + DATA_READ was confirmed above, before anything here could act on it.
     if ! $CHECK_ONLY && yes_no "Turn switch 1 on now?"; then
-      local backup; backup="$PWD/abstract-audit-config-backup-$(date +%Y%m%d%H%M%S).json"
-      printf '%s\n' "$cur" > "$backup"; say "  saved current settings to $backup"
-      local body; body=$(python3 - "$cur" "$switched" "$DA_TYPES" <<'PY'
+      # Next to the answers file, not in the current folder: clean-up points at it, so it must be findable.
+      local backup; backup="$(dirname "$STATE")/abstract-audit-config-backup-$(date +%Y%m%d%H%M%S).json"
+      ( umask 077; printf '%s\n' "$cur" > "$backup" ) && say "  saved current settings to $backup"
+      offer_download "$backup" "the copy of the current audit settings"
+      local body
+      if ! body=$(python3 - "$cur" "$switched" "$DA_TYPES" <<'PY'
 import json, sys
 cur = json.loads(sys.argv[1]); svcs = sys.argv[2].split(","); types = sys.argv[3].split(",")
+if not cur.get("etag"):
+    sys.exit(1)                     # never write without the etag: it is what stops a lost update
 cfgs = {c["service"]: c for c in cur.get("auditConfigs", [])}
 for s in svcs:
     c = cfgs.setdefault(s, {"service": s, "auditLogConfigs": []})
@@ -652,9 +963,20 @@ for s in svcs:
     c["auditLogConfigs"] += [{"logType": t} for t in types if t not in have]
 print(json.dumps({"policy": {"etag": cur["etag"], "auditConfigs": list(cfgs.values())}, "updateMask": "auditConfigs"}))
 PY
-)
-      local out; out=$(curl -s -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" -d "$body" "$(scope_url):setIamPolicy")
-      grep -q '"error"' <<<"$out" && bad "Google refused: $(python3 -c 'import json,sys;print(json.load(sys.stdin)["error"]["message"])' <<<"$out")" || pass "switch 1 on"
+); then bad "the audit settings had no etag; nothing was sent"
+      else
+        local out code; out=$(curl -s -w '\n%{http_code}' -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" \
+          -d "$body" "$(scope_url):setIamPolicy"); code=${out##*$'\n'}; out=${out%$'\n'*}
+        # On only when Google answers with the policy it stored; an error or an empty reply is not a yes.
+        if [[ "$code" == 200 ]] && python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if "auditConfigs" in d and "error" not in d else 1)' <<<"$out" 2>/dev/null; then
+          pass "switch 1 on"
+          DA_CHANGED=1; DA_BACKUP="$backup"; DA_ADDED="$missing"; save
+        else
+          bad "Google did not confirm the change (HTTP ${code:-?}: $(python3 -c 'import json,sys
+try: print(json.load(sys.stdin)["error"]["message"])
+except Exception: print("<empty or unreadable reply>")' <<<"$out")). Check with --step 6 --check before trying again; the copy of the settings stays at $backup."
+        fi
+      fi
     fi
   fi
   local sf; sf=$(scope_flag); local routed; routed=$(routed_services "$DA_SERVICES")
@@ -673,9 +995,9 @@ PY
 # ─────────────────────────────────────────────────────────────────────────────
 step7() {
   title 7 "Google Workspace logs (optional)"
-  why "Sign-ins, admin changes and token grants in Google Workspace do NOT go through Cloud"
-  why "Logging. Abstract reads them from the Workspace Reports API with a separate service"
-  why "account that a Workspace SUPER ADMIN allows through domain-wide delegation."
+  why "Abstract reads sign-ins, admin changes and token grants in Google Workspace from the"
+  why "Workspace Reports API, not Cloud Logging, with a separate service account that a"
+  why "Workspace SUPER ADMIN allows through domain-wide delegation."
   why "A Google Cloud Owner cannot do that last part; plan for the super admin."
   if [[ "$WORKSPACE" != yes ]] && ! $CHECK_ONLY; then
     yes_no "Set up Google Workspace logs?" || { say "  skipped"; return; }
@@ -704,12 +1026,21 @@ step7() {
     admin.google.com → Security → Access and data control → API controls
       → Domain-wide delegation → Add new
     Client ID     $cid
-    OAuth scopes  https://www.googleapis.com/auth/admin.reports.audit.readonly,https://www.googleapis.com/auth/admin.reports.usage.readonly
-    (one line, comma-separated, no spaces; both are read-only)
+    OAuth scope   https://www.googleapis.com/auth/admin.reports.audit.readonly
+    (read-only, and the only scope Abstract's Workspace integration requests)
 
 EOF
-  [[ -f "$WS_KEY_FILE" ]] && pass "key file ready: $WS_KEY_FILE" || { ! $CHECK_ONLY && make_key "$email" "$WS_KEY_FILE"; }
-  if [[ -f "$WS_KEY_FILE" && -n "$WS_ADMIN" ]]; then
+  if [[ -f "$WS_KEY_FILE" ]] && key_for "$WS_KEY_FILE" "$email"; then pass "key file ready: $WS_KEY_FILE"
+  elif [[ -f "$WS_KEY_FILE" ]]; then
+    if $CHECK_ONLY; then bad "key file $WS_KEY_FILE belongs to $(key_field "$WS_KEY_FILE" client_email || echo 'an unreadable account'), not $email. Run --step 7 to replace it."
+    else
+      local aside rv; aside="$WS_KEY_FILE.other-$(date +%Y%m%d%H%M%S)"; rv=$(revoke_hint "$WS_KEY_FILE") || rv=""
+      warn "key file $WS_KEY_FILE belongs to $(key_field "$WS_KEY_FILE" client_email || echo 'an unreadable account'), not $email. Moving it to $aside and making a key for $email."
+      [[ -n "$rv" ]] && why "Its key stays valid in Google after the file is deleted. Once you know nothing uses it: $rv"
+      mv "$WS_KEY_FILE" "$aside" && make_key "$email" "$WS_KEY_FILE" WS_KEY_ID
+    fi
+  else ! $CHECK_ONLY && make_key "$email" "$WS_KEY_FILE" WS_KEY_ID; fi
+  if [[ -f "$WS_KEY_FILE" && -n "$WS_ADMIN" ]] && key_for "$WS_KEY_FILE" "$email"; then
     verify_workspace "$WS_KEY_FILE" "$WS_ADMIN"
   fi
 }
@@ -763,12 +1094,23 @@ step8() {
     ALERTS=yes; save
   fi
   [[ "$ALERTS" == yes ]] || { say "  off (your choice)"; return; }
+  # Alerts, and the channel they mail, live in the Monitoring API: turn it on before anything is made there.
+  local apis
+  if ! apis=$(gcloud services list --enabled --project="$LOG_PROJECT" --format='value(config.name)' 2>&1); then
+    warn "could not list the APIs on in $LOG_PROJECT (${apis%%$'\n'*}); the Monitoring API was not checked"
+  elif ! grep -qx monitoring.googleapis.com <<<"$apis"; then
+    warn "the Monitoring API is off in $LOG_PROJECT; alerts need it"
+    $CHECK_ONLY && return
+    run gcloud services enable monitoring.googleapis.com --project="$LOG_PROJECT" && pass "Monitoring API enabled" \
+      || { bad "alerts were not created: the Monitoring API is off"; return; }
+  fi
   # REST, not "gcloud alpha": the alpha component may not be installed, and installing it prompts.
-  local have; have=$(curl -s -H "Authorization: Bearer $(token)" "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/alertPolicies?pageSize=200" \
-    | python3 -c 'import json,sys;print(sum(1 for p in json.load(sys.stdin).get("alertPolicies",[]) if p.get("displayName","").startswith("Abstract log pipeline")))' 2>/dev/null)
+  # A listing that failed is not "no alerts" (mon_list says so and counts it).
+  mon_list alertPolicies "alert policies" || return
+  local before="$MON_NAMES" have; have=$(grep -c . <<<"$before")
   # gcp-monitoring-pipeline-health-alerts makes three policies without a dead-letter topic (this setup uses none).
-  if [[ "${have:-0}" -ge 3 ]]; then pass "$have Abstract alert policies exist"; return; fi
-  [[ "${have:-0}" -gt 0 ]] && warn "only ${have} of 3 alert policies exist" || warn "no Abstract alert policies yet"
+  if (( have >= 3 )); then pass "$have Abstract alert policies exist"; return; fi
+  (( have > 0 )) && warn "only ${have} of 3 alert policies exist" || warn "no Abstract alert policies yet"
   $CHECK_ONLY && return
   need terraform
   while [[ -z "$ALERT_EMAIL" ]]; do
@@ -777,34 +1119,63 @@ step8() {
   done; save
   local dir="$ROOT/templates/gcp/gcp-monitoring-pipeline-health-alerts" ch="[]"
   if [[ -n "$ALERT_EMAIL" ]]; then
-    local body; body=$(python3 -c 'import json,sys;print(json.dumps({"type":"email","displayName":"Abstract log pipeline","labels":{"email_address":sys.argv[1]}}))' "$ALERT_EMAIL")
-    local cname; cname=$(curl -s -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" -d "$body" \
-      "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/notificationChannels" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("name",""))')
-    [[ -n "$cname" ]] || { bad "could not create the email channel for $ALERT_EMAIL; alerts not created, so none are silent. Check that the Monitoring API is on (step 3)."; return; }
-    pass "email channel for $ALERT_EMAIL"; ch="[\"$cname\"]"; ALERT_CHANNELS="$cname"; save
+    # One channel per address: a retry reuses the channel an earlier attempt made, never adds another.
+    local cname="" list code
+    list=$(curl -s -w '\n%{http_code}' -H "Authorization: Bearer $(token)" "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/notificationChannels?pageSize=200")
+    code=${list##*$'\n'}
+    [[ "$code" == 200 ]] && cname=$(python3 -c 'import json, sys
+for c in json.loads(sys.argv[1]).get("notificationChannels", []):
+    if c.get("type") == "email" and c.get("displayName", "").startswith("Abstract log pipeline") \
+       and c.get("labels", {}).get("email_address", "").lower() == sys.argv[2].lower():
+        print(c["name"]); break' "${list%$'\n'*}" "$ALERT_EMAIL" 2>/dev/null)
+    if [[ -n "$cname" ]]; then pass "email channel for $ALERT_EMAIL already exists ($cname); using it"
+    else
+      local body; body=$(python3 -c 'import json,sys;print(json.dumps({"type":"email","displayName":"Abstract log pipeline","labels":{"email_address":sys.argv[1]}}))' "$ALERT_EMAIL")
+      cname=$(curl -s -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" -d "$body" \
+        "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/notificationChannels" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("name",""))' 2>/dev/null)
+      [[ -n "$cname" ]] || { bad "could not create the email channel for $ALERT_EMAIL; alerts not created, so none are silent."; return; }
+      pass "email channel for $ALERT_EMAIL"
+      # Added to what earlier attempts recorded, never in place of it: clean-up removes exactly these.
+      ALERT_CHANNELS=$(printf '%s\n' $ALERT_CHANNELS "$cname" | grep . | sort -u | paste -sd' ' -); save
+    fi
+    ch="[\"$cname\"]"
   fi
   python3 -c 'import json,sys;print(json.dumps({"log_project":sys.argv[1],"topic_id":sys.argv[2],"subscription_id":sys.argv[3],"notification_channels":json.loads(sys.argv[4]),"acknowledge_no_channel":sys.argv[4]=="[]"}, indent=2))' \
     "$LOG_PROJECT" "$TOPIC" "$SUB" "$ch" > "$dir/abstract.auto.tfvars.json"
   terraform -chdir="$dir" init -input=false >/dev/null || { bad "terraform init failed in $dir"; return; }
   terraform -chdir="$dir" plan -input=false -out=abstract.tfplan || { bad "terraform plan failed"; return; }
   # The plan above is the preview; approving it here is the only confirmation.
-  local before ok=0; before=$(alert_policy_names)
+  local ok=0
   run terraform -chdir="$dir" apply -input=false abstract.tfplan && ok=1
   # Record what this apply added, even when it failed part-way, and keep what earlier attempts
-  # recorded: clean-up removes exactly these and never someone else's.
-  local added; added=$(comm -13 <(printf '%s\n' "$before" | sort) <(alert_policy_names | sort))
-  ALERT_POLICIES=$(printf '%s\n' $ALERT_POLICIES $added | sort -u | tr '\n' ' '); save
+  # recorded: clean-up removes exactly these and never someone else's. A listing that failed records nothing.
+  if mon_list alertPolicies "alert policies"; then
+    local added; added=$(comm -13 <(printf '%s\n' "$before" | sort) <(printf '%s\n' "$MON_NAMES" | sort))
+    ALERT_POLICIES=$(printf '%s\n' $ALERT_POLICIES $added | grep . | sort -u | paste -sd' ' -); save
+  else warn "the alerts this apply made were not recorded; clean-up will list them as not made here"; fi
   (( ok )) && pass "alerts created" || bad "terraform apply failed; the alerts it did create are recorded for clean-up"
 }
 
-# Where the probe must be written: somewhere the sink can see, with an API that is on.
+# Where the probe must be written: somewhere the sink can see, with an API that is on. The logging project
+# when it sits under the scope, otherwise any active project under it, however deeply nested.
 probe_project() {
   case "$SCOPE" in
     project) echo "$SCOPE_ID" ;;
-    organization) echo "$LOG_PROJECT" ;;
-    folder) if gcloud projects get-ancestors "$LOG_PROJECT" --format='value(id)' 2>/dev/null | grep -qx "$SCOPE_ID"; then echo "$LOG_PROJECT"
-            else gcloud projects list --filter="parent.type=folder AND parent.id=$SCOPE_ID" --format='value(projectId)' --limit=1 2>/dev/null; fi ;;
+    organization|folder)
+      if gcloud projects get-ancestors "$LOG_PROJECT" --format='value(id)' 2>/dev/null | grep -qx "$SCOPE_ID"; then echo "$LOG_PROJECT"
+      else project_under "$SCOPE" "$SCOPE_ID"; fi ;;
   esac
+}
+# project_under <organization|folder> <id>: the first active project found walking down the folders,
+# breadth first, at most 30 containers looked at.
+project_under() {
+  local -a queue=("$1:$2"); local i=0 t id p f
+  while (( i < ${#queue[@]} && i < 30 )); do
+    t=${queue[$i]%%:*}; id=${queue[$i]#*:}; i=$((i + 1))
+    p=$(gcloud projects list --filter="parent.type=$t AND parent.id=$id AND lifecycleState:ACTIVE" --format='value(projectId)' --limit=1 2>/dev/null)
+    [[ -n "$p" ]] && { echo "$p"; return; }
+    for f in $(gcloud resource-manager folders list "--$t=$id" --format='value(ID)' 2>/dev/null); do queue+=("folder:$f"); done
+  done
 }
 
 step9() {
@@ -818,7 +1189,7 @@ step9() {
     return
   fi
   local pp; pp=$(probe_project)
-  [[ -n "$pp" ]] || { bad "found no project inside folder $SCOPE_ID to write the test event in"; return; }
+  [[ -n "$pp" ]] || { bad "found no active project under the $SCOPE $SCOPE_ID to write the test event in"; return; }
   yes_no "Send a test event from $pp now?" || return
   local age=$(( $(date +%s) - ${SINK_CREATED_AT:-0} ))
   if (( SINK_CREATED_AT > 0 && age < 240 )); then
@@ -852,36 +1223,83 @@ step9() {
   fi
   send_probe || { gcloud pubsub subscriptions delete "$probe_sub" --project="$LOG_PROJECT" --quiet >/dev/null 2>&1; return; }
   say "  watching the probe subscription $probe_sub (on $TOPIC) for up to 5 minutes…"
+  # The probe subscription sees the whole stream at the scope, so each round drains it, up to 1,000 messages a
+  # pull, until a pull returns nothing or the deadline passes. --limit is only an upper bound: Pub/Sub may
+  # return fewer while a backlog remains, so a short batch is not the end of it.
+  local end=$(( $(date +%s) + 330 )) seen raw pull_err="" errfile; errfile=$(mktemp)
   for i in $(seq 1 20); do
     sleep 15
-    # Only this script reads the probe subscription, so acknowledging there is safe.
-    got=$(gcloud pubsub subscriptions pull "$probe_sub" --project="$LOG_PROJECT" --limit=50 --auto-ack --format=json 2>/dev/null | python3 -c '
+    while :; do
+      # Only this script reads the probe subscription, so acknowledging there is safe. A pull that fails, or
+      # whose answer cannot be read, is not "nothing yet": it is remembered and reported (PR #55 review).
+      if ! raw=$(gcloud pubsub subscriptions pull "$probe_sub" --project="$LOG_PROJECT" --limit=1000 --auto-ack --format=json 2>"$errfile"); then
+        [[ "$pull_err" == *"could not be read"* ]] || { pull_err=$(grep -v '^[[:space:]]*$' "$errfile" | head -n1); pull_err="${pull_err:-the pull failed with no message}"; }
+        break
+      fi
+      # A failed pull acknowledges nothing, so a later pull that works clears it. An unreadable answer is kept:
+      # with --auto-ack it may have taken the test event with it.
+      [[ "$pull_err" == *"could not be read"* ]] || pull_err=""
+      seen=$(printf '%s' "$raw" | python3 -c '
 import base64, json, sys
-for m in json.load(sys.stdin) or []:
+raw = sys.stdin.read().strip()
+try: msgs = json.loads(raw) if raw else []
+except Exception: print("UNREADABLE"); sys.exit()
+if not isinstance(msgs, list): print("UNREADABLE"); sys.exit()
+for m in msgs:
     d = m.get("message", {}).get("data", "")
     try: d = base64.b64decode(d).decode("utf-8", "replace")
     except Exception: pass
-    if sys.argv[1] in d: print(sys.argv[1]); break' "$probe")
+    if sys.argv[1] in d: print("FOUND"); sys.exit()
+print(len(msgs))' "$probe")
+      [[ "$seen" == FOUND ]] && { got=1; break; }
+      [[ "$seen" == UNREADABLE ]] && { pull_err="a pull returned an answer that could not be read"; break; }
+      (( ${seen:-0} == 0 )) && break
+      (( $(date +%s) >= end )) && break
+    done
     [[ -n "$got" ]] && break
+    (( $(date +%s) >= end )) && break
     # One more event half way, in case the first was written before routing began.
     [[ $i -eq 10 ]] && { echo; send_probe || true; }
     printf '.'
   done; echo
   gcloud pubsub subscriptions delete "$probe_sub" --project="$LOG_PROJECT" --quiet >/dev/null 2>&1 \
     || warn "could not delete the probe subscription $probe_sub; it expires by itself after 1 day"
-  [[ -n "$got" ]] && pass "the test event arrived on $TOPIC — the pipeline works end to end" \
-    || bad "no test event after 5 minutes. Check sink errors: gcloud logging read 'logName:\"logging.googleapis.com%2Fsink_error\"' --project=$LOG_PROJECT --limit=5"
+  rm -f "$errfile"
+  if [[ -z "$got" && -n "$pull_err" ]]; then
+    bad "could not read the probe subscription $probe_sub ($pull_err), so this test says nothing either way about routing."
+    why "Check you can pull in $LOG_PROJECT (roles/pubsub.subscriber there), then run step 9 again."
+  elif [[ -n "$got" ]]; then
+    pass "the test event arrived on $TOPIC: the sink routes and the topic receives"
+    why "That proves Google's side. Abstract's side is proven in Abstract, once the integration shows events."
+  else
+    bad "no test event seen on $TOPIC in 5 minutes. Either the sink is not routing, or the topic was too busy to reach it."
+    why "Sink errors:  gcloud logging read 'logName:\"logging.googleapis.com%2Fsink_error\"' --project=$LOG_PROJECT --limit=5"
+    why "Backlog: in Monitoring, the subscription metric oldest_unacked_message_age for $SUB; a growing age means events arrive and are not read."
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 step10() {
   title 10 "Connect Abstract"
-  cat <<EOF
+  # The Workspace tutorial runs steps 1, 3, 7 and 10 only: with no subscription, there is no Pub/Sub
+  # integration to add and no key of its own to hand over.
+  # Only Google's NOT_FOUND means there is no subscription. Any other failure (no pubsub.subscriptions.get, a
+  # network error) says nothing about it: warn, and still name the Pub/Sub Source, never report it absent.
+  local pipeline=false sub_err=""
+  if [[ "${SUB_CREATED:-0}" == 1 || -n "$KEY_ID" || -f "$KEY_FILE" ]]; then pipeline=true
+  elif sub_err=$(gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT" 2>&1 >/dev/null); then pipeline=true
+  elif ! grep -q 'NOT_FOUND' <<<"$sub_err"; then
+    pipeline=true
+    warn "could not check whether subscription $SUB exists in $LOG_PROJECT ($(grep -v '^[[:space:]]*$' <<<"$sub_err" | head -n1)). If steps 4 and 5 (or the Terraform templates) made it, add the Pub/Sub Source below."
+  fi
+  if $pipeline; then cat <<EOF
   In Abstract, add the ${B}GCP Pub/Sub Source${O} integration:
     Project ID        ${B}$LOG_PROJECT${O}     ← the project with the SUBSCRIPTION, not the ones sending logs
     Subscription ID   ${B}$SUB${O}      ← the short name only
     Credentials       ${B}$(basename "$KEY_FILE")${O}      ← the key file, downloaded below
 EOF
+  else say "  There is no Pub/Sub pipeline in this setup (subscription $SUB was not found in $LOG_PROJECT; script steps 4 and 5 make it), so there is no GCP Pub/Sub Source to add."
+  fi
   [[ "$WORKSPACE" == yes ]] && cat <<EOF
 
   In Abstract, add the ${B}Google Workspace Audit Log Integration${O}:
@@ -890,41 +1308,85 @@ EOF
     Application Name  every application is selected by default. To start small, keep
                       Login, Admin, Token, SAML, User Accounts and Groups.
 EOF
-  # The keys exist only in this Cloud Shell session, which is temporary. Whoever fills in the
-  # Abstract form needs them on their own computer: download, upload to Abstract, delete everywhere.
-  local keys=("$KEY_FILE") f; [[ "$WORKSPACE" == yes ]] && keys+=("$WS_KEY_FILE")
+  # Whoever fills in the Abstract form needs the key on their own computer: upload it, then delete every copy.
+  # In Cloud Shell that means downloading it first: a session opened from a link is deleted when it ends.
+  local keys=() f; $pipeline && keys+=("$KEY_FILE"); [[ "$WORKSPACE" == yes ]] && keys+=("$WS_KEY_FILE")
   say ""
-  say "  ${B}Download the key files.${O} They exist only in this Cloud Shell session, which is temporary:"
-  local acct n
-  for f in "${keys[@]}"; do
-    if [[ -f "$f" ]]; then say "    cloudshell download $f"; continue; fi
+  if (( ${#keys[@]} == 0 )); then :     # nothing to upload: no heading over an empty list
+  elif [[ "${CLOUD_SHELL:-}" == true ]]; then
+    say "  ${B}Download the key files.${O} A Cloud Shell session opened from a link is temporary, and its files go with it:"
+  else say "  ${B}The key files${O} (upload them to Abstract from here):"; fi
+  local acct ids n rec step id t others
+  for f in ${keys[@]+"${keys[@]}"}; do
+    if [[ "$f" == "$WS_KEY_FILE" ]]; then acct="$WS_SA@$LOG_PROJECT.iam.gserviceaccount.com"; rec="$WS_KEY_ID"; step=7
+    else acct="$SA@$LOG_PROJECT.iam.gserviceaccount.com"; rec="$KEY_ID"; step=5; fi
+    if [[ -f "$f" ]]; then
+      if ! key_for "$f" "$acct"; then
+        bad "$f belongs to $(key_field "$f" client_email || echo 'an unreadable account'), not $acct: Abstract would have no access with it. Do not upload it; $(again --step $step) makes the right one."
+      elif [[ "${CLOUD_SHELL:-}" == true ]]; then say "    cloudshell download $f"
+      else say "    $f"; fi
+      continue
+    fi
     # No file is normal after the upload: the guide says to delete it. Only a missing key is a problem.
-    if [[ "$f" == "$WS_KEY_FILE" ]]; then acct="$WS_SA@$LOG_PROJECT.iam.gserviceaccount.com"; else acct="$SA@$LOG_PROJECT.iam.gserviceaccount.com"; fi
-    local step; step=$([[ "$f" == "$WS_KEY_FILE" ]] && echo 7 || echo 5)
-    local ids; ids=$(gcloud iam service-accounts keys list --iam-account="$acct" --managed-by=user --format='value(name.basename())' 2>/dev/null)
+    if ! ids=$(gcloud iam service-accounts keys list --iam-account="$acct" --managed-by=user --format='value(name.basename(),validAfterTime)' 2>&1); then
+      warn "could not list the keys of $acct (${ids%%$'\n'*}); which keys exist was not checked"; continue
+    fi
     n=$(grep -c . <<<"$ids")
-    if [[ "${n:-0}" -gt 0 ]]; then
-      say "    $(basename "$f") is no longer in Cloud Shell, and $acct has $n key(s). If Abstract already has it, nothing to do."
-      # Google keeps only the public half of a key, so a file lost before the upload cannot be
-      # downloaded again. The way on is a new key, then deleting the one nobody holds.
-      say "    Lost it before Abstract had it? Make a new one: $0 --step $step (answer y to a new key)."
-      say "    Then delete the lost one, once the new key is in Abstract:"
-      local id; for id in $ids; do say "      gcloud iam service-accounts keys delete $id --iam-account=$acct"; done
+    if (( n == 0 )); then warn "no key for $acct, here or in Google Cloud. Step $step makes one: run it again."; continue; fi
+    say "    $(basename "$f") is no longer here, and $acct has $n key(s):"
+    others=""
+    while IFS=$'\t' read -r id t; do
+      [[ -n "$id" ]] || continue
+      if [[ -n "$rec" && "$id" == "$rec" ]]; then say "      $id  created ${t:-?}   <- made by this setup for Abstract: keep it"
+      else say "      $id  created ${t:-?}"; others+=" $id"; fi
+    done <<<"$ids"
+    say "    If Abstract already has it, nothing to do."
+    # Google keeps only the public half of a key, so a file lost before the upload cannot be downloaded
+    # again. The way on is a new key, then deleting the one nobody holds.
+    say "    Lost it before Abstract had it? Make a new one: $(again --step $step) (answer y to a new key)."
+    if [[ -n "$rec" ]] && grep -q "^${rec}[[:space:]]" <<<"$ids"; then
+      if [[ -n "$others" ]]; then
+        say "    The other keys are not the one recorded for Abstract. Once you know nothing else uses them, delete them:"
+        for id in $others; do say "      gcloud iam service-accounts keys delete $id --iam-account=$acct"; done
+      fi
+    elif [[ -n "$rec" ]]; then
+      warn "the key recorded for Abstract ($rec) is no longer on $acct. Before deleting any key above, match the private_key_id in the file you uploaded to Abstract against these ids."
     else
-      warn "no key for $acct, here or in Google Cloud. Step $step makes one: run it again."
+      say "    This setup has no record of which key Abstract holds (made before keys were recorded, or by hand)."
+      say "    Before deleting any key, match the private_key_id in the file you uploaded to Abstract against these ids."
     fi
   done
   why "If someone else fills in the Abstract form, hand the key over through your password manager or"
-  why "secret-sharing tool, never by email or chat. Anyone holding it can read the subscription."
+  why "secret-sharing tool, never by email or chat."
+  $pipeline && why "Anyone holding $(basename "$KEY_FILE") can read the subscription $SUB."
+  [[ "$WORKSPACE" == yes ]] && why "Anyone holding $(basename "$WS_KEY_FILE") can read your Workspace audit reports as ${WS_ADMIN:-the admin you named}."
   say ""
-  say "  ${B}Download your answers too.${O} The clean-up needs them to know what this setup made:"
-  say "    cloudshell download $STATE"
+  if [[ -n "$DA_BACKUP" ]]; then
+    say ""
+    say "  ${B}Keep the copy of the audit settings step 6 saved${O} (clean-up uses it): $DA_BACKUP"
+    [[ "${CLOUD_SHELL:-}" == true ]] && say "    cloudshell download $DA_BACKUP"
+  fi
   say ""
-  say "  ${B}Once Abstract has saved the integration, delete every copy of the keys:${O}"
-  say "    rm -f$(printf ' %q' "${keys[@]}")"
-  say "    and delete the downloaded copies from your computer."
+  if [[ "${CLOUD_SHELL:-}" == true ]]; then
+    say "  ${B}Download your answers too.${O} The clean-up needs them to know what this setup made:"
+    say "    cloudshell download $STATE"
+  else say "  ${B}Keep your answers file${O}, $STATE: the clean-up needs it to know what this setup made."; fi
+  # It is a hidden file, and the guide calls it <answers-file>: name it, and the exact way to load it again.
+  say "    In another session, put that file back and load it with:  $0 --state $(printf '%q' "$STATE") --check"
   say ""
-  say "  Re-check everything any time:  $0 --check"
+  local -a aside=(); while IFS= read -r f; do aside+=("$f"); done < <(aside_keys)
+  # No key to hand over and none set aside: no clean-up heading, and never an "rm -f ''".
+  if (( ${#keys[@]} + ${#aside[@]} > 0 )); then
+    say "  ${B}Once Abstract has saved the integration, delete every copy of the keys.${O} A key file stays on disk until you delete it:"
+    local rv
+    for f in ${aside[@]+"${aside[@]}"}; do
+      rv=$(revoke_hint "$f") && say "    $f holds a key that stays valid in Google after the file is deleted. Once you know nothing uses it: $rv"
+    done
+    say "    rm -f$(printf ' %q' ${keys[@]+"${keys[@]}"} ${aside[@]+"${aside[@]}"})"
+    say "    and delete any copy you downloaded or handed over."
+    say ""
+  fi
+  say "  Re-check everything any time:  $(again --check)"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -937,36 +1399,35 @@ gone() {  # gone <what> <command...>
     local out; if out=$("$@" 2>&1); then pass "removed $what"
     elif grep -qiE 'NOT_FOUND|not found|does not exist' <<<"$out"; then pass "$what was already gone"
     else bad "could not remove $what: ${out%%$'\n'*}"; fi
-  else printf '  %swould remove%s %s\n%s   $' "$Y" "$O" "$what" "$D"; printf ' %q' "$@"; printf '%s\n' "$O"; fi
+  else WOULD=$((WOULD+1)); printf '  %swould remove%s %s\n%s   $' "$Y" "$O" "$what" "$D"; printf ' %q' "$@"; printf '%s\n' "$O"; fi
 }
+WOULD=0; BYHAND=0   # what a dry run would remove, and what is left for a person: the hints below depend on both
 kept()   { printf '  %skept%s    %s\n' "$G" "$O" "$*"; }
-byhand() { printf '  %sby hand%s %s\n' "$Y" "$O" "$*"; WARNS=$((WARNS+1)); }
-api_names() {  # api_names <url> <collection> <display-name prefix>: names of matching monitoring objects
-  curl -s -H "Authorization: Bearer $(token)" "$1" | python3 -c '
-import json, sys
-for o in json.load(sys.stdin).get(sys.argv[1], []):
-    if o.get("displayName", "").startswith(sys.argv[2]): print(o["name"])' "$2" "$3" 2>/dev/null
-}
+byhand() { printf '  %sby hand%s %s\n' "$Y" "$O" "$*"; WARNS=$((WARNS+1)); BYHAND=$((BYHAND+1)); }
 # Deletes one Monitoring object by name. Defined as a function so a dry run prints its name, never
 # the bearer token the request carries. 404 counts as done, so a retried clean-up can finish.
 mon_delete() {
-  local code; code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $(token)" \
-    "https://monitoring.googleapis.com/v3/$1${2:+?$2}")
-  [[ "$code" == 200 || "$code" == 404 ]]
+  local out code; out=$(curl -s -w '\n%{http_code}' -X DELETE -H "Authorization: Bearer $(token)" \
+    "https://monitoring.googleapis.com/v3/$1${2:+?$2}"); code=${out##*$'\n'}
+  [[ "$code" == 200 || "$code" == 404 ]] && return 0
+  # The reason, for gone() to print. Never the request: it carries the bearer token.
+  printf 'HTTP %s: %s\n' "${code:-?}" "$(python3 -c 'import json, sys
+try: print(json.loads(sys.argv[1])["error"]["message"])
+except Exception: print("no reason given")' "${out%$'\n'*}")"
+  return 1
 }
-alert_policy_names() { api_names "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/alertPolicies?pageSize=200" alertPolicies "Abstract log pipeline"; }
-alert_channel_names() { api_names "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/notificationChannels?pageSize=200" notificationChannels "Abstract log pipeline"; }
 found() { byhand "found, not recorded: $1. Check it is Abstract's, then: $2"; }
 # look <what> <how to remove> <describe command...>: found, absent, or COULD NOT CHECK. A denied or
 # failed lookup is never read as absent; that false zero once listed nothing beside a live topic.
 look() {
   local what="$1" how="$2" out; shift 2
-  if out=$("$@" 2>&1); then found "$what" "$how"
+  if out=$("$@" 2>&1); then found "$what" "$how"; return 0
   # Absent only when the error says so and nothing in it says access was refused: Google answers
   # "does not exist or you do not have access" for both, and that is not proof of absence.
   elif grep -qiE 'NOT_FOUND|Resource not found' <<<"$out" \
        && ! grep -qiE 'PERMISSION_DENIED|denied|not authori[sz]ed|do not have access|forbidden' <<<"$out"; then :
   else bad "could not check $what: ${out%%$'\n'*}"; fi
+  return 1
 }
 # mon_list <collection> <what>: sets MON_NAMES to the Monitoring objects named "Abstract log pipeline…",
 # or reports a failure. Not called through $(…): a bad() inside a subshell is never counted.
@@ -993,7 +1454,8 @@ discover_all() {
     gcloud pubsub topics describe "$TOPIC" --project="$LOG_PROJECT"
   local a; for a in "$SA" "$WS_SA"; do
     look "service account $a" "gcloud iam service-accounts delete $a@$LOG_PROJECT.iam.gserviceaccount.com --project=$LOG_PROJECT" \
-      gcloud iam service-accounts describe "$a@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT"; done
+      gcloud iam service-accounts describe "$a@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT" \
+      && sa_keys "$a@$LOG_PROJECT.iam.gserviceaccount.com" ""; done
   local n probes
   if probes=$(gcloud pubsub subscriptions list --project="$LOG_PROJECT" --filter='name:abstract-probe-' --format='value(name.basename())' 2>&1); then
     for n in $probes; do found "probe subscription $n" "gcloud pubsub subscriptions delete $n --project=$LOG_PROJECT"; done
@@ -1004,6 +1466,19 @@ discover_all() {
     for n in $MON_NAMES; do found "alert channel $n" "delete it under Monitoring > Alerting > Edit notification channels"; done; fi
   byhand "the log sink lives on your organization, folder or project, not here. Find it with: gcloud logging sinks list --organization=<org-id> --filter='destination:$TOPIC' (or --folder / --project)"
   kept "logging project $LOG_PROJECT: this script never deletes it."
+}
+
+# sa_keys <service account> <recorded key id>: on an account this setup did not create, the key it recorded
+# making is removed; every other user-managed key is listed, never deleted (a key is not proof it is Abstract's).
+sa_keys() {
+  local ids id
+  if ! ids=$(gcloud iam service-accounts keys list --iam-account="$1" --managed-by=user --format='value(name.basename())' 2>&1); then
+    bad "could not list the keys of $1: ${ids%%$'\n'*}"; return
+  fi
+  for id in $ids; do
+    if [[ -n "$2" && "$id" == "$2" ]]; then gone "key $id on $1 (made by this setup)" gcloud iam service-accounts keys delete "$id" --iam-account="$1" --quiet
+    else byhand "key $id on $1 was not recorded as made here. If it is Abstract's: gcloud iam service-accounts keys delete $id --iam-account=$1"; fi
+  done
 }
 
 remove_all() {
@@ -1020,27 +1495,53 @@ remove_all() {
     # shellcheck disable=SC2086
     gone "log sink $SINK at the $SCOPE $SCOPE_ID" gcloud logging sinks delete "$SINK" $sf --quiet
   else kept "log sink $SINK: it existed before this setup. Its filter may have been extended; review it."; fi
-  local p; for p in $(gcloud pubsub subscriptions list --project="$LOG_PROJECT" --filter='name:abstract-probe-' --format='value(name.basename())' 2>/dev/null); do
-    gone "probe subscription $p" gcloud pubsub subscriptions delete "$p" --project="$LOG_PROJECT" --quiet; done
+  local p probes
+  if probes=$(gcloud pubsub subscriptions list --project="$LOG_PROJECT" --filter='name:abstract-probe-' --format='value(name.basename())' 2>&1); then
+    for p in $probes; do gone "probe subscription $p" gcloud pubsub subscriptions delete "$p" --project="$LOG_PROJECT" --quiet; done
+  else bad "could not list probe subscriptions in $LOG_PROJECT: ${probes%%$'\n'*}"; fi
   if [[ "${SUB_CREATED:-0}" == 1 ]]; then gone "subscription $SUB" gcloud pubsub subscriptions delete "$SUB" --project="$LOG_PROJECT" --quiet
   else byhand "subscription $SUB was not recorded as created here. If it is Abstract's: gcloud pubsub subscriptions delete $SUB --project=$LOG_PROJECT"; fi
   if [[ "${TOPIC_CREATED:-0}" == 1 ]]; then gone "topic $TOPIC" gcloud pubsub topics delete "$TOPIC" --project="$LOG_PROJECT" --quiet
   else byhand "topic $TOPIC was not recorded as created here. If it is Abstract's: gcloud pubsub topics delete $TOPIC --project=$LOG_PROJECT"; fi
   if [[ "${SA_CREATED:-0}" == 1 ]]; then gone "service account $SA (and its keys)" gcloud iam service-accounts delete "$SA@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT" --quiet
-  else byhand "service account $SA was not recorded as created here. If it is Abstract's: gcloud iam service-accounts delete $SA@$LOG_PROJECT.iam.gserviceaccount.com"; fi
+  else byhand "service account $SA was not recorded as created here. If it is Abstract's: gcloud iam service-accounts delete $SA@$LOG_PROJECT.iam.gserviceaccount.com"
+       sa_keys "$SA@$LOG_PROJECT.iam.gserviceaccount.com" "$KEY_ID"; fi
   if [[ "${WS_SA_CREATED:-0}" == 1 ]]; then
     gone "Workspace service account $WS_SA (and its keys)" gcloud iam service-accounts delete "$WS_SA@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT" --quiet
     byhand "a Workspace super admin removes its entry under admin.google.com > Security > API controls > Domain-wide delegation"
+  elif [[ "$WORKSPACE" == yes ]]; then
+    byhand "Workspace service account $WS_SA was not recorded as created here. If it is Abstract's: gcloud iam service-accounts delete $WS_SA@$LOG_PROJECT.iam.gserviceaccount.com"
+    sa_keys "$WS_SA@$LOG_PROJECT.iam.gserviceaccount.com" "$WS_KEY_ID"
   fi
   local n; for n in $ALERT_POLICIES; do gone "alert policy $n" mon_delete "$n"; done
   for n in $ALERT_CHANNELS; do gone "alert email channel $n" mon_delete "$n" force=true; done
-  for n in $(alert_policy_names) $(alert_channel_names); do
+  local others=""
+  mon_list alertPolicies "alert policies" && others+=" $MON_NAMES"
+  mon_list notificationChannels "notification channels" && others+=" $MON_NAMES"
+  for n in $others; do
     [[ " $ALERT_POLICIES $ALERT_CHANNELS " == *" $n "* ]] || kept "alert $n: not made by this setup (Terraform, or another setup)"; done
-  local f; for f in "$KEY_FILE" "$WS_KEY_FILE"; do [[ -f "$f" ]] && gone "key file $f" rm -f "$f"; done
-  [[ "$DATA_ACCESS" == yes ]] && byhand "Data Access audit settings were changed in step 6. A copy of the earlier settings was saved as abstract-audit-config-backup-*.json where step 6 ran. Restore it with get-iam-policy, edit, then set-iam-policy, keeping the etag."
+  local f rv; local -a aside=(); while IFS= read -r f; do aside+=("$f"); done < <(aside_keys)
+  for f in ${aside[@]+"${aside[@]}"}; do
+    rv=$(revoke_hint "$f") && byhand "$f holds a key that stays valid in Google after the file is deleted. Once you know nothing uses it: $rv"
+  done
+  for f in "$KEY_FILE" "$WS_KEY_FILE" ${aside[@]+"${aside[@]}"}; do [[ -f "$f" ]] && gone "key file $f" rm -f "$f"; done
+  if [[ "${DA_CHANGED:-}" == 1 ]]; then
+    byhand "step 6 turned on Data Access logs at the $SCOPE $SCOPE_ID (${DA_ADDED:-see the backup}). The settings before that are in ${DA_BACKUP:-the backup step 6 saved}. To undo, remove those log types with get-iam-policy, edit, then set-iam-policy (keep the etag); never set the whole backup back over changes made since."
+  elif [[ "$DATA_ACCESS" == yes && -z "${DA_CHANGED:-}" ]]; then
+    byhand "Data Access audit settings may have been changed in step 6 (this answers file predates the record of it). If they were, a copy of the earlier settings was saved as abstract-audit-config-backup-*.json in the folder step 6 ran in. Compare it with get-iam-policy before changing anything."
+  fi
   kept "logging project $LOG_PROJECT: this script never deletes it. If you created it only for Abstract: gcloud projects delete $LOG_PROJECT"
-  if $CONFIRM && (( FAILS == 0 )); then mv "$STATE" "$STATE.removed-$(date +%Y%m%d%H%M%S)"; say "  saved answers moved aside; running --remove again lists nothing"
-  elif ! $CONFIRM; then say ""; say "  Nothing was removed. Run again with --remove --confirm to remove the items marked 'would remove'."; fi
+  if $CONFIRM && (( FAILS == 0 )); then
+    local moved; moved="$STATE.removed-$(date +%Y%m%d%H%M%S)"; mv "$STATE" "$moved"
+    if (( BYHAND > 0 )); then
+      say "  saved answers moved aside to $moved. The $BYHAND by-hand item(s) above are still in place: act on each."
+      say "  To list them again:  $0 --state $(printf '%q' "$moved") --remove"
+    else say "  saved answers moved aside to $moved; nothing this setup recorded is left"; fi
+  elif ! $CONFIRM; then
+    say ""
+    if (( WOULD > 0 )); then say "  Nothing was removed. To remove the items marked 'would remove':  $(again --remove --confirm)"
+    else say "  Nothing is marked 'would remove', so --confirm would delete nothing. Act on the by-hand lines above yourself."; fi
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1052,16 +1553,30 @@ while [[ $# -gt 0 ]]; do case "$1" in
   --remove) REMOVE=true; shift ;;
   --confirm) CONFIRM=true; shift ;;
   --step) ONLY_STEP="$2"; shift 2 ;;
-  --state) STATE="$2"; shift 2; [[ -f "$STATE" ]] && source "$STATE" ;;
+  # A file that is not there is a stop, never the default answers: those may describe a different, live pipeline.
+  --state) [[ -n "${2:-}" && -f "$2" ]] || { echo "no answers file at ${2:-(no path given)}: nothing was read, checked or removed"; exit 2; }
+           STATE="$2"; defaults; load_answers "$STATE"; shift 2 ;;
   --project) FIND_PROJECT="$2"; shift 2 ;;
   --reset) RESET=true; shift ;;
   -h|--help) sed -n '2,/^# =====/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "unknown option $1 (try --help)"; exit 2 ;; esac; done
 
+summary() { printf '\n%s%d passed%s · %s%d to look at%s · %s%d to fix%s\n' "$G" "$PASSES" "$O" "$Y" "$WARNS" "$O" "$R" "$FAILS" "$O"; }
+# Signed out, every read fails, and a failed read must never be reported as absent or as fine.
+need_sign_in() {
+  signed_in && return 0
+  bad "$(signed_in_problem). Nothing was $1; run this again once signed in."
+  summary; exit 1
+}
+
 need gcloud; need python3; need curl
 $RESET && start_over
-if $REMOVE; then python3 "$HERE/brand.py" header "Google Cloud setup" "clean-up"; remove_all
+if $REMOVE; then
+  signed_in || launch
+  need_sign_in "listed or removed"
+  python3 "$HERE/brand.py" header "Google Cloud setup" "clean-up" "info|answers: $STATE"; remove_all
 elif $CONFIRM; then echo "--confirm only goes with --remove"; exit 2
-else launch; if [[ -n "$ONLY_STEP" ]]; then "step$ONLY_STEP"; else for s in 1 2 3 4 5 6 7 8 9 10; do "step$s"; done; fi; fi
-printf '\n%s%d passed%s · %s%d to look at%s · %s%d to fix%s\n' "$G" "$PASSES" "$O" "$Y" "$WARNS" "$O" "$R" "$FAILS" "$O"
+else launch; need_sign_in checked
+  if [[ -n "$ONLY_STEP" ]]; then "step$ONLY_STEP"; else for s in 1 2 3 4 5 6 7 8 9 10; do "step$s"; done; fi; fi
+summary
 [[ $FAILS -eq 0 ]]

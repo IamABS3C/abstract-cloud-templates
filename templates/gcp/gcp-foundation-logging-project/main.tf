@@ -1,7 +1,7 @@
 # Create the dedicated logging project and enable what the pipeline needs.
 #
 # OPTIONAL. Most customers already have a security or logging project — point
-# 02-audit-logs-organization at it and skip this entirely. Run this for greenfield, or when
+# gcp-source-audit-logs-organization at it and skip this entirely. Run this for greenfield, or when
 # the only candidate is a WORKLOAD project, which is the wrong answer: Pub/Sub
 # publish quota is consumed in the destination project, and a security pipeline
 # inside a workload project can be read or broken by that workload's owner.

@@ -10,7 +10,7 @@ Run `tools/gcp-guided-setup/preflight.sh` before anything else — it checks the
 
 ## The one that blocks people
 
-> ### `roles/logging.configWriter` at the **ORGANIZATION**
+> ### `roles/logging.configWriter` at the **ORGANIZATION** (or at the folder or project you export)
 >
 > This is the blocking prerequisite for an aggregated sink, and it is **rarely held by
 > whoever owns the project**. Subscription Owner is not enough. Project Owner is not
@@ -20,12 +20,18 @@ Run `tools/gcp-guided-setup/preflight.sh` before anything else — it checks the
 > instead of a working feed. **Identify the human who holds it before scheduling
 > anything.**
 
+To find who holds it directly:
+
 ```bash
 gcloud organizations get-iam-policy YOUR_ORG_ID \
   --flatten="bindings[].members" \
   --filter="bindings.role:roles/logging.configWriter" \
   --format="table(bindings.members)"
 ```
+
+That list shows direct grants only. A grant through a group or a custom role does not appear in
+it, so to know whether you can create the sink yourself, run `preflight.sh`: it asks Google
+directly, which counts every route.
 
 ---
 
@@ -126,7 +132,7 @@ sink gets one; each needs its own grant.
 **What is already narrow:**
 
 - `roles/pubsub.subscriber` on **one subscription**, never project-wide
-- Workspace scopes are the two `admin.reports.*.readonly` and nothing else
+- The Workspace scope is the one read-only `admin.reports.audit.readonly` and nothing else
 - Every binding is `_iam_member` (additive), never `_iam_policy` (authoritative), so nothing
   here can clobber a grant somebody else made
 - `create_service_account_key` defaults **false** — a key in Terraform state is a key in
@@ -148,7 +154,7 @@ with `pubsub.subscriptions.consume` + `pubsub.subscriptions.get`, or adding
 
 | Policy | Effect | Response |
 |---|---|---|
-| `constraints/iam.disableServiceAccountKeyCreation` | **Blocks the whole deployment** — Abstract authenticates with a service-account key | Request a scoped exception for the logging project. Longer term, Workload Identity Federation on the Abstract side is what removes the need |
+| `constraints/iam.disableServiceAccountKeyCreation`, and its managed successor `constraints/iam.managed.disableServiceAccountKeyCreation` | **Blocks the whole deployment** — Abstract authenticates with a service-account key. Either one blocks it | Request a scoped exception for the logging project, on whichever of the two is enforced (script step 3 checks both; see [Organization policy constraints](https://docs.cloud.google.com/organization-policy/reference/org-policy-constraints)). Longer term, Workload Identity Federation on the Abstract side is what removes the need |
 | `constraints/iam.serviceAccountKeyExpiryHours` | Keys expire | Build rotation into the runbook rather than discovering it |
 | `constraints/iam.disableCrossProjectServiceAccountUsage` | Blocks cross-project SA use | Keep the identity in the logging project |
 | `constraints/gcp.restrictNonCmekServices` | Requires CMEK on Pub/Sub | Set the topic's KMS key |
@@ -181,6 +187,7 @@ The service-account key is the whole credential. Treat it accordingly:
 ./tools/gcp-guided-setup/preflight.sh --project YOUR_LOG_PROJECT --org-id YOUR_ORG_ID --report ~/readiness.md
 ```
 
-Read-only. It checks identity, APIs, the `logging.configWriter` grant at your chosen scope,
+Read-only. It checks identity, APIs, whether Google confirms you can create sinks
+(`logging.sinks.create`, from `roles/logging.configWriter`) at your chosen scope,
 whether Data Access is already enabled, and whether sinks already exist — then writes a
 report with a numbered action list.

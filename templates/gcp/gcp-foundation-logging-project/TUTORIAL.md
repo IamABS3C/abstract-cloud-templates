@@ -19,11 +19,10 @@ project with no billing account cannot publish to Pub/Sub.
 <!-- abstract:signin -->
 ## Sign in first
 
-Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in; `--update-adc` gives the scripts and Terraform the same sign-in:
 
 ```bash
-gcloud auth login
-gcloud auth application-default login
+gcloud auth login --update-adc
 ```
 <!-- /abstract:signin -->
 
@@ -92,15 +91,21 @@ That names the grants Terraform cannot verify for you — including
 <!-- abstract:cleanup -->
 ## Clean up
 
-Delete the integration in Abstract first, so it stops reading. The clean-up needs the answers file the guided setup saved; in a new Cloud Shell session, upload the copy you downloaded at the end of the setup. Then list what the clean-up would remove, and remove it:
+Delete the integration in Abstract first, so it stops reading. The clean-up needs the answers file the guided setup saved, `~/.abstract-gcp-setup.env`; in a new Cloud Shell session, upload the copy you downloaded at the end of the setup to your home folder. First list what the clean-up would remove. This deletes nothing:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --state <answers-file> --remove --confirm
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove
 ```
 
-It removes only what the guided setup recorded creating, and never the logging project. Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself. If you deployed with Terraform instead, run `terraform destroy` in this folder with the same `backend.tf`.
+When the list is right, remove it:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm
+```
+
+It removes only what the guided setup recorded creating, and never the logging project. Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself. If you deployed with Terraform instead, follow **To remove it later** at the end of [Terraform instead](#terraform-instead).
 
 terraform destroy never deletes the logging project: a project it created has deletion_policy PREVENT, and the APIs stay on (disable_on_destroy = false). Delete the project yourself in the console only when nothing else uses it; Google keeps it recoverable for 30 days.
 <!-- /abstract:cleanup -->
@@ -110,7 +115,7 @@ terraform destroy never deletes the logging project: a project it created has de
 
 Run every command in this template's folder.
 
-**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it. The bucket goes in the logging project by default, and Google's Cloud Storage guides ask for billing on a project before you create a bucket in it (this repo has not tested a project without). If the logging project has no billing (the guided setup allows that), first run `export STATE_PROJECT=<project-id-with-billing>` to put the bucket in a project that has it.
 
 Creating the logging project with Terraform (`create_project = true`)? It does not exist yet, so keep the state in a project that does. Set it first, with your own project ID:
 
@@ -146,6 +151,18 @@ terraform apply abstract.tfplan
 
 **To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
 <!-- /abstract:terraform -->
+
+<!-- abstract:references -->
+## Google documentation
+
+Google's own pages on what this template sets up, and the Terraform provider's pages for the resources it creates:
+
+- [Create projects](https://docs.cloud.google.com/resource-manager/docs/creating-managing-projects)
+- [Enable, disable, or change billing for a project](https://docs.cloud.google.com/billing/docs/how-to/modify-project#enable_billing_for_an_existing_project)
+- [Enable and disable services](https://docs.cloud.google.com/service-usage/docs/enable-disable#enabling)
+- [google_project_service](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_service)
+- [Overview of Terraform on Google Cloud](https://docs.cloud.google.com/docs/terraform/terraform-overview)
+<!-- /abstract:references -->
 
 ---
 

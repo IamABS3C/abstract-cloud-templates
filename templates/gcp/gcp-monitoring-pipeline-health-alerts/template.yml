@@ -96,3 +96,8 @@ cost: Alert policies are free; Cloud Monitoring bills only for metrics beyond th
 when_to_use: Alongside gcp-source-audit-logs-organization, not later.
 when_not_to_use: As a replacement for checking the feed in Abstract; these watch the Google side only.
 live_test: static
+references:
+- monitoring-alert-policies
+- monitoring-alert-policies-create
+- pubsub-monitoring
+- pubsub-metrics-reference

@@ -85,6 +85,13 @@ Four metric alert rules and one log search rule, a fixed cost per namespace. The
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The five rules exist and are enabled | `az monitor metrics alert list -g <resource-group> --query "[?contains(name,'abstract-eh')].{name:name,enabled:enabled,severity:severity}" -o table az monitor scheduled-query list -g <resource-group> --query "[?contains(name,'abstract-eh')].{name:name,enabled:enabled}" -o table` | Four metric alerts and one scheduled query rule, all enabled. |
+| The five rules exist and are enabled | see below | Four metric alerts and one scheduled query rule, all enabled. |
 | The consumer-stall rule is evaluating, not sitting in Insufficient data |  | The rule's history shows evaluations on schedule with a result. |
 | The alert path works end to end |  | A test notification from the Action Group arrives. |
+
+**The five rules exist and are enabled:**
+
+```bash
+az monitor metrics alert list -g <resource-group> --query "[?contains(name,'abstract-eh')].{name:name,enabled:enabled,severity:severity}" -o table
+az monitor scheduled-query list -g <resource-group> --query "[?contains(name,'abstract-eh')].{name:name,enabled:enabled}" -o table
+```

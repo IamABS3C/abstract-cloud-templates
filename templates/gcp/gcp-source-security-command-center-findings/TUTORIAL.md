@@ -17,11 +17,10 @@ Needs **SCC Premium or Enterprise**, and
 <!-- abstract:signin -->
 ## Sign in first
 
-Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in, then give the scripts and Terraform the same sign-in:
+Cloud Shell opened the public templates repository in a **temporary** session. Google gives a repository it does not own none of your credentials, and deletes the session's files when it ends. Sign in; `--update-adc` gives the scripts and Terraform the same sign-in:
 
 ```bash
-gcloud auth login
-gcloud auth application-default login
+gcloud auth login --update-adc
 ```
 <!-- /abstract:signin -->
 
@@ -103,12 +102,7 @@ audit-log parser to handle them.
 <!-- abstract:cleanup -->
 ## Clean up
 
-Delete the integration in Abstract first, if this piece feeds one. Then, with the same `backend.tf`:
-
-```bash
-cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-security-command-center-findings"
-terraform destroy
-```
+Delete the integration in Abstract first, if this piece feeds one. Then follow **To remove it later** at the end of [Deploy with Terraform](#deploy-with-terraform), with the same `backend.tf`.
 <!-- /abstract:cleanup -->
 
 <!-- abstract:terraform -->
@@ -116,7 +110,7 @@ terraform destroy
 
 Run every command in this template's folder.
 
-**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it.
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it. The bucket goes in the logging project by default, and Google's Cloud Storage guides ask for billing on a project before you create a bucket in it (this repo has not tested a project without). If the logging project has no billing (the guided setup allows that), first run `export STATE_PROJECT=<project-id-with-billing>` to put the bucket in a project that has it.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-security-command-center-findings"
@@ -146,6 +140,16 @@ terraform apply abstract.tfplan
 
 **To remove it later**, run `terraform destroy` in this folder with the same `backend.tf`.
 <!-- /abstract:terraform -->
+
+<!-- abstract:references -->
+## Google documentation
+
+Google's own pages on what this template sets up:
+
+- [Enable finding notifications for Pub/Sub](https://docs.cloud.google.com/security-command-center/docs/how-to-notifications)
+- [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription)
+- [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles)
+<!-- /abstract:references -->
 
 ---
 

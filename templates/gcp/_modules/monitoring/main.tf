@@ -10,6 +10,13 @@
 # your ENTIRE recovery window: when it expires, the data is gone permanently,
 # with no error and no backfill. Alerting at a fraction of that window is the
 # difference between an incident and a data-loss event.
+#
+# Why the global metric and not oldest_unacked_message_age_by_region, which Google's
+# backlog page (pubsub/docs/monitoring) now recommends: measured 2026-10-11 on a live
+# subscription, the regional metric wrote 8 points in 24 hours (all 0, within seven
+# minutes) while the global one wrote a point every minute. An alert on a metric that
+# is mostly absent cannot be shown to fire, so this stays on the measured one until the
+# regional metric is proven to report a growing backlog.
 # ---------------------------------------------------------------------------
 
 terraform {

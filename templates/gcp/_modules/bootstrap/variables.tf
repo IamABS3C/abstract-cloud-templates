@@ -27,7 +27,7 @@ variable "folder_id" {
 }
 
 variable "billing_account_id" {
-  description = "Required when create_project = true. A project with no billing account cannot publish to Pub/Sub."
+  description = "Billing account to link when create_project = true. The log pipeline itself was measured delivering on a project with billing disabled (docs/public/gcp/VERIFIED.md), but an API that requires billing cannot be enabled without one, and Google's Cloud Storage guides ask for billing before a bucket, such as a Terraform state bucket, is created in the project. Find it with: gcloud billing accounts list"
   type        = string
   default     = ""
 }

@@ -16,7 +16,7 @@ The guided setup's steps 1 and 2 check most of what follows against your real en
 | **Organization** | ✅ by containment | `roles/logging.configWriter` **at the org** | Almost always |
 | **Folder** | ✅ within the subtree | `roles/logging.configWriter` **at the folder** | Org IAM not granted, or a real trust boundary |
 | **Project** | ❌ | `roles/logging.configWriter` on the project | Pilot only |
-| **Billing account** | n/a | `roles/logging.configWriter` on the billing account | Billing logs, which sit outside the hierarchy |
+| **Billing account** | n/a | `roles/logging.configWriter` on the billing account | Billing account logs. An organization sink routes the organization and the folders and projects under it; a billing account is a separate resource, so its logs are collected with a sink created on the billing account itself. |
 
 ### What actually differs, in practice
 
@@ -26,14 +26,13 @@ granted by default even to an Organization Admin. **Verified on a live org 2026-
 account holding `roles/resourcemanager.organizationAdmin` did **not** hold
 `logging.configWriter`, and could not create the sink until it granted itself the role.
 
+Check who holds it. An Organization Admin can then grant it to themselves with the second command.
+
 ```bash
-# Are you actually able to do this?
 gcloud organizations get-iam-policy $ORG_ID \
   --flatten="bindings[].members" \
   --filter="bindings.role:roles/logging.configWriter" \
   --format="table(bindings.members)"
-
-# Organization Admin? You can grant it to yourself.
 gcloud organizations add-iam-policy-binding $ORG_ID \
   --member="user:you@example.com" --role="roles/logging.configWriter"
 ```
@@ -44,7 +43,7 @@ Choose it because org IAM is genuinely unavailable, not because it feels safer. 
 which folder, and schedule the org conversation.
 
 **Project.** No `include_children` exists below a project, so it cannot cover future
-projects. It proves the pipeline end to end before you ask for org rights — which is
+projects. It shows the pipeline working, from the sink to Abstract, before you ask for org rights — which is
 genuinely useful, because "it works, here is the data" is a better ask than "please grant
 me org IAM." Replace it; never repeat it per project.
 
@@ -64,11 +63,13 @@ or broken by that workload's owner.
 
 ### Create one if there is not
 
+`project_id` must be unique across all of Google Cloud.
+
 ```bash
 cd templates/gcp/gcp-foundation-logging-project
 cat > terraform.tfvars <<EOF
 create_project     = true
-project_id         = "acme-security-logging"     # globally unique
+project_id         = "acme-security-logging"
 org_id             = "123456789012"
 billing_account_id = "XXXXXX-XXXXXX-XXXXXX"
 EOF
@@ -202,6 +203,9 @@ You only need per-project visibility to **size** the deployment and predict cost
 
 ## 6. Two switches, both required
 
+Google writes BigQuery's Data Access logs by default, so BigQuery needs only switch 2: route it, and its
+volume, `DATA_READ` included, arrives at once. Every other service needs both.
+
 **Verified live:** enabling Data Access audit logging routes **nothing** on its own.
 
 ```
@@ -209,8 +213,8 @@ Switch 1  IAM audit config     — is the log GENERATED?      templates/gcp/gcp-
 Switch 2  the sink filter      — is the log ROUTED?         log_categories
 ```
 
-Flip only switch 1 and you pay to generate logs nobody receives. Flip only switch 2 and the
-filter matches **nothing, with no error** — indistinguishable from a broken sink.
+Flip only switch 1 and you pay to generate logs nobody receives. Flip only switch 2 and, for every
+service but BigQuery, the filter matches **nothing, with no error** — indistinguishable from a broken sink.
 
 ```hcl
 # Switch 1 — gcp-foundation-data-access-audit-logs
@@ -222,8 +226,11 @@ log_categories       = [..., "data_access_all"]
 data_access_services = ["bigquery.googleapis.com", "storage.googleapis.com", "cloudkms.googleapis.com"]
 ```
 
-Keep the service lists **identical**, or you generate logs you never route, or route for
-services that generate nothing.
+Keep the two lists matched service for service, or you generate logs you never route, or route
+for services that generate nothing. One exception: token minting is turned on as
+`iam.googleapis.com` in switch 1 and routed as `iamcredentials.googleapis.com` in switch 2,
+which the `identity_access` category does for you, together with `sts.googleapis.com`. See
+[Record identity](../../templates/gcp/gcp-foundation-data-access-audit-logs/TUTORIAL.md#record-identity-token-minting-and-federation).
 
 ---
 

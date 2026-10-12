@@ -99,6 +99,8 @@ In Cloud Monitoring, chart these for the subscription:
 | `pubsub.googleapis.com/subscription/num_undelivered_messages` | Messages waiting. Near zero means Abstract keeps up |
 | `pubsub.googleapis.com/subscription/oldest_unacked_message_age` | How far behind. It must stay well under the seven-day retention |
 
+Google's backlog page recommends the regional versions (`num_unacked_messages_by_region`, `oldest_unacked_message_age_by_region`). The alerts here use the two above because they were measured reporting every minute on a live subscription (2026-10-11), while the regional ones wrote only 8 points in 24 hours. Either works for a chart; alert on the ones that report.
+
 A backlog that only grows means the sink works and Abstract is not reading. Go to check 6. A flat
 zero with no traffic means nothing is arriving. Go back to checks 1 to 3.
 
@@ -111,7 +113,8 @@ This proves the whole path to Pub/Sub without touching Abstract's subscription.
 The subscription lives in the logging project. The test event must be written in a project the
 sink covers. For an organization sink the logging project is fine. For a project sink it must be
 the sink's own project. For a folder sink it must be a project inside that folder, and the logging
-project may not be one. Set `PROBE_PROJECT` to that project.
+project may not be one. Set `PROBE_PROJECT` to that project. The test event is a topic created and
+deleted at once; the loop then checks every 30 seconds, for up to 5 minutes.
 
 ```bash
 PROBE_PROJECT="replace-with-a-project-inside-the-sink-scope"
@@ -119,26 +122,32 @@ PROBE=abstract-probe-$(date +%s)
 TOPIC=abstract-probe-topic-$(date +%s)
 gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs \
   --project=$LOG_PROJECT --expiration-period=1d --message-retention-duration=10m
-# write a harmless admin event: create and delete a topic
 gcloud pubsub topics create "$TOPIC" --project=$PROBE_PROJECT --quiet
 gcloud pubsub topics delete "$TOPIC" --project=$PROBE_PROJECT --quiet
-for i in $(seq 1 10); do   # every 30 s, up to 5 minutes
+END=$(( $(date +%s) + 330 )); FOUND=
+for i in $(seq 1 10); do
   sleep 30
-  gcloud pubsub subscriptions pull "$PROBE" --project=$LOG_PROJECT --limit=50 --format=json 2>/dev/null \
-    | python3 -c '
+  while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
+    N=$(gcloud pubsub subscriptions pull "$PROBE" --project=$LOG_PROJECT --limit=1000 --auto-ack --format=json 2>/dev/null \
+      | python3 -c '
 import base64, json, sys
-for m in json.load(sys.stdin) or []:
-    d = base64.b64decode(m.get("message", {}).get("data", "")).decode("utf-8", "replace")
-    if sys.argv[1] in d: print("FOUND", sys.argv[1]); sys.exit(0)
-sys.exit(1)' "$TOPIC" && break
+m = json.load(sys.stdin) or []
+for x in m:
+    d = base64.b64decode(x.get("message", {}).get("data", "")).decode("utf-8", "replace")
+    if sys.argv[1] in d: print("FOUND"); sys.exit(0)
+print(len(m))' "$TOPIC" 2>/dev/null)
+    case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
+  done
+  [ -n "$FOUND" ] && { echo "FOUND $TOPIC"; break; }
 done
 gcloud pubsub subscriptions delete "$PROBE" --project=$LOG_PROJECT --quiet
 ```
 
 Pub/Sub returns each message with its body base64-encoded in `message.data`, so the loop decodes
-it before matching. `FOUND` means the path works up to Pub/Sub. Nothing after ten tries means one
+it before matching. Each round keeps pulling until a pull comes back empty, because Pub/Sub may
+return short batches while a backlog remains and the probe event can sit behind it. `FOUND` means the path works up to Pub/Sub. Nothing after ten tries means one
 of checks 1 to 3 is failing, or the sink is under three minutes old. The probe subscription expires
-in a day, so a forgotten one cleans itself up. Guided setup step 9 does the same test for you.
+in a day, so a forgotten one cleans itself up. Script step 9 of the guided setup does the same test for you.
 
 ## 6. Is Abstract reading?
 
@@ -162,9 +171,10 @@ order. [Abstract integration](ABSTRACT-INTEGRATION.md) has the details.
 |---|---|---|
 | Healthy sink, no events, ever | Writer identity lacks publisher on the topic | Check 3 |
 | New projects send nothing | Sink has no child inclusion, or it is a folder sink and the project sits outside the folder | Check 2. For a folder sink, deploy at organization scope, or one sink per folder |
-| Data Access events missing | Data Access logs are off, or the filter does not name them | Turn them on with `gcp-foundation-data-access-audit-logs` or guided step 6, then add `identity_access` (impersonation and federation) or `data_access_all` with `data_access_services` to `log_categories`. A filter that names a log that does not exist matches nothing and raises no error |
+| Data Access events missing | Data Access logs are off, or the sink filter does not route them | Turn them on with `gcp-foundation-data-access-audit-logs` or script step 6 of the guided setup. For identity, switch on `iam.googleapis.com` and `sts.googleapis.com`; the events arrive as `iamcredentials.googleapis.com` and `sts.googleapis.com`. Then route them: add `identity_access` to `log_categories` for impersonation and federation, or `data_access_all` for other services. `data_access_services` is read only when `data_access_all` is set. A filter that names a log that does not exist matches nothing and raises no error |
 | Cost jumps after enabling Data Access | `DATA_READ` on all services | Scope `data_access_services`, and exempt chatty service accounts |
-| Billing account changes missing | Billing accounts sit outside the hierarchy. An organization sink never sees them | Deploy `gcp-source-billing-account-logs` |
+| Billing account changes missing | An organization sink routes the organization and the folders and projects under it; a billing account is a separate resource, so its logs are collected with a sink created on the billing account itself. | Deploy `gcp-source-billing-account-logs` |
+| A script stops: "gcloud is set to A, but its stored sign-in acts as B" (or "its token acts as B") | The token gcloud mints is not A's: an old stored sign-in, a service account set in `auth/impersonate_service_account`, or a token file in `CLOUDSDK_AUTH_ACCESS_TOKEN_FILE` | The message names the cause. A stale sign-in: `gcloud auth login A`. Impersonating a service account on purpose is accepted, and the scripts say "acting as <service account> (impersonated by A)"; when the token is someone else's, correct the setting or clear it with `gcloud config unset auth/impersonate_service_account`. A token file decides the identity by itself: point the variable at a token for A, or `unset CLOUDSDK_AUTH_ACCESS_TOKEN_FILE`. Signing in again changes neither setting |
 | `PERMISSION_DENIED` creating the sink | You lack `roles/logging.configWriter` at that scope | Find who holds it. Project Owner is not enough. `preflight.sh` shows it |
 | Cannot turn on Data Access | You lack permission to change the organization IAM policy | Ask an Organization Admin. This is usually a different person from the sink owner |
 | Security Command Center findings never arrive | Security Command Center Premium or Enterprise is not on, or the service agent cannot publish to the topic | Check the tier, then the topic's publisher grants |
@@ -180,7 +190,7 @@ order. [Abstract integration](ABSTRACT-INTEGRATION.md) has the details.
 | Everything stopped inside a VPC Service Controls perimeter | The perimeter blocks Abstract's pull | [VPC Service Controls](VPC-SC.md) |
 | Worked for a month, then stopped | The subscription expired | Recreate it with no expiry. The templates set it to never expire |
 | Messages piling up in a dead-letter topic | Dead-letter delivery is on and Abstract is failing to acknowledge | It is off by default, because nobody reads it. Fix the reader, then drain it |
-| Nothing alerts you when it stops | Health alerts are not deployed | `gcp-monitoring-pipeline-health-alerts` or guided step 8 |
+| Nothing alerts you when it stops | Health alerts are not deployed | `gcp-monitoring-pipeline-health-alerts` or script step 8 of the guided setup |
 
 ---
 
@@ -192,9 +202,15 @@ copy removes every binding added since, and on an organization that can lock peo
 must edit a full policy, read it with `get-iam-policy`, edit that copy, and write it back with its
 `etag` so a concurrent change is refused instead of overwritten.
 
-Data Access audit settings are the sharpest case: they are set per service, and a change that lists
-fewer services than exist removes the rest. Run `preflight.sh` first, and let the template or
-guided step 6 make the change. Step 6 saves a backup of your earlier settings.
+Data Access audit settings are the sharpest case: they are set per service, and the Terraform
+template replaces the settings of every service it names. It applies ONE log_types list and ONE
+exempted_members list to every service it names, so copying one service's `DATA_READ` into
+`log_types` turns it on for every named service. Run `preflight.sh` first: it marks each service
+whose settings differ from what the template sets. Name only services whose settings you accept
+being replaced, and leave out any service that already has DATA_READ or exempted members, or manage
+it only from a separate root with its own backend prefix, after removing it from this root's
+services. Script step 6 of the guided setup only adds to your settings, and saves a backup of the
+earlier ones first.
 
 ---
 

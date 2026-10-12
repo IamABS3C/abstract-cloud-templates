@@ -13,7 +13,8 @@
 #      visible instead of intermittent.
 #
 # Admin Activity is ALWAYS ON and cannot be disabled. Nothing here enables it,
-# and nothing here can turn it off. Only Data Access is off by default.
+# and nothing here can turn it off. Data Access is off by default for every service except
+# BigQuery, which writes its Data Access logs by default.
 
 terraform {
   required_version = ">= 1.5"

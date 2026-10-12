@@ -12,7 +12,7 @@ output "workspace_onboarding" {
       note    = "Upload to Abstract, then DELETE the local copy. Not created in Terraform on purpose — it would put a private key in state."
     }
     step_3_abstract_integration = {
-      integration      = "default.google_workspace (Event Source, PULL)"
+      integration      = "Google Workspace Audit Log Integration"
       admin_email      = var.workspace_admin_email
       credentials      = "the JSON key from step 2 — must be under 1 MB"
       application_name = local.workspace_apps

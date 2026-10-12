@@ -35,4 +35,6 @@ module "archive" {
   archive_cmek_key            = var.archive_cmek_key
   archive_nearline_after_days = var.archive_nearline_after_days
   labels                      = var.labels
+
+  depends_on = [google_project_service.required]
 }

@@ -18,7 +18,7 @@ permissions:
   where: admin.google.com
   why: 'Workspace super admin: No API or Terraform provider exists for it; a Google Cloud Owner cannot
     grant it.'
-- role: The two admin.reports readonly scopes, through delegation only
+- role: The admin.reports.audit.readonly scope, through delegation only
   where: Google Workspace
   why: 'Workspace service account: It holds nothing in GCP IAM.'
 creates:
@@ -91,3 +91,10 @@ when_to_use: 'Who signed in to Google Workspace: the identity group covers login
 when_not_to_use: Collecting Workspace logs through a Cloud Logging sink; this template is the Reports
   API path only.
 live_test: canary
+references:
+- service-accounts-create
+- workspace-domain-wide-delegation
+- workspace-reports-api-scopes
+- service-account-keys-best-practices
+- tf-google_service_account
+- tf-google_project_service

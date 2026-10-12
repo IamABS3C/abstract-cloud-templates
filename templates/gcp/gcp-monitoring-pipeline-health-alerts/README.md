@@ -28,6 +28,8 @@ Or from a shell, in this folder:
 ./deploy.sh
 ```
 
+In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, step 1): the session's files, Terraform state included, are deleted when it ends, so `./deploy.sh` stops there without it.
+
 ## Prerequisites
 
 - A notification channel; the module refuses to deploy without one unless explicitly acknowledged
@@ -76,5 +78,22 @@ Alert policies are free; Cloud Monitoring bills only for metrics beyond the free
 
 | Check | Command | Healthy when |
 |---|---|---|
-| Every policy is enabled and wired to a channel | `TOKEN=$(gcloud auth print-access-token) curl -s "https://monitoring.googleapis.com/v3/projects/<log-project-id>/alertPolicies" \ -H "Authorization: Bearer $TOKEN"` | Each policy shows enabled true and at least one notification channel. |
+| Every policy is enabled and wired to a channel | see below | Each policy shows enabled true and at least one notification channel. |
 | The stall alert before Abstract is connected |  | It fires, correctly, because nothing consumes the subscription yet. |
+
+**Every policy is enabled and wired to a channel:**
+
+```bash
+TOKEN=$(gcloud auth print-access-token)
+curl -s "https://monitoring.googleapis.com/v3/projects/<log-project-id>/alertPolicies" \
+-H "Authorization: Bearer $TOKEN"
+```
+
+## Google documentation
+
+Google's own pages on what this template sets up:
+
+- [Alerting overview](https://docs.cloud.google.com/monitoring/alerts)
+- [Create metric-threshold alerting policies](https://docs.cloud.google.com/monitoring/alerts/using-alerting-ui)
+- [Monitor Pub/Sub in Cloud Monitoring](https://docs.cloud.google.com/pubsub/docs/monitoring#monitoring_the_backlog). We alert on the global oldest_unacked_message_age anyway: measured on a live subscription it reported every minute, while the regional metric wrote 8 points in 24 hours (docs/public/gcp/TROUBLESHOOTING.md, the backlog check).
+- [Google Cloud metrics: P through Z](https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z#gcp-pubsub)

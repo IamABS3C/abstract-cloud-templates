@@ -40,11 +40,24 @@ variable "services" {
     Services to enable it for, e.g. bigquery.googleapis.com. EMPTY means allServices,
     which with DATA_READ is the expensive option and requires acknowledge_data_read.
 
-    Recommended opening position: ADMIN_READ + DATA_WRITE on allServices, and DATA_READ
-    only on bigquery.googleapis.com and storage.googleapis.com.
+    Recommended opening position, the guided setup's five: bigquery.googleapis.com,
+    storage.googleapis.com, cloudkms.googleapis.com, iam.googleapis.com (token minting) and
+    sts.googleapis.com (federation), with ADMIN_READ + DATA_WRITE. Every service named here,
+    allServices included, is managed authoritatively.
+
+    This module applies ONE log_types list and ONE exempted_members list to every service it
+    names. Name only services whose existing settings you accept being replaced by those; leave
+    out any service that already has DATA_READ or exempted members, or manage it only from a
+    separate root with its own backend prefix, after removing it from this root's services. Token minting is turned on as iam.googleapis.com: iamcredentials.googleapis.com is
+    refused, because Google records nothing for it on its own.
   EOT
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = !contains(var.services, "iamcredentials.googleapis.com")
+    error_message = "iamcredentials.googleapis.com cannot be turned on by itself: Google records token minting (GenerateAccessToken, SignBlob, SignJwt) only through the IAM API. Name iam.googleapis.com instead; the events still carry serviceName iamcredentials.googleapis.com, which is what the sink routes (identity_access)."
+  }
 }
 
 variable "exempted_members" {
@@ -60,7 +73,7 @@ variable "acknowledge_data_read" {
 }
 
 variable "acknowledge_authoritative_overwrite" {
-  description = "Required when services resolves to allServices. This resource is authoritative per service — applying a narrower set of log types REMOVES the ones you did not list, including ones a landing zone or CIS benchmark put there. Read preflight.sh output before setting this."
+  description = "Required for every apply. This resource is authoritative for EVERY service it names, not only allServices: applying REPLACES the log types and exempted members already set on those services (including ones a landing zone or CIS benchmark put there) with this module's single log_types and exempted_members lists, and destroy REMOVES them. Read tools/gcp-guided-setup/preflight.sh output before setting this. To offboard without changing logging, run terraform state rm 'module.audit_config' instead of destroy."
   type        = bool
   default     = false
 }

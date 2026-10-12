@@ -18,7 +18,7 @@ variable "folder_id" {
   default = ""
 }
 variable "billing_account_id" {
-  description = "Required when create_project = true. A project with no billing account cannot publish to Pub/Sub. Globally unique, 6-30 chars, lowercase. This is the ID you are creating, not one to look up — confirm it is still free with: gcloud projects list"
+  description = "Billing account to link when create_project = true. The log pipeline itself was measured delivering on a project with billing disabled (docs/public/gcp/VERIFIED.md), but an API that requires billing cannot be enabled without one. Find it with: gcloud billing accounts list"
   type        = string
   default     = ""
 }

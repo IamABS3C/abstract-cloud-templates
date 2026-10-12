@@ -1,16 +1,16 @@
 variable "log_project" {
-  description = "DEDICATED logging or security project holding this pipeline. Not a workload project. Find it with: gcloud projects list. If no dedicated logging project exists yet, create one first with deployments/01-logging-project (set create_project = true)."
+  description = "DEDICATED logging or security project holding this pipeline. Not a workload project. Find it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project = true)."
   type        = string
 }
 
 variable "topic_id" {
-  description = "Topic NAME (not the full path), from 02-audit-logs-organization."
+  description = "Topic NAME (not the full path), from gcp-source-audit-logs-organization."
   type        = string
   default     = "abstract-audit-logs"
 }
 
 variable "subscription_id" {
-  description = "Subscription NAME (not the full path), from 02-audit-logs-organization."
+  description = "Subscription NAME (not the full path), from gcp-source-audit-logs-organization."
   type        = string
   default     = "abstract-audit-logs-sub"
 }
