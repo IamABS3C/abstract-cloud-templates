@@ -38,8 +38,10 @@ directly, which counts every route.
 ## Grant exactly these roles, with `--grant`
 
 The guided setup lists, checks and grants the roles it needs. Replace EMAIL with the address of the person who
-runs the setup (a bare address is a user; put `group:` or `serviceAccount:` before it for those). See which of
-them that person holds directly; this changes nothing:
+runs the setup (a bare address is a user; put `group:` or `serviceAccount:` before it for those). Check them,
+changing nothing. For your own address it asks Google which permissions you hold by any route (directly, through a
+group, or inherited from a folder or the organization); for someone else's it reads the bindings each policy holds
+directly, and names Policy Troubleshooter for the rest:
 
 ```bash
 ./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL --check
@@ -52,8 +54,13 @@ Someone who can set IAM policy at the scope then grants them, one binding per ro
 ./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL
 ```
 
-Every role below was checked to exist with `gcloud iam roles describe` on 2026-10-12, and the script asks
-Google again before it offers one.
+The roles come from one list, [`tools/gcp-guided-setup/permissions.json`](../../tools/gcp-guided-setup/permissions.json),
+which the script, the step-by-step guide ([STEP-BY-STEP.md](STEP-BY-STEP.md)) and the app all read. It also holds the
+roles for deploying with Infrastructure Manager: `--grant EMAIL --for infra-manager` for the person who starts the
+deployment, and `--grant serviceAccount:EMAIL --for infra-manager-sa` for the service account it runs as (see
+[DEPLOY-INFRA-MANAGER.md](DEPLOY-INFRA-MANAGER.md)). Every role below was checked to exist with
+`gcloud iam roles describe` on 2026-10-12, and the script asks Google again before it offers one;
+`python3 tools/gcp-guided-setup/permissions.py verify` checks every row, title and permission against Google.
 
 | Role | Where | Required | For |
 |---|---|---|---|
@@ -71,9 +78,7 @@ Google again before it offers one.
 | `roles/monitoring.editor` | the logging project | optional | The health alerts (script step 8) |
 
 A project you create in script step 3 makes you its Owner, so the logging-project roles matter only for a
-project that already exists. `--check` reads each resource's own IAM policy, so a role held through a group,
-or inherited from a folder or the organization, shows as not held directly; script step 2 asks Google, which
-counts every route. The roles outlive the setup, so take them back once the pipeline works: script step 10,
+project that already exists. Script step 2 checks every one of these roles the same way, before anything is built. The roles outlive the setup, so take them back once the pipeline works: script step 10,
 `--remove` and `--teardown` each list every binding `--grant` recorded with the `remove-iam-policy-binding`
 command that takes it back, and `--teardown --include-grants` removes those bindings, and only those.
 
@@ -117,7 +122,7 @@ this by hand, it is what they miss.
 
 | Principal | Role | Scope |
 |---|---|---|
-| deployer | **Organization Admin** (`resourcemanager.organizations.setIamPolicy`) | organization |
+| deployer | **`roles/iam.securityAdmin`** (or Organization Admin; either holds `resourcemanager.organizations.setIamPolicy`) | organization |
 
 Not Logging Admin. Not Owner on a project. This modifies the **organization IAM policy**,
 and it is usually a different person again from the `logging.configWriter` holder.

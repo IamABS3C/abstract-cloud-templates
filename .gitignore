@@ -1,0 +1,9 @@
+# Your deployment values and Terraform's working files. The *.tfvars.example files are the templates.
+*.tfvars
+!*.tfvars.example
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfplan
+# An exported Infrastructure Manager preview holds the deployment's inputs.
+abstract-preview*

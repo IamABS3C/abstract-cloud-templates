@@ -37,7 +37,14 @@
 #                                 before the email; a bare email is a user): what each is for, required or
 #                                 optional; asks before each, adds one binding per role, records it. Run by
 #                                 someone who can set IAM policy at the scope; otherwise it prints the commands
-#    ... --grant <email> --check  which of those roles they hold directly; changes nothing
+#    ... --grant <email> --check  checks those roles, changing nothing: for your own email it asks Google which
+#                                 permissions you hold by any route (directly, through a group, inherited); for
+#                                 someone else's it reads the bindings each policy holds directly
+#    ... --grant <email> --for infra-manager       the roles to start an Infrastructure Manager deployment
+#    ... --grant serviceAccount:<email> --for infra-manager-sa
+#                                 the roles the service account Infrastructure Manager runs as needs (--sa <email>
+#                                 names it; default infra-manager-abstract@<logging project>.iam.gserviceaccount.com)
+#    The roles come from permissions.json; python3 tools/gcp-guided-setup/permissions.py verify checks them with Google.
 #
 #  Nothing changes without a "y". Every command is printed before it runs. Answers are
 #  kept in ~/.abstract-gcp-setup.env so you can stop and resume. No secret is printed;
@@ -495,6 +502,13 @@ step2() {
     warn "not checked yet: your rights in the logging project, and whether an org policy blocks the key step 5 makes. Step 3 checks both as soon as the project is chosen, before step 4 builds anything."
   fi
   local me; me=$(gcloud config get-value account 2>/dev/null)
+  # Every role in permissions.json, asked of Google in one call per resource. The checks above already stopped on
+  # what blocks a step, so a gap here is something to look at, not a second failure for the same thing.
+  if [[ -n "$me" ]] && grant_plan; then
+    local i; GR_OK=(); for ((i = 0; i < ${#GR_ROLE[@]}; i++)); do GR_OK[$i]=1; done
+    say ""; say "  ${B}Every role the setup needs, checked${O}"
+    EC_SOFT=1 effective_check "user:$me"
+  fi
   why "Who needs what: every role these steps need, what each is for and where it goes, is listed (and checked,"
   why "changing nothing) by:  $(again --grant "${me:-you@example.com}" --check)"
   why "Someone who can set IAM policy at the $SCOPE grants them one at a time with:  $(again --grant "${me:-you@example.com}")"
@@ -1709,7 +1723,7 @@ grant_member() {
   printf '%s' "$p"
 }
 
-# binding_cmd <organization|folder|project|billing> <id> <role> <member> <add|remove>: sets BCMD to the gcloud
+# binding_cmd <organization|folder|project|billing|service_account> <id> <role> <member> <add|remove>: sets BCMD to the gcloud
 # command for one binding. Billing accounts take no --condition (gcloud billing accounts add-iam-policy-binding
 # --help, SDK 588.0.0); the others get --condition=None, so a policy holding conditional bindings never makes
 # gcloud stop to ask which one is meant.
@@ -1720,6 +1734,8 @@ binding_cmd() {
     folder)       BCMD=(gcloud resource-manager folders "$v" "$2") ;;
     project)      BCMD=(gcloud projects "$v" "$2") ;;
     billing)      BCMD=(gcloud billing accounts "$v" "$2") ;;
+    # The project is the one in the account's own address (NAME@PROJECT.iam.gserviceaccount.com).
+    service_account) local sp="${2#*@}"; BCMD=(gcloud iam service-accounts "$v" "$2" "--project=${sp%%.*}") ;;
   esac
   BCMD+=("--member=$4" "--role=$3")
   [[ "$1" == billing ]] || BCMD+=(--condition=None)
@@ -1739,7 +1755,9 @@ each_grant() {
 # grant_undo <kind> <id> <role> <member>: prints the one command that takes that binding back. Never run here.
 grant_undo() { binding_cmd "$1" "$2" "$3" "$4" remove; printf '%s' "${BCMD[*]}"; }
 # The roles --grant added outlive the setup unless someone takes them back, so clean-up and step 10 name each one.
-grant_byhand() { byhand "$3 for $4 on the ${1/billing/billing account} $2 was added by --grant. Once the pipeline works and nobody needs it: $(grant_undo "$@")"; }
+# kind_words <kind>: a recorded grant's resource kind as words (billing account, service account).
+kind_words() { case "$1" in billing) echo "billing account" ;; service_account) echo "service account" ;; *) echo "$1" ;; esac; }
+grant_byhand() { byhand "$3 for $4 on the $(kind_words "$1") $2 was added by --grant. Once the pipeline works and nobody needs it: $(grant_undo "$@")"; }
 grant_say()    { say "    $(grant_undo "$@")"; }
 
 # policy_of <organization|folder|project|billing> <id>: that resource's IAM policy as JSON (status 1 and the
@@ -1750,54 +1768,58 @@ policy_of() {
     folder)       gcloud resource-manager folders get-iam-policy "$2" --format=json 2>&1 ;;
     project)      gcloud projects get-iam-policy "$2" --format=json 2>&1 ;;
     billing)      gcloud billing accounts get-iam-policy "$2" --format=json 2>&1 ;;
+    service_account) local sp="${2#*@}"; gcloud iam service-accounts get-iam-policy "$2" --project="${sp%%.*}" --format=json 2>&1 ;;
   esac
 }
 
-# The roles, in the order the steps need them: GR_KIND (scope|billing|project), GR_ROLE, GR_NEED, GR_WHY.
-# Every role here was checked with `gcloud iam roles describe` (2026-10-12, all GA), and is checked again at run time.
-# At the organization the viewer role is roles/browser: roles/resourcemanager.organizationViewer holds only
-# resourcemanager.organizations.get, so it cannot list the folders and projects steps 1 and 3 show.
-gr() { GR_KIND+=("$1"); GR_ROLE+=("$2"); GR_NEED+=("$3"); GR_WHY+=("$4"); }
+# The roles, in the order the steps need them: GR_KIND (scope|billing|project|service_account), GR_ROLE, GR_NEED, GR_WHY,
+# GR_PERMS (the permissions the setup uses from the role, space-separated). They come from permissions.json, the one
+# list the app and docs/public/gcp/STEP-BY-STEP.md render too; `python3 tools/gcp-guided-setup/permissions.py verify`
+# checks every row against Google (gcloud iam roles describe). GRANT_FOR picks the set: setup (whoever runs the setup,
+# by any path but Infrastructure Manager), infra-manager (whoever starts an Infrastructure Manager deployment) or
+# infra-manager-sa (the service account Infrastructure Manager runs as). At the organization the viewer role is
+# roles/browser: roles/resourcemanager.organizationViewer holds only resourcemanager.organizations.get, so it cannot
+# list the folders and projects steps 1 and 3 show.
+GRANT_FOR="setup"; IM_SA=""
+gr() { GR_KIND+=("$1"); GR_ROLE+=("$2"); GR_NEED+=("$3"); GR_WHY+=("$4"); GR_PERMS+=("${5:-}"); }
 grant_plan() {
-  GR_KIND=(); GR_ROLE=(); GR_NEED=(); GR_WHY=()
-  case "$SCOPE" in
-    organization) gr scope roles/browser required "see the organization, its folders and projects (steps 1 and 3)" ;;
-    folder)       gr scope roles/resourcemanager.folderViewer required "see the folder and its projects (steps 1 and 3)" ;;
-    project)      gr scope roles/browser required "see the project (steps 1 and 3)" ;;
-  esac
-  gr scope roles/logging.configWriter required "create the log sink (step 4)"
-  gr scope roles/orgpolicy.policyViewer required "read the organization policies that can block the key (step 3)"
-  gr scope roles/iam.securityReviewer required "read IAM policies and the audit settings (steps 2, 5 and 6)"
-  [[ "$SCOPE" != project ]] && gr scope roles/resourcemanager.projectCreator optional "create a new logging project (step 3)"
-  gr scope roles/iam.securityAdmin optional "turn on Data Access logs (step 6). Powerful: it can change IAM anywhere at the $SCOPE"
-  gr billing roles/billing.user optional "link a billing account to the logging project (step 3)"
-  if [[ -n "$LOG_PROJECT" ]]; then
-    gr project roles/pubsub.admin required "create the topic and subscription, and grant on them (steps 4 and 5)"
-    gr project roles/iam.serviceAccountAdmin required "create Abstract's service accounts (steps 5 and 7)"
-    gr project roles/iam.serviceAccountKeyAdmin required "create the key Abstract signs in with (steps 5 and 7)"
-    gr project roles/serviceusage.serviceUsageAdmin required "turn on the APIs (steps 3, 7 and 8)"
-    gr project roles/monitoring.editor optional "create the health alerts (step 8)"
-  fi
+  GR_KIND=(); GR_ROLE=(); GR_NEED=(); GR_WHY=(); GR_PERMS=()
+  local kind role need why steps perms rows
+  rows=$(python3 "$HERE/permissions.py" roles "$GRANT_FOR" "$SCOPE") || { bad "could not read $HERE/permissions.json"; return 1; }
+  while IFS=$'\t' read -r kind role need why steps perms; do
+    [[ -n "$role" ]] || continue
+    # The logging project's roles wait until it is chosen; a project made in step 3 makes its creator Owner.
+    [[ "$kind" == project && -z "$LOG_PROJECT" ]] && continue
+    [[ "$kind" == service_account && -z "$IM_SA" ]] && continue
+    gr "$kind" "$role" "$need" "$why" "$perms"
+  done <<<"$rows"
   return 0
 }
-gr_kind() { case "$1" in scope) echo "$SCOPE" ;; project) echo project ;; billing) echo billing ;; esac; }
-gr_id()   { case "$1" in scope) echo "$SCOPE_ID" ;; project) echo "$LOG_PROJECT" ;; billing) echo "$BILLING" ;; esac; }
+gr_kind() { case "$1" in scope) echo "$SCOPE" ;; project) echo project ;; billing) echo billing ;; service_account) echo service_account ;; esac; }
+gr_id()   { case "$1" in scope) echo "$SCOPE_ID" ;; project) echo "$LOG_PROJECT" ;; billing) echo "$BILLING" ;; service_account) echo "$IM_SA" ;; esac; }
 gr_where() { case "$1" in scope) echo "the $SCOPE $SCOPE_ID" ;; project) echo "the logging project $LOG_PROJECT" ;;
-  billing) echo "the billing account${BILLING:+ $BILLING}" ;; esac; }
+  billing) echo "the billing account${BILLING:+ $BILLING}" ;; service_account) echo "the service account $IM_SA" ;; esac; }
 # Who can grant there, for the hand-over line.
 gr_admin() { case "$1" in
   scope) case "$SCOPE" in organization) echo "an Organization Admin" ;; folder) echo "a Folder Admin" ;; *) echo "a project Owner or Project IAM Admin" ;; esac ;;
-  project) echo "a project Owner or Project IAM Admin" ;; billing) echo "a Billing Account Administrator" ;; esac; }
+  project) echo "a project Owner or Project IAM Admin" ;; billing) echo "a Billing Account Administrator" ;;
+  service_account) echo "a project Owner, or a Service Account Admin on $LOG_PROJECT" ;; esac; }
 gr_url() { case "$1" in
   scope) scope_url ;; project) echo "https://cloudresourcemanager.googleapis.com/v3/projects/$LOG_PROJECT" ;;
-  billing) echo "https://cloudbilling.googleapis.com/v1/billingAccounts/$BILLING" ;; esac; }
+  billing) echo "https://cloudbilling.googleapis.com/v1/billingAccounts/$BILLING" ;;
+  service_account) echo "https://iam.googleapis.com/v1/projects/-/serviceAccounts/$IM_SA" ;; esac; }
 gr_perm() { case "$1" in
   scope) echo "resourcemanager.$( [[ $SCOPE == organization ]] && echo organizations || echo "${SCOPE}s" ).setIamPolicy" ;;
-  project) echo resourcemanager.projects.setIamPolicy ;; billing) echo billing.accounts.setIamPolicy ;; esac; }
+  project) echo resourcemanager.projects.setIamPolicy ;; billing) echo billing.accounts.setIamPolicy ;;
+  service_account) echo iam.serviceAccounts.setIamPolicy ;; esac; }
 
 grant_roles() {
   local member="$GRANT" i k last="" out
-  title "+" "Grant the roles the setup needs"
+  case "$GRANT_FOR" in
+    infra-manager)    title "+" "Grant the roles to deploy with Infrastructure Manager" ;;
+    infra-manager-sa) title "+" "Grant the roles the Infrastructure Manager service account needs" ;;
+    *)                title "+" "Grant the roles the setup needs" ;;
+  esac
   why "Run by someone who can set IAM policy where each role goes. Each role is one binding, added on its own;"
   why "nothing else in a policy changes. The bindings this run adds are recorded, so --teardown --include-grants removes them."
   if [[ -z "$SCOPE" || -z "$SCOPE_ID" ]]; then
@@ -1810,8 +1832,15 @@ grant_roles() {
       "not chosen yet: skip the logging-project roles" "" '^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
     [[ -n "$pick" && "$pick" != +new ]] && { LOG_PROJECT="$pick"; save; }
   fi
+  if [[ "$GRANT_FOR" != setup ]]; then
+    # Infrastructure Manager deploys into the logging project and runs as an account there, so both must be known.
+    [[ -n "$LOG_PROJECT" ]] || { bad "Infrastructure Manager deploys into the logging project: choose it first ($(again --step 3)), or load an answers file with --state"; return; }
+    IM_SA="${IM_SA:-infra-manager-abstract@$LOG_PROJECT.iam.gserviceaccount.com}"
+    why "Infrastructure Manager runs as $IM_SA. Create it first if it is not there:"
+    why "  gcloud iam service-accounts create ${IM_SA%%@*} --project=$LOG_PROJECT --display-name=\"Infra Manager - Abstract\""
+  fi
   [[ -n "$LOG_PROJECT" ]] || why "No logging project yet, so its roles are left out. A project you create in step 3 makes you its Owner."
-  grant_plan
+  grant_plan || return
   say ""; say "  ${B}Roles for $member${O}"
   for ((i = 0; i < ${#GR_ROLE[@]}; i++)); do
     k=${GR_KIND[$i]}
@@ -1827,16 +1856,63 @@ grant_roles() {
       else warn "could not confirm ${GR_ROLE[$i]} exists ($(first_line "$out"))"; fi
     fi
   done
-  why "Roles held through a group, or inherited from a folder or the organization, do not show in a resource's own IAM"
-  why "policy: a role not held directly may still be held that way."
   if $CHECK_ONLY; then grant_check "$member"; else grant_apply "$member"; fi
 }
 
 # held_directly <policy JSON> <member> <role>
 held_directly() { [[ " $(member_roles "$2" <<<"$1") " == *" $3 "* ]]; }
 
+# The --grant command again, for the same set of roles.
+again_grant() { if [[ "$GRANT_FOR" == setup ]]; then again --grant "$1" "${@:2}"; else again --grant "$1" --for "$GRANT_FOR" "${@:2}"; fi; }
+
 grant_check() {
+  local member="$1" me
+  me=$(token_email)
+  # Your own access is asked of Google itself (testIamPermissions), which counts every route: a direct grant,
+  # a group, a role inherited from a folder or the organization. Someone else's can only be read from the
+  # policies, where a group or an inherited role does not show.
+  if [[ -n "$me" && ( "$member" == "user:$me" || "$member" == "serviceAccount:$me" ) ]]; then effective_check "$member"
+  else direct_check "$member"; fi
+  say ""; say "  Nothing was changed. To grant what is missing:  $(again_grant "$member")"
+}
+
+# effective_check <member>: the signed-in principal's permissions, per role, from Google's own answer.
+effective_check() {
+  local member="$1" i k polk="" h="" ok=true p miss
+  why "Checked with Google directly (testIamPermissions), so a role held through a group or inherited from a folder"
+  why "or the organization counts. Each role is listed with the permissions this setup uses from it."
+  for ((i = 0; i < ${#GR_ROLE[@]}; i++)); do
+    (( GR_OK[i] )) || continue
+    k=${GR_KIND[$i]}
+    if [[ "$k" != "$polk" ]]; then
+      polk="$k"; ok=true
+      if [[ "$k" == billing && -z "$BILLING" ]]; then ok=false; say "  - no billing account saved, so roles/billing.user was not checked"
+      else
+        local all="" j
+        for ((j = i; j < ${#GR_ROLE[@]}; j++)); do [[ "${GR_KIND[$j]}" == "$k" ]] && all="$all ${GR_PERMS[$j]}"; done
+        # shellcheck disable=SC2086  # one permission per word
+        if ! h=$(held "$(gr_url "$k")" $all); then ok=false; warn "could not check your permissions on $(gr_where "$k"): $h"; fi
+      fi
+    fi
+    $ok || continue
+    miss=""
+    for p in ${GR_PERMS[$i]}; do has "$h" "$p" || miss="${miss:+$miss, }$p"; done
+    if [[ -z "$miss" ]]; then pass "you hold what ${GR_ROLE[$i]} is needed for on $(gr_where "$k") (${GR_PERMS[$i]// /, })"; continue; fi
+    binding_cmd "$(gr_kind "$k")" "$(gr_id "$k")" "${GR_ROLE[$i]}" "$member" add
+    if [[ "${GR_NEED[$i]}" == required && -z "${EC_SOFT:-}" ]]; then bad "you do not hold $miss on $(gr_where "$k"): ${GR_ROLE[$i]} gives it (${GR_WHY[$i]})"
+    elif [[ "${GR_NEED[$i]}" == required ]]; then warn "you do not hold $miss on $(gr_where "$k"): ${GR_ROLE[$i]} gives it (${GR_WHY[$i]})"
+    else say "  - optional: you do not hold $miss on $(gr_where "$k"); ${GR_ROLE[$i]} gives it (${GR_WHY[$i]})"; fi
+    say "      $(printf '%q ' "${BCMD[@]}")"
+  done
+}
+
+# direct_check <member>: someone else's roles, read from each policy. Only direct bindings show there.
+direct_check() {
   local member="$1" i k pol="" polk="" ok=true
+  why "Roles held through a group, or inherited from a folder or the organization, do not show in a resource's own IAM"
+  why "policy: a role not held directly may still be held that way. $member can check every route by running this"
+  why "with --check themselves, or ask Policy Troubleshooter for one permission:"
+  why "  gcloud policy-intelligence troubleshoot-policy iam //cloudresourcemanager.googleapis.com/${SCOPE}s/$SCOPE_ID --principal-email=${member#*:} --permission=logging.sinks.create"
   for ((i = 0; i < ${#GR_ROLE[@]}; i++)); do
     (( GR_OK[i] )) || continue
     k=${GR_KIND[$i]}
@@ -1852,7 +1928,6 @@ grant_check() {
     elif [[ "${GR_NEED[$i]}" == required ]]; then warn "$member does not hold ${GR_ROLE[$i]} directly on $(gr_where "$k")"
     else say "  - $member does not hold ${GR_ROLE[$i]} directly on $(gr_where "$k") (optional)"; fi
   done
-  say ""; say "  Nothing was changed. To grant what is missing:  $(again --grant "$member")"
 }
 
 grant_apply() {
@@ -2304,8 +2379,8 @@ td_main() {
       kind=${g%%:*}; rest=${g#*:}; id=${rest%%:*}; rest=${rest#*:}; role=${rest%%:*}; member=${rest#*:}
       [[ -n "$kind" && -n "$id" && -n "$role" && -n "$member" ]] || continue
       if $TD_GRANTS; then binding_cmd "$kind" "$id" "$role" "$member" remove
-        td_add 7 remove "$role for $member on the ${kind/billing/billing account} $id" "${BCMD[@]}" --format=none
-      else td_add 7 kept "$role for $member on the ${kind/billing/billing account} $id (added by --grant) - only with --include-grants, or take it back yourself: $(grant_undo "$kind" "$id" "$role" "$member")"; fi
+        td_add 7 remove "$role for $member on the $(kind_words "$kind") $id" "${BCMD[@]}" --format=none
+      else td_add 7 kept "$role for $member on the $(kind_words "$kind") $id (added by --grant) - only with --include-grants, or take it back yourself: $(grant_undo "$kind" "$id" "$role" "$member")"; fi
     done
   else td_add 7 kept "no role grants recorded by --grant in $STATE"; fi
   td_state
@@ -2375,6 +2450,10 @@ while [[ $# -gt 0 ]]; do case "$1" in
   --include-grants) TD_GRANTS=true; shift ;;
   --yes-i-mean-it) YES_I_MEAN_IT=true; shift ;;
   --reset) RESET=true; shift ;;
+  --for) [[ "${2:-}" =~ ^(setup|infra-manager|infra-manager-sa)$ ]] || { echo "--for needs setup, infra-manager or infra-manager-sa"; exit 2; }
+         GRANT_FOR="$2"; shift 2 ;;
+  --sa) [[ "${2:-}" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$ ]] || { echo "--sa needs a service account email: NAME@PROJECT.iam.gserviceaccount.com"; exit 2; }
+        IM_SA="$2"; shift 2 ;;
   --grant) [[ -n "${2:-}" && "$2" != --* ]] || { echo "--grant needs a principal: --grant name@example.com (a user), or group:, serviceAccount: before the email"; exit 2; }
            GRANT=$(grant_member "$2") || { echo "\"$2\" is not a principal: use an email address (a user), or user:, group: or serviceAccount: and the email"; exit 2; }
            shift 2 ;;
@@ -2389,6 +2468,9 @@ need_sign_in() {
   summary; exit 1
 }
 
+if [[ -z "$GRANT" && ( "$GRANT_FOR" != setup || -n "$IM_SA" ) ]]; then
+  echo "--for and --sa go with --grant: --grant EMAIL --for infra-manager. Nothing was checked or changed."; exit 2
+fi
 if $NEW_KEY && { $CHECK_ONLY || [[ "$ONLY_STEP" != 7 ]]; }; then
   echo "--new-key goes only with --step 7, and not with --check: it makes another Workspace key. Nothing was checked or changed."; exit 2
 fi

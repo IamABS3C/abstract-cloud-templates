@@ -277,6 +277,45 @@ with no compute.
 
 ---
 
+## The role list and the checks, run against a live organization (2026-10-13)
+
+- `python3 tools/gcp-guided-setup/permissions.py verify`: 16 of 16 roles exist with the title written in
+  `permissions.json` and include every permission listed for them. Its first run caught two wrong rows: Google titles
+  the Infrastructure Manager roles "Cloud Infrastructure Manager Admin" and "... Agent", and the agent role holds the
+  deployment-state permissions (`config.deployments.getState`, `updateState`, `getLock`), not `config.deployments.get`.
+- `--grant <own email> --check` at the organization: every role answered by Google's testIamPermissions, 11 passed.
+  `--step 2 --check`: the full role check ran inside step 2, 16 passed.
+- `--grant <own email> --for infra-manager --check`: 4 passed. On a service account that does not exist, Google
+  answers 404 "Unknown service account", which the script reports as could not check, never as held.
+- The proof step's pull, `--format="value(message.data.decode(base64))" | grep -c`, counted the test event on the
+  first pull. The same event pulled with `--format=json` and grepped undecoded counted 0: message data is base64.
+
+## The console click paths, read from the live console (2026-10-13)
+
+The step-by-step guide ([STEP-BY-STEP.md](STEP-BY-STEP.md)) and the app give a console click path for every step. Each
+label in them was read from the live Google Cloud console's own accessibility tree on 13 October 2026, in a test
+organization, by opening each form and filling it in without ever pressing the final Create, Save or Enable. The
+screenshots in the app were taken the same way. Before each capture the page's text was rewritten in the browser so
+the organization, its domain, project IDs, account emails and numeric IDs read as example values; every image was
+then checked by eye. No form was submitted; afterwards the organization's sinks were listed (only the existing one) and the project ID typed into the new-project form was looked up (it does not exist).
+
+Where the live console differed from Google's documentation, the guide follows the console:
+
+| Step | Google's documentation says | The console showed |
+|---|---|---|
+| Sink destination, organization sink | choose **Pub/Sub topic** and enter the path | **Cloud Pub/Sub topic**, then **Use a Cloud Pub/Sub topic in a project**, which switches the service to **Other resource** with a template path in **Sink destination** |
+| Sink, include children | (not stated) | the default is **Include only logs ingested by this organization**, which misses every project; **Include logs ingested by this organization and all child resources** must be chosen |
+| Sink panels | **Choose logs to exclude from the sink** | **Choose logs to filter out of sink (optional)** |
+| Create subscription, topic field | **Pub/Sub topic** | **Select a Cloud Pub/Sub topic** |
+| Grant a role | **Grant Access** | **Grant access**, a panel with **New principals** and **Role** |
+| Audit logs | **Set Default Configuration**, **Log Types** tab | **Set default configuration**, **Permission types** tab with **Admin read**, **Data read**, **Data write** |
+| Policy Troubleshooter | **Add Another Pair** | **Add another pair**, up to five pairs a query |
+| Organization policies | (not stated) | an **Enforcement state** column reading Inactive or Active |
+
+Not captured: the Infrastructure Manager create form (the test project has no open billing account, so the API
+cannot be turned on there), the alerting policy form, and the Pub/Sub **Messages** tab, which would show real audit
+events.
+
 ## To raise the tier further
 
 One apply each, in a project with billing:

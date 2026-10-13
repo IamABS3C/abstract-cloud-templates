@@ -57,6 +57,8 @@ Deployment templates for sending AWS, Azure and Google Cloud logs to Abstract Se
 
 **Start here: [the setup guide](docs/gcp/GUIDE.md).** A few questions lead to one plan, in order, from checking what you have to cleaning it up.
 
+Every step, written for the console, the command line and Infrastructure Manager, with the roles each needs and how to grant them: [step by step](docs/gcp/STEP-BY-STEP.md).
+
 | Template | Role | Summary |
 |---|---|---|
 | [Archive Google Cloud logs to Cloud Storage: second sink](templates/gcp/gcp-archive-log-bucket/README.md) | archive | A second organization sink writing to a Cloud Storage bucket, for evidence you keep and search there (Abstract does not read it today), because a sink has exactly one destination. It is not the detection path: storage batches, so latency is minutes to hours. |

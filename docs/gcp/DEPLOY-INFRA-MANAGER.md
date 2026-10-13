@@ -75,25 +75,73 @@ Run [`tools/gcp-guided-setup/preflight.sh`](../../tools/gcp-guided-setup/preflig
 
 ---
 
-## Step 1 — Enable the APIs
+## Who needs which role
 
-Replace LOGGING_PROJECT_ID with your logging project's ID, YOUR_ORG_ID with your organization's ID, and
-INFRA_MANAGER_REGION with a Google Cloud region your organization allows. `gcloud infra-manager locations list`
-does not exist; check the Infra Manager locations page if you need the authoritative list.
+Two principals need roles, and they are not the same set. Every row below comes from
+[`tools/gcp-guided-setup/permissions.json`](../../tools/gcp-guided-setup/permissions.json), the list the guided script's
+`--grant` and the app's step-by-step guide read too.
+
+| Principal | Role | Where | For |
+|---|---|---|---|
+| you | `roles/serviceusage.serviceUsageAdmin` | logging project | turn on the Infrastructure Manager and Cloud Build APIs |
+| you | `roles/iam.serviceAccountAdmin` | logging project | create the service account Infrastructure Manager runs as |
+| you | `roles/config.admin` | logging project | create previews and deployments |
+| you | `roles/iam.serviceAccountUser` | the Infrastructure Manager service account | start a deployment that runs as it |
+| the service account | `roles/config.agent` | logging project | run deployments for Infrastructure Manager |
+| the service account | `roles/pubsub.admin` | logging project | create the topic and subscription, and grant on them |
+| the service account | `roles/iam.serviceAccountAdmin` | logging project | create Abstract's service account |
+| the service account | `roles/serviceusage.serviceUsageAdmin` | logging project | turn on the APIs each template names in `apis.tf` |
+| the service account | **`roles/logging.configWriter`** | **the organization, folder or project the sink is at** | create the log sink |
+| the service account | `roles/iam.securityAdmin` (optional) | the same scope | only to deploy `gcp-foundation-data-access-audit-logs` |
+| the service account | `roles/monitoring.editor` (optional) | logging project | only to deploy `gcp-monitoring-pipeline-health-alerts` |
+
+`roles/iam.serviceAccountKeyAdmin` is not on the list: the templates make no key unless you set
+`create_service_account_key = true`, which puts the private key in Terraform state. Make the key with
+gcloud instead (script step 5).
+
+### Check them, then grant them
+
+The guided script checks and grants both sets, one binding per role, never a write of a whole policy. Run these
+from the top folder of the templates repository. Replace YOUR_EMAIL with your account and LOGGING_PROJECT_ID with
+the logging project's ID.
+
+Check what you hold, changing nothing. For your own email it asks Google which permissions you hold by any
+route, a group or an inherited role included:
 
 ```bash
-export LOG_PROJECT=LOGGING_PROJECT_ID
-export ORG_ID=YOUR_ORG_ID
-export LOCATION=INFRA_MANAGER_REGION
-export SA=infra-manager-abstract
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant YOUR_EMAIL --for infra-manager --check
+```
 
-gcloud config set project "$LOG_PROJECT"
-gcloud services enable \
-  config.googleapis.com \
-  cloudbuild.googleapis.com \
-  pubsub.googleapis.com \
-  logging.googleapis.com \
-  --project="$LOG_PROJECT"
+Grant what is missing. Someone who can set IAM policy on the logging project runs it; anyone else is handed the
+commands to pass on:
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant YOUR_EMAIL --for infra-manager
+```
+
+Then the service account's roles, once it exists (Step 2):
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant serviceAccount:infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --for infra-manager-sa
+```
+
+The commands below do the same by hand.
+
+## Step 1 — Enable the APIs
+
+Replace LOGGING_PROJECT_ID with your logging project's ID, ORG_ID with your organization's ID, YOUR_EMAIL with
+your account, and INFRA_MANAGER_REGION with a Google Cloud region your organization allows.
+`gcloud infra-manager locations list` does not exist; check the Infra Manager locations page if you need the
+authoritative list.
+
+```bash
+gcloud services enable config.googleapis.com cloudbuild.googleapis.com pubsub.googleapis.com logging.googleapis.com --project=LOGGING_PROJECT_ID
+```
+
+Then confirm both took. A project without open billing reports success here and enables nothing:
+
+```bash
+gcloud services list --enabled --project=LOGGING_PROJECT_ID --filter="config.googleapis.com OR cloudbuild.googleapis.com" --format="value(config.name)"
 ```
 
 `config.googleapis.com` **is** the Infrastructure Manager API — the naming is not obvious,
@@ -102,46 +150,55 @@ and it is why the agent role is called `roles/config.agent`.
 ## Step 2 — Create the service account
 
 ```bash
-gcloud iam service-accounts create "$SA" \
-  --display-name="Infra Manager — Abstract log export" \
-  --project="$LOG_PROJECT"
-
-export SA_EMAIL="$SA@$LOG_PROJECT.iam.gserviceaccount.com"
+gcloud iam service-accounts create infra-manager-abstract --display-name="Infra Manager - Abstract" --project=LOGGING_PROJECT_ID
 ```
 
-## Step 3 — Grant it, at the project
+## Step 3 — Grant it, in the logging project
 
-The first grant is for Infra Manager itself; the rest cover what the module creates in this project.
+The first grant is for Infrastructure Manager itself; the rest cover what the template creates in this project.
+One command per role:
 
 ```bash
-gcloud projects add-iam-policy-binding "$LOG_PROJECT" \
-  --member="serviceAccount:$SA_EMAIL" --role="roles/config.agent"
-gcloud projects add-iam-policy-binding "$LOG_PROJECT" \
-  --member="serviceAccount:$SA_EMAIL" --role="roles/pubsub.admin"
-gcloud projects add-iam-policy-binding "$LOG_PROJECT" \
-  --member="serviceAccount:$SA_EMAIL" --role="roles/iam.serviceAccountAdmin"
+gcloud projects add-iam-policy-binding LOGGING_PROJECT_ID --member=serviceAccount:infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --role=roles/config.agent --condition=None
 ```
-
-## Step 4 — Grant it at the ORGANIZATION
-
-**This is the step that gets missed.**
 
 ```bash
-gcloud organizations add-iam-policy-binding "$ORG_ID" \
-  --member="serviceAccount:$SA_EMAIL" \
-  --role="roles/logging.configWriter"
+gcloud projects add-iam-policy-binding LOGGING_PROJECT_ID --member=serviceAccount:infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --role=roles/pubsub.admin --condition=None
 ```
 
-Add `roles/resourcemanager.organizationAdmin` **only** if you are also deploying
-`gcp-foundation-data-access-audit-logs`, which changes the org IAM policy.
+```bash
+gcloud projects add-iam-policy-binding LOGGING_PROJECT_ID --member=serviceAccount:infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --role=roles/iam.serviceAccountAdmin --condition=None
+```
+
+```bash
+gcloud projects add-iam-policy-binding LOGGING_PROJECT_ID --member=serviceAccount:infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --role=roles/serviceusage.serviceUsageAdmin --condition=None
+```
+
+## Step 4 — Grant it where the sink goes
+
+**This is the step that gets missed.** For an organization sink:
+
+```bash
+gcloud organizations add-iam-policy-binding ORG_ID --member=serviceAccount:infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --role=roles/logging.configWriter --condition=None
+```
+
+For a folder sink, `gcloud resource-manager folders add-iam-policy-binding FOLDER_ID` with the same flags; for a
+project sink, `gcloud projects add-iam-policy-binding` on the project the logs come from.
+
+Add `roles/iam.securityAdmin` at the same scope **only** if you are also deploying
+`gcp-foundation-data-access-audit-logs`, which changes the audit settings in the IAM policy there. It is powerful:
+it can change IAM anywhere at that scope, so take it back once the deployment is done.
 
 ## Step 5 — Let yourself act as the service account
 
 ```bash
-gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
-  --member="user:$(gcloud config get-value account)" \
-  --role="roles/iam.serviceAccountUser" \
-  --project="$LOG_PROJECT"
+gcloud iam service-accounts add-iam-policy-binding infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --project=LOGGING_PROJECT_ID --member=user:YOUR_EMAIL --role=roles/iam.serviceAccountUser --condition=None
+```
+
+You also need `roles/config.admin` on the logging project to create previews and deployments:
+
+```bash
+gcloud projects add-iam-policy-binding LOGGING_PROJECT_ID --member=user:YOUR_EMAIL --role=roles/config.admin --condition=None
 ```
 
 ### If the service account lives in a different project from the resources
@@ -154,65 +211,46 @@ Google documents two extra grants for cross-project use:
 
 Simplest avoidance: put the service account in the logging project, as above.
 
-## Step 6 — Preview (this is `terraform plan`)
+## Step 6 — Choose the source: the public repository at a release tag
+
+> **Not yet run end to end.** Every command on this page was checked against gcloud's own help (SDK 588.0.0) and
+> Google's Infrastructure Manager pages, but the test organization has no open billing account, so no preview or
+> deployment has run (see [VERIFIED.md](VERIFIED.md)). Treat your first preview as the test, and read it before you
+> apply.
+
+Deploy from the public repository, not from a folder on your computer. Each template reads the shared modules
+from `../_modules`, and `--local-source` uploads only the folder you name: gcloud's own help says Terraform
+references outside that path are not supported (`gcloud infra-manager deployments apply --help`, SDK 588.0.0). A
+git source fetches the whole repository, so the modules resolve.
+
+Pin `--git-source-ref` to a release tag, never a branch: with a branch, the next apply deploys whatever was merged
+since, unreviewed. Every publish of the public repository is tagged `release-<UTC time>-<commit>`, so the tags
+sort in publish order. List them, newest last,
+and use the last one wherever RELEASE_TAG appears below:
 
 ```bash
-gcloud infra-manager previews create \
-  "projects/$LOG_PROJECT/locations/$LOCATION/previews/abstract-preview" \
-  --service-account="projects/$LOG_PROJECT/serviceAccounts/$SA_EMAIL" \
-  --local-source="./templates/gcp/gcp-source-audit-logs-organization" \
-  --input-values="org_id=$ORG_ID,log_project=$LOG_PROJECT"
+git ls-remote --tags --sort=v:refname https://github.com/IamABS3C/abstract-cloud-templates
 ```
 
-**Read it.** Confirm the sink is org-scoped with `include_children = true`, and that
-`effective_filter` is what you expect. That filter decides both coverage and bill.
+## Step 7 — Write your values in a .tfvars file
 
-## Step 7 — Apply
+`--input-values` takes scalars only (`gcloud infra-manager deployments apply --help`), so lists such as
+`log_categories` go in a `.tfvars` file passed with `--inputs-file`. Copy the template's example, then edit the copy:
 
 ```bash
-gcloud infra-manager deployments apply \
-  "projects/$LOG_PROJECT/locations/$LOCATION/deployments/abstract-log-export" \
-  --service-account="projects/$LOG_PROJECT/serviceAccounts/$SA_EMAIL" \
-  --local-source="./templates/gcp/gcp-source-audit-logs-organization" \
-  --input-values="org_id=$ORG_ID,log_project=$LOG_PROJECT"
+cp templates/gcp/gcp-source-audit-logs-organization/terraform.tfvars.example abstract.tfvars
 ```
 
-## Step 8 — Read the outputs
-
-```bash
-gcloud infra-manager deployments describe \
-  "projects/$LOG_PROJECT/locations/$LOCATION/deployments/abstract-log-export"
-
-gcloud infra-manager revisions list \
-  --deployment="projects/$LOG_PROJECT/locations/$LOCATION/deployments/abstract-log-export"
-```
-
-`abstract_onboarding` carries the `project_id` / `subscription_id` pair for the Abstract
-integration. `sink_writer_identity` confirms the publisher binding landed.
-
----
-
-## List variables: `--input-values` cannot carry them
-
-**`--input-values` accepts scalars only.** Google's reference: *"It only accepts (key,
-value) pairs where value is a scalar value."* There is no `--inputs-file` flag.
-
-So `log_categories`, `data_access_services`, `workspace_app_groups` and `exclusions`
-**cannot** be passed on the command line.
-
-**Commit a `terraform.tfvars` into the deployment directory instead.** Terraform
-auto-loads it from the working directory, and `--input-values` still overrides scalars on
-top. This repo has not run the Infra Manager path end to end (it needs a project with
-billing; see [VERIFIED.md](VERIFIED.md)), so treat your first preview as the test.
+Set at least `org_id` and `log_project`. For the default three Cloud Audit Logs plus service-account token minting
+and Workload Identity Federation:
 
 ```hcl
-# templates/gcp/gcp-source-audit-logs-organization/terraform.tfvars
+org_id         = "ORG_ID"
+log_project    = "LOGGING_PROJECT_ID"
 log_categories = ["admin_activity", "system_event", "policy_denied", "identity_access"]
 ```
 
-That is the default three Cloud Audit Logs plus `identity_access` (service account token
-minting and Workload Identity Federation). To route BigQuery, Cloud Storage and Cloud KMS Data
-Access logs as well, add `data_access_all`:
+To route BigQuery, Cloud Storage and Cloud KMS Data Access logs as well, add `data_access_all`:
 
 ```hcl
 log_categories = ["admin_activity", "system_event", "policy_denied", "identity_access", "data_access_all"]
@@ -230,40 +268,60 @@ Abstract's managed GCP parser keeps only Cloud Audit Log records, so they would 
 discarded. `gcp-source-network-threat-logs` routes them to a topic of their own, but Abstract does not keep
 them there either today: deploying it costs money in Google Cloud and adds nothing in Abstract.
 
-```bash
-gcloud infra-manager deployments apply ... \
-  --input-values="org_id=$ORG_ID,log_project=$LOG_PROJECT"
-```
+`abstract.tfvars` stays on your computer: gcloud reads it and sends the values, and the repository's `.gitignore`
+keeps `*.tfvars` out of git so nobody commits a customer's values by accident.
 
-Note the repo `.gitignore` excludes `terraform.tfvars` by default — deliberately, so
-nobody commits a customer's values by accident. For a git-source deployment you must
-either commit it intentionally (`git add -f`) or keep the defaults.
-
----
-
-## Deploying from git instead of local
-
-`--local-source` uploads whatever is on your laptop, which is a one-shot. Point at the
-repo to make it a controlled pipeline. Replace RELEASE_TAG with the release tag to deploy:
+## Step 8 — Preview (this is `terraform plan`)
 
 ```bash
-gcloud infra-manager deployments apply \
-  "projects/$LOG_PROJECT/locations/$LOCATION/deployments/abstract-log-export" \
-  --service-account="projects/$LOG_PROJECT/serviceAccounts/$SA_EMAIL" \
-  --git-source-repo="https://github.com/IamABS3C/abstract-cloud-templates" \
-  --git-source-directory="templates/gcp/gcp-source-audit-logs-organization" \
-  --git-source-ref="RELEASE_TAG" \
-  --input-values="org_id=$ORG_ID,log_project=$LOG_PROJECT"
+gcloud infra-manager previews create projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/previews/abstract-preview --service-account=projects/LOGGING_PROJECT_ID/serviceAccounts/infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --git-source-repo=https://github.com/IamABS3C/abstract-cloud-templates --git-source-directory=templates/gcp/gcp-source-audit-logs-organization --git-source-ref=RELEASE_TAG --inputs-file=abstract.tfvars
 ```
 
-> **Pin `--git-source-ref` to a TAG, not a branch.** With a branch, the deployment's
-> content changes whenever somebody merges — and the next apply silently deploys code
-> nobody reviewed against that environment.
+Wait for the state to read `SUCCEEDED`:
 
-The repo layout is designed for this: `--git-source-directory` points at a deployment
-root, and the local `../_modules/...` references resolve inside the clone.
+```bash
+gcloud infra-manager previews describe projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/previews/abstract-preview --format="value(state,errorCode)"
+```
 
----
+Then download the result. Google exports it twice, as a binary plan and as JSON; read the JSON in any editor or
+with `jq`:
+
+```bash
+gcloud infra-manager previews export projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/previews/abstract-preview --file=abstract-preview
+```
+
+**Read it.** Confirm the sink is at the scope you chose with `include_children = true`, and that the filter is
+what you expect. That filter decides both coverage and bill.
+
+## Step 9 — Apply
+
+```bash
+gcloud infra-manager deployments apply projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/deployments/abstract-log-export --service-account=projects/LOGGING_PROJECT_ID/serviceAccounts/infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --git-source-repo=https://github.com/IamABS3C/abstract-cloud-templates --git-source-directory=templates/gcp/gcp-source-audit-logs-organization --git-source-ref=RELEASE_TAG --inputs-file=abstract.tfvars
+```
+
+In the console the same deployment is under **Infra Manager** (console.cloud.google.com/infra-manager): **Create**,
+then on **Deployment details** the deployment ID, region, Terraform version, service account and a Git source
+(repository, directory, tag), **Continue**, the input values on **Terraform details** (one key and value per
+variable, so lists are easier from gcloud), **Continue**, then **Create deployment**.
+
+## Step 10 — Read the result
+
+```bash
+gcloud infra-manager deployments describe projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/deployments/abstract-log-export --format="yaml(state,stateDetail,errorCode,tfErrors,latestRevision)"
+```
+
+`ACTIVE` is done. `FAILED` names why in `stateDetail`, `errorCode` and `tfErrors` (Terraform's own errors, up to
+ten, each with the resource and Google's HTTP status). A `403` there is a role the service account is missing:
+check it with `--grant serviceAccount:… --for infra-manager-sa --check` above. For `REVISION_FAILED`, the
+revision names the Cloud Build run that holds the full log:
+
+```bash
+gcloud infra-manager revisions list --deployment=projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/deployments/abstract-log-export
+```
+
+The template's outputs carry the values Abstract needs: `abstract_onboarding` holds the `project_id` /
+`subscription_id` pair for the integration, and `sink_writer_identity` names the account the publisher grant went
+to. Make Abstract's key with script step 5, never in Terraform: a key made by Terraform lives in its state.
 
 ## Pinning the Terraform version
 
@@ -304,12 +362,29 @@ first, so nothing is written to a topic that is about to go, then the subscripti
 topic, then Abstract's service account. Use your own names if you changed them:
 
 ```bash
-gcloud infra-manager deployments delete "projects/$LOG_PROJECT/locations/$LOCATION/deployments/abstract-log-export" --delete-policy=abandon
-gcloud logging sinks delete abstract-org-audit-sink --organization="$ORG_ID"
-gcloud pubsub subscriptions delete abstract-audit-logs-sub --project="$LOG_PROJECT"
-gcloud pubsub topics delete abstract-audit-logs --project="$LOG_PROJECT"
-gcloud iam service-accounts delete "abstract-pubsub-reader@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT"
+gcloud infra-manager deployments delete projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/deployments/abstract-log-export --delete-policy=abandon
 ```
+
+```bash
+gcloud logging sinks delete abstract-org-audit-sink --organization=ORG_ID
+```
+
+```bash
+gcloud pubsub subscriptions delete abstract-audit-logs-sub --project=LOGGING_PROJECT_ID
+```
+
+```bash
+gcloud pubsub topics delete abstract-audit-logs --project=LOGGING_PROJECT_ID
+```
+
+```bash
+gcloud iam service-accounts delete abstract-pubsub-reader@LOGGING_PROJECT_ID.iam.gserviceaccount.com --project=LOGGING_PROJECT_ID
+```
+
+The guided script's `--teardown` finds all of these across the organization and lists them before it deletes
+anything (`./tools/gcp-guided-setup/abstract-gcp-setup.sh --teardown`). The Infrastructure Manager service account
+`infra-manager-abstract` and its grants stay until you remove them; the roles `--grant` added are taken back with
+`--teardown --include-grants`.
 
 If you turned on `enable_dead_letter`, delete the dead-letter topic too. The topic's
 publisher grant to the sink goes with the topic.

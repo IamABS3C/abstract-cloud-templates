@@ -163,7 +163,7 @@ If a sink cannot publish, **Cloud Logging drops the entry.** No retry, no backfi
 
 | Principal | Role | Scope |
 |---|---|---|
-| you | **Organization Admin** (`resourcemanager.organizations.setIamPolicy`) | organization |
+| you | **`roles/iam.securityAdmin`** (or Organization Admin; either holds `resourcemanager.organizations.setIamPolicy`) | organization, or the folder or project of the sink |
 
 Usually a different person again from the `logging.configWriter` holder.
 
@@ -172,9 +172,13 @@ Usually a different person again from the `logging.configWriter` holder.
 | Principal | Role | Scope |
 |---|---|---|
 | the IM service account | `roles/config.agent` | logging project |
-| the IM service account | `roles/pubsub.admin`, `roles/iam.serviceAccountAdmin` | logging project |
-| the IM service account | **`roles/logging.configWriter`** | **the organization** |
+| the IM service account | `roles/pubsub.admin`, `roles/iam.serviceAccountAdmin`, `roles/serviceusage.serviceUsageAdmin` | logging project |
+| the IM service account | **`roles/logging.configWriter`** | **the organization** (or the folder or project of the sink) |
+| you | `roles/config.admin`, `roles/serviceusage.serviceUsageAdmin`, `roles/iam.serviceAccountAdmin` | logging project |
 | you | `roles/iam.serviceAccountUser` | on that service account |
+
+The full list, and the commands that check and grant it, are in [DEPLOY-INFRA-MANAGER.md](DEPLOY-INFRA-MANAGER.md)
+and come from [`permissions.json`](../../tools/gcp-guided-setup/permissions.json).
 
 > **The deployment is project-scoped; the sink is org-scoped.** So the service account needs
 > a grant *above* the project it lives in. That is the step people miss, and it fails at

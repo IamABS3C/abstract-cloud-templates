@@ -36,7 +36,11 @@ locals {
 # 1. The sink cannot publish.
 #    Catches the missing writer-identity grant AND publish-quota exhaustion.
 #    When a sink cannot publish, Cloud Logging DROPS the entry — no retry, no
-#    backfill. This is the only signal that it happened.
+#    backfill. For a sink in a project this is the direct signal. Google's
+#    troubleshooting page says the exports metrics "aren't available for folder-
+#    or organization-level sinks" (logging/docs/export/troubleshoot#quota-issues,
+#    read 2026-10-13; not yet measured here), so for those the feed_dark alert
+#    below, nothing published to the topic, is the one that fires.
 resource "google_monitoring_alert_policy" "sink_errors" {
   project      = var.log_project
   display_name = "${var.prefix} — log sink is failing to export"
