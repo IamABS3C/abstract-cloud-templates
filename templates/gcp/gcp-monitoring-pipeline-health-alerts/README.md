@@ -57,6 +57,7 @@ Alert policies are free; Cloud Monitoring bills only for metrics beyond the free
 ## Permissions
 
 - **roles/monitoring.editor** on The logging project: Deployer: Create the alert policies.
+- **roles/serviceusage.serviceUsageAdmin** on The logging project: Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.
 
 ## Creates
 
@@ -76,18 +77,12 @@ Alert policies are free; Cloud Monitoring bills only for metrics beyond the free
 
 ## Verify
 
+These read, and change nothing. They use LOG_PROJECT from the guided setup's answers: run `source ~/.abstract-gcp-setup.env` first, or `export` each one. An UPPERCASE word such as YOUR_BUCKET or BILLING_ACCOUNT_ID is yours to replace.
+
 | Check | Command | Healthy when |
 |---|---|---|
-| Every policy is enabled and wired to a channel | see below | Each policy shows enabled true and at least one notification channel. |
+| Every policy is enabled and wired to a channel | `curl -s "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/alertPolicies" -H "Authorization: Bearer $(gcloud auth print-access-token)"` | Each "Abstract log pipeline" policy shows enabled true and at least one notification channel. |
 | The stall alert before Abstract is connected |  | It fires, correctly, because nothing consumes the subscription yet. |
-
-**Every policy is enabled and wired to a channel:**
-
-```bash
-TOKEN=$(gcloud auth print-access-token)
-curl -s "https://monitoring.googleapis.com/v3/projects/<log-project-id>/alertPolicies" \
--H "Authorization: Bearer $TOKEN"
-```
 
 ## Google documentation
 
@@ -97,3 +92,4 @@ Google's own pages on what this template sets up:
 - [Create metric-threshold alerting policies](https://docs.cloud.google.com/monitoring/alerts/using-alerting-ui)
 - [Monitor Pub/Sub in Cloud Monitoring](https://docs.cloud.google.com/pubsub/docs/monitoring#monitoring_the_backlog). We alert on the global oldest_unacked_message_age anyway: measured on a live subscription it reported every minute, while the regional metric wrote 8 points in 24 hours (docs/public/gcp/TROUBLESHOOTING.md, the backlog check).
 - [Google Cloud metrics: P through Z](https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z#gcp-pubsub)
+- [Create and manage notification channels](https://docs.cloud.google.com/monitoring/support/notification-options)

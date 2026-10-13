@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Plan, then apply with --yes. Variables come from terraform.tfvars: the first run copies
-# terraform.tfvars.example there and stops, so you can fill in every <placeholder>.
+# terraform.tfvars.example there and stops, so you can replace every placeholder.
 set -euo pipefail
 cd "$(dirname "$0")"
 # Cloud Shell deletes a session's files when it ends, Terraform state included. A state that lived only
@@ -15,8 +15,11 @@ if [ ! -f terraform.tfvars ]; then
   echo "Wrote terraform.tfvars from terraform.tfvars.example. Fill it in, then run ./deploy.sh again." >&2
   exit 1
 fi
-if grep -Eq '^[^#]*<[A-Za-z_]+>' terraform.tfvars; then
-  echo "terraform.tfvars still has a <placeholder>. Fill it in first." >&2
+# A placeholder is <name>, or a whole value in UPPERCASE words joined by "_" (LOGGING_PROJECT_ID, ORG_ID): no real
+# project, organization or billing-account ID has that shape, so an unedited file never reaches a plan.
+if grep -Eq '^[^#]*<[A-Za-z_]+>' terraform.tfvars \
+   || grep -Eq '^[^#]*=[[:space:]]*"[A-Z][A-Z0-9]*(_[A-Z0-9]+)+"[[:space:]]*$' terraform.tfvars; then
+  echo "terraform.tfvars still has a placeholder (a <name>, or an UPPERCASE_NAME). Replace it first." >&2
   exit 1
 fi
 plan="$(mktemp -d)/abstract.tfplan"

@@ -50,9 +50,9 @@ parameters:
 - name: folder_id
   type: string
   required: false
-  description: 'Folder ID, when scope = folder. Find it with: gcloud resource-manager folders list --organization=<org-id>'
+  description: 'Folder ID, when scope = folder. Find it with: gcloud resource-manager folders list --organization=ORG_ID'
   default: ''
-  find_it: gcloud resource-manager folders list --organization=<org-id>
+  find_it: gcloud resource-manager folders list --organization=ORG_ID
 - name: project_id
   type: string
   required: false
@@ -108,7 +108,7 @@ outputs:
 - enabled
 verify:
 - check: See what is already enabled
-  command: tools/gcp-guided-setup/preflight.sh --project <project-id> --org-id <org-id>
+  command: ./tools/gcp-guided-setup/preflight.sh --project "$LOG_PROJECT" --org-id "$ORG_ID"
   healthy: The audit config lists exactly the services and log types you chose.
 cost: BigQuery DATA_READ on a BigQuery-heavy estate can move total volume by one to two orders of magnitude;
   scope it to BigQuery and regulated buckets rather than refusing it.

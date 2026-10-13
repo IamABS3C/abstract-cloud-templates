@@ -120,15 +120,19 @@ Workspace sign-ins do not travel the log sink path. See [Google Workspace](WORKS
 
 ## Which template builds which path
 
+Abstract's Google Cloud integration keeps only Cloud Audit Logs, so three templates below send records Abstract
+does not keep today: deploying them costs money in Google Cloud and adds nothing in Abstract. The setup guide
+lists them under "Not collected by Abstract yet".
+
 | Template | Path | What it creates |
 |---|---|---|
 | [gcp-source-audit-logs-organization](../../templates/gcp/gcp-source-audit-logs-organization/README.md) | 1 | Organization sink, topic, subscription, reader account |
 | [gcp-source-audit-logs-folder](../../templates/gcp/gcp-source-audit-logs-folder/README.md) | 1 | The same at folder scope |
 | [gcp-source-audit-logs-project](../../templates/gcp/gcp-source-audit-logs-project/README.md) | 1 | The same at project scope, for a pilot |
-| [gcp-source-network-threat-logs](../../templates/gcp/gcp-source-network-threat-logs/README.md) | 1 | A filtered sink for firewall, DNS, load balancer and IDS logs, on its own topic |
+| [gcp-source-network-threat-logs](../../templates/gcp/gcp-source-network-threat-logs/README.md) | 1 | A filtered sink for firewall, DNS, load balancer and IDS logs, on its own topic. **Not kept by Abstract today** |
 | [gcp-source-billing-account-logs](../../templates/gcp/gcp-source-billing-account-logs/README.md) | 1 | A billing-account sink on its own topic |
-| [gcp-source-security-command-center-findings](../../templates/gcp/gcp-source-security-command-center-findings/README.md) | 2 | A notification config, topic and subscription |
-| [gcp-source-asset-and-iam-changes](../../templates/gcp/gcp-source-asset-and-iam-changes/README.md) | 2 | An organization asset feed, topic and subscription |
+| [gcp-source-security-command-center-findings](../../templates/gcp/gcp-source-security-command-center-findings/README.md) | 2 | A notification config, topic and subscription. **Not kept by Abstract today** |
+| [gcp-source-asset-and-iam-changes](../../templates/gcp/gcp-source-asset-and-iam-changes/README.md) | 2 | An organization asset feed, topic and subscription. **Not kept by Abstract today** |
 | [gcp-source-cloud-storage-bucket-logs](../../templates/gcp/gcp-source-cloud-storage-bucket-logs/README.md) | 3 | Bucket notifications, topic and subscription |
 | [gcp-source-google-workspace-logs](../../templates/gcp/gcp-source-google-workspace-logs/README.md) | 4 | A service account for domain-wide delegation |
 | [gcp-foundation-logging-project](../../templates/gcp/gcp-foundation-logging-project/README.md) | all | The logging project and its APIs |

@@ -28,10 +28,10 @@ customer call.
 
 | Flag | Meaning |
 |---|---|
-| `--project <id>` | **Required.** The logging project holding the topic and subscription |
-| `--org-id <id>` | Organization ID. Required at organization scope, the default: without it nothing at the organization is checked, and that is a blocker |
-| `--folder-id <id>` | Folder ID. Implies `--scope folder`, and is required there |
-| `--scope <organization\|folder\|project>` | Which scope to check. Default `organization` |
+| `--project PROJECT_ID` | **Required.** The logging project holding the topic and subscription |
+| `--org-id ORG_ID` | Organization ID. Required at organization scope, the default: without it nothing at the organization is checked, and that is a blocker |
+| `--folder-id FOLDER_ID` | Folder ID. Implies `--scope folder`, and is required there |
+| `--scope organization`, `folder` or `project` | Which scope to check. Default `organization` |
 
 Exit code is **1** if there is a blocker, **0** otherwise — so it works as a CI gate.
 
@@ -129,7 +129,11 @@ you can stop and resume.
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --check` | Checks everything and changes nothing |
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove` | Lists what the clean-up would delete, and deletes nothing |
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm` | Deletes that list. Run it only after you have read the list |
-| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove --project <logging-project-id>` | With no answers file: lists by name what carries the setup's names, and deletes nothing |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove --project LOGGING_PROJECT_ID` | With no answers file, LOGGING_PROJECT_ID being your logging project's ID: lists by name what carries the setup's names, and deletes nothing |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --teardown` | Full reset, to start from scratch: lists everything the setup and the templates make across the organization, and deletes nothing |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --teardown --confirm` | Deletes that list, after you type the organization ID. Run it only after you have read the list |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL --check` | The roles the setup needs, what each is for, and which of them EMAIL holds directly. Changes nothing |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL` | Run by someone who can set IAM policy: grants those roles to EMAIL, one binding per role, asking first |
 
 `--state` names the answers file. In a new Cloud Shell session, upload the copy you downloaded
 (More, then Upload), and if it is saved under another name, put that path after `--state`.
@@ -157,6 +161,34 @@ made, and lists anything that existed before for you to decide on. Without the a
 lists what carries the setup's names and deletes nothing. It never deletes the logging
 project. Without `--confirm` it only prints the list.
 
+**The full reset finds what the setup makes, whatever was recorded.** `--teardown` looks across the
+organization (bounded, and it says when it stopped looking): sinks named `abstract-…` or sending to a topic
+named `abstract-audit-logs`, at the organization and in its folders and projects; in every project, its
+`abstract-…` topics and every subscription on them, the reader service accounts named `abstract-…-reader`
+(deleting one deletes its keys) and, where it found a topic, the "Abstract log pipeline" alerts and channels;
+at the organization, the Security Command Center notification configs and Cloud Asset feeds that send to one of
+those topics. Cloud Storage bucket notifications cannot be found without reading every bucket, so for each
+topic it prints how to find and delete them by hand. With `--confirm` it deletes the sinks, notification
+configs and feeds first, so nothing is sent to a topic about to go, then subscriptions, topics, service
+accounts and alerts. A listing it cannot read is a failure, never "none found", and the answers file stays;
+the one exception is a project with the Pub/Sub or IAM API off, which holds none of these.
+It lists and keeps your Data Access audit settings unless you add `--include-audit-settings`: then it takes
+off exactly the log types script step 6 recorded adding (only what Google confirmed), at the scope where it
+added them, after saving a copy, with the policy's etag and `updateMask=auditConfigs`. A log type that was on
+before stays. With no such record it changes nothing and prints how to do it by hand. The bindings `--grant`
+recorded stay unless you add `--include-grants`. It never deletes a project or Terraform state: it prints `gcloud projects delete` for each
+logging project, and the `terraform state rm` lines for each template folder that still has state (the
+topic, subscription and sink carry `prevent_destroy`, so `terraform destroy` refuses them). Without a terminal,
+`--confirm` also needs `--yes-i-mean-it`.
+
+**`--grant` adds the setup's roles one at a time.** Each is `add-iam-policy-binding` for one role (never a
+write of the whole policy, which would replace every other binding), with `--condition=None` except on a billing account. A role
+the person already holds directly is skipped and not recorded; each one added is recorded in the answers file,
+so `--teardown --include-grants` removes exactly those. Script step 10, `--remove` and a plain `--teardown`
+list each recorded binding with the `remove-iam-policy-binding` command that takes it back: run those once the
+pipeline works, because the roles are not needed after the setup. The roles are listed in
+[PERMISSIONS.md](PERMISSIONS.md#grant-exactly-these-roles-with---grant).
+
 ## When to use Terraform instead
 
 If your team keeps infrastructure as code, use the Terraform appendix in each template's
@@ -175,28 +207,18 @@ cannot be recovered. Wait five minutes, then fire a **fresh** event.
 **A pull that does not acknowledge makes the next pull look empty.**
 The first pull delivers the message but does not acknowledge it, so it stays inside the
 60-second ack deadline and a second pull returns nothing. That reads as "it stopped
-working". Use `--auto-ack` only on your own probe subscription, never on Abstract's.
+working".
+
+Script step 9 handles both. It waits until the sink is old enough to route, writes a harmless admin event
+inside your scope (it creates and deletes a log-based metric), and waits for that event on a throwaway
+subscription on the same topic, acknowledging only there, then deletes the throwaway subscription. From the top
+folder of the repository:
 
 ```bash
-PROBE=abstract-probe-$(date +%s)
-gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs \
-  --project=P --expiration-period=1d
-gcloud pubsub topics create abstract-probe-topic --project=P --quiet
-gcloud pubsub topics delete abstract-probe-topic --project=P --quiet
-END=$(( $(date +%s) + 330 )); FOUND=
-for i in $(seq 1 20); do
-  sleep 15
-  while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
-    N=$(gcloud pubsub subscriptions pull "$PROBE" --project=P --limit=1000 --auto-ack --format=json 2>/dev/null \
-      | python3 -c 'import base64, json, sys; m = json.load(sys.stdin) or []; print("FOUND" if any(sys.argv[1].encode() in base64.b64decode(x.get("message", {}).get("data", "")) for x in m) else len(m))' abstract-probe-topic 2>/dev/null)
-    case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
-  done
-  [ -n "$FOUND" ] && { echo "FOUND: the sink routes and the topic delivers"; break; }
-done
-gcloud pubsub subscriptions delete "$PROBE" --project=P --quiet
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 9
 ```
 
-Never pull from `abstract-audit-logs-sub`: Abstract reads that subscription, and `--auto-ack` there deletes events before Abstract sees them. The probe subscription above is yours and expires in a day.
+Never pull from `abstract-audit-logs-sub` yourself: Abstract reads that subscription, and an acknowledged pull there deletes events before Abstract sees them.
 
 ---
 
@@ -208,4 +230,6 @@ Deploy:              abstract-gcp-setup.sh (or the Terraform appendix, if you ke
 Detail on a project: preflight.sh
 Later, any time:     abstract-gcp-setup.sh --check
 To remove it:        abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove, read the list, then add --confirm
+From scratch:        abstract-gcp-setup.sh --teardown, read the list, then add --confirm
+Missing roles:       abstract-gcp-setup.sh --grant EMAIL --check, then an admin runs it without --check
 ```

@@ -3,6 +3,7 @@ title: 'Asset and IAM changes to Abstract: asset feed'
 cloud: gcp
 role: source
 scope: organization
+not_kept_by_abstract: 'Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract''s Google Cloud integration supports these records. Abstract''s Google Cloud integration keeps only Cloud Audit Logs, which asset and IAM-policy change records are not.'
 summary: Cloud Asset Inventory publishes to Pub/Sub through its own feed, which no log sink can carry.
   It records what an IAM policy now is and what it was before, the diff a detection wants, alongside the
   audit log of who called which API.
@@ -14,6 +15,12 @@ permissions:
 - role: roles/cloudasset.owner
   where: The organization
   why: 'Deployer: Create the organization feed.'
+- role: roles/pubsub.admin
+  where: The logging project
+  why: 'Deployer: Create the topic, the subscription and their IAM bindings.'
+- role: roles/serviceusage.serviceUsageAdmin
+  where: The logging project
+  why: 'Deployer: Turn on the APIs this template uses, and create the Cloud Asset Inventory service agent. Terraform turns on only the APIs still off.'
 - role: roles/pubsub.publisher
   where: The topic
   why: 'Cloud Asset Inventory service agent: The feed publishes as its own agent; without the grant it
@@ -35,7 +42,7 @@ prerequisites:
   subscriber_service_account_email
 - An empty asset_types feeds every asset type and is refused without acknowledge_all_asset_types
 - roles/cloudasset.owner at the organization, and the Cloud Asset API on the billing project, whose service
-  agent (service-<project-number>@gcp-sa-cloudasset.iam.gserviceaccount.com) publishes
+  agent (service-PROJECT_NUMBER@gcp-sa-cloudasset.iam.gserviceaccount.com, with PROJECT_NUMBER that project's number) publishes
 - 'A separate Abstract configuration for this subscription with parsers/cloud-asset-inventory.yml attached
   to it, never to the audit-log configuration: a configuration-level parser replaces the managed one'
 parameters:
@@ -51,7 +58,7 @@ parameters:
     it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project
     (set create_project = true).'
   find_it: gcloud projects list --format='value(projectId)'
-  example: acme-security-logging
+  example: LOGGING_PROJECT_ID
 - name: remote_state_bucket
   type: string
   required: false

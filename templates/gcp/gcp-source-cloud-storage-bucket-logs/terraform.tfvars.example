@@ -12,7 +12,7 @@
 # DEDICATED logging or security project holding this pipeline. Not a workload project. Find it with:
 # gcloud projects list. If no dedicated logging project exists yet, create one first with
 # templates/gcp/gcp-foundation-logging-project (set create_project = true).
-log_project = "acme-security-logging"
+log_project = "LOGGING_PROJECT_ID"
 
 # Scope to a prefix so irrelevant objects never generate a message you then pay to fetch.
 # object_name_prefix = ""

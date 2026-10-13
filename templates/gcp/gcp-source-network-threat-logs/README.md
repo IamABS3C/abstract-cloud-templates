@@ -2,6 +2,9 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+> [!WARNING]
+> Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records. Abstract's Google Cloud Pub/Sub integration keeps only Cloud Audit Log records, and firewall, Cloud DNS, load balancer (Cloud Armor) and Cloud IDS logs are not audit logs.
+
 Routes firewall rule, Cloud DNS query, load balancer (Cloud Armor) and Cloud IDS threat logs to a Pub/Sub topic for Abstract. Abstract's managed GCP parser does not yet store these logs: it keeps only Cloud Audit Log records, and these are not.
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
@@ -46,7 +49,7 @@ DNS query and load balancer logs are high volume and are billed as Cloud Logging
 |---|---|---|---|---|
 | `sink_scope` | string | no | Where the sink binds: organization Everything, current and future, by containment (recommended). folder All projects within a folder and subfolders. project ONE project (requires acknowledge_pilot_scope = true). sink_scope must be one of: organization, folder, project. |  |
 | `org_id` | string | no | Organization ID. Required when sink_scope = organization. Find it with: gcloud organizations list | `gcloud organizations list --format='value(ID)'` |
-| `folder_id` | string | no | Folder ID. Required when sink_scope = folder. | `gcloud resource-manager folders list --organization=<org-id>` |
+| `folder_id` | string | no | Folder ID. Required when sink_scope = folder. | `gcloud resource-manager folders list --organization=ORG_ID` |
 | `sink_project` | string | no | Project to bind the sink to when sink_scope = project. Defaults to log_project. |  |
 | `log_project` | string | yes | DEDICATED logging or security project holding the topic and subscription. Find it with: gcloud projects list. | `gcloud projects list --format='value(projectId)'` |
 | `acknowledge_pilot_scope` | bool | no | Required when sink_scope = project to acknowledge single-project scope. |  |
@@ -71,6 +74,7 @@ DNS query and load balancer logs are high volume and are billed as Cloud Logging
 - **roles/logging.configWriter** on The organization (or the folder or project for those scopes): Deployer: Create the sink.
 - **roles/pubsub.admin** on The logging project: Deployer: Create the topic, subscription and IAM bindings.
 - **roles/iam.serviceAccountAdmin** on The logging project: Deployer: Create Abstract's service account.
+- **roles/serviceusage.serviceUsageAdmin** on The logging project: Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.
 - **roles/pubsub.publisher** on The topic: Sink writer identity: granted by this template.
 - **roles/pubsub.subscriber** on The subscription only: Abstract service account: Abstract pulls; not publisher, not project-wide.
 
@@ -99,9 +103,11 @@ DNS query and load balancer logs are high volume and are billed as Cloud Logging
 
 ## Verify
 
+These read, and change nothing. They use ORG_ID from the guided setup's answers: run `source ~/.abstract-gcp-setup.env` first, or `export` each one. An UPPERCASE word such as YOUR_BUCKET or BILLING_ACCOUNT_ID is yours to replace.
+
 | Check | Command | Healthy when |
 |---|---|---|
-| The sink exists with the intended filter | `gcloud logging sinks describe abstract-network-threats-sink --organization=<org-id> --format="value(filter,destination)"` | The filter names the chosen categories and ids.googleapis.com%2Fthreat; the destination is the abstract-network-threats topic. |
+| The sink exists with the intended filter | `gcloud logging sinks describe abstract-network-threats-sink --organization="$ORG_ID" --format="value(filter,destination)"` | The filter names the chosen categories and ids.googleapis.com%2Fthreat; the destination is the abstract-network-threats topic. For a folder sink use --folder=FOLDER_ID instead. |
 
 ## Google documentation
 

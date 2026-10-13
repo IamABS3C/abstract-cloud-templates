@@ -70,7 +70,7 @@ parameters:
     exists yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project
     = true) — do not point this at a workload project.'
   find_it: gcloud projects list --format='value(projectId)'
-  example: acme-security-logging
+  example: LOGGING_PROJECT_ID
 - name: log_categories
   type: array
   required: false
@@ -205,27 +205,12 @@ verify:
   command: gcloud pubsub topics get-iam-policy abstract-audit-logs --project="$LOG_PROJECT"
   healthy: The sink's writer identity has roles/pubsub.publisher.
 - check: A fresh event reaches the topic from the sink
-  command: |-
-    PROBE=abstract-probe-$(date +%s)
-    gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs --project=<log-project-id> --expiration-period=1d
-    gcloud pubsub topics create abstract-probe-topic --project=<log-project-id> --quiet
-    gcloud pubsub topics delete abstract-probe-topic --project=<log-project-id> --quiet
-    END=$(( $(date +%s) + 330 )); FOUND=
-    for i in $(seq 1 20); do
-      sleep 15
-      while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
-        N=$(gcloud pubsub subscriptions pull "$PROBE" --project=<log-project-id> --limit=1000 --auto-ack --format=json 2>/dev/null \
-          | python3 -c 'import base64, json, sys; m = json.load(sys.stdin) or []; print("FOUND" if any(sys.argv[1].encode() in base64.b64decode(x.get("message", {}).get("data", "")) for x in m) else len(m))' abstract-probe-topic 2>/dev/null)
-        case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
-      done
-      [ -n "$FOUND" ] && { echo "FOUND: the sink routes and the topic delivers"; break; }
-    done
-    gcloud pubsub subscriptions delete "$PROBE" --project=<log-project-id> --quiet
-  healthy: 'FOUND is printed within five minutes: your own CreateTopic and DeleteTopic reached the probe
-    subscription. Wait five minutes after creating the sink before testing. Never
-    pull from Abstract''s own subscription: --auto-ack there deletes events before Abstract reads them.'
+  command: ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 9
+  healthy: 'A ✓ "the test event arrived" within five minutes, from the top folder of the repository. It writes a
+    fresh event in your scope and waits on a probe subscription of its own, which it deletes; it never reads
+    Abstract''s subscription. Wait five minutes after creating the sink before testing.'
 - check: No sink errors
-  command: gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project=<log-project-id>
+  command: gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project="$LOG_PROJECT"
   healthy: No sink_error entries.
 cost: Pub/Sub throughput is usually the largest line. BigQuery Data Access reads are both the richest
   exfiltration signal and the biggest cost driver, able to move volume by one to two orders of magnitude.

@@ -3,6 +3,7 @@ title: 'Firewall, DNS and IDS logs to Abstract: filtered sink'
 cloud: gcp
 role: source
 scope: organization
+not_kept_by_abstract: 'Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract''s Google Cloud integration supports these records. Abstract''s Google Cloud Pub/Sub integration keeps only Cloud Audit Log records, and firewall, Cloud DNS, load balancer (Cloud Armor) and Cloud IDS logs are not audit logs.'
 summary: 'Routes firewall rule, Cloud DNS query, load balancer (Cloud Armor) and Cloud IDS threat logs
   to a Pub/Sub topic for Abstract. Abstract''s managed GCP parser does not yet store these logs: it keeps
   only Cloud Audit Log records, and these are not.'
@@ -20,6 +21,9 @@ permissions:
 - role: roles/iam.serviceAccountAdmin
   where: The logging project
   why: 'Deployer: Create Abstract''s service account.'
+- role: roles/serviceusage.serviceUsageAdmin
+  where: The logging project
+  why: 'Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.'
 - role: roles/pubsub.publisher
   where: The topic
   why: 'Sink writer identity: granted by this template.'
@@ -65,7 +69,7 @@ parameters:
   required: false
   description: Folder ID. Required when sink_scope = folder.
   default: ''
-  find_it: gcloud resource-manager folders list --organization=<org-id>
+  find_it: gcloud resource-manager folders list --organization=ORG_ID
 - name: sink_project
   type: string
   required: false
@@ -77,7 +81,7 @@ parameters:
   description: 'DEDICATED logging or security project holding the topic and subscription. Find it with:
     gcloud projects list.'
   find_it: gcloud projects list --format='value(projectId)'
-  example: acme-security-logging
+  example: LOGGING_PROJECT_ID
 - name: acknowledge_pilot_scope
   type: bool
   required: false
@@ -188,9 +192,9 @@ abstract:
   integration: google_cloud_pub_sub
 verify:
 - check: The sink exists with the intended filter
-  command: gcloud logging sinks describe abstract-network-threats-sink --organization=<org-id> --format="value(filter,destination)"
+  command: gcloud logging sinks describe abstract-network-threats-sink --organization="$ORG_ID" --format="value(filter,destination)"
   healthy: The filter names the chosen categories and ids.googleapis.com%2Fthreat; the destination is
-    the abstract-network-threats topic.
+    the abstract-network-threats topic. For a folder sink use --folder=FOLDER_ID instead.
 cost: DNS query and load balancer logs are high volume and are billed as Cloud Logging ingestion and Pub/Sub
   throughput. Cloud IDS is billed per endpoint-hour and per GB inspected, and needs Packet Mirroring.
   Measure a 7-day baseline before acknowledging high volume.

@@ -1,11 +1,11 @@
 # Project that owns the connector service account. Can be the same one used for the Pub/Sub
 # pipeline. Find it with: gcloud projects list
-log_project = "acme-security-logging"
+log_project = "LOGGING_PROJECT_ID"
 
 # A Workspace ADMIN the service account impersonates. Delegation acts as a real user — without a
 # subject the Reports API returns 401, not an empty result. A Google Workspace SUPER ADMIN, used
 # only for domain-wide delegation. No gcloud command lists this — ask whoever administers Workspace.
-workspace_admin_email = "<workspace_admin_email>"
+workspace_admin_email = "WORKSPACE_ADMIN_EMAIL"
 
 # identity | admin | data | endpoint | collaboration | platform. Individual application names also
 # work.

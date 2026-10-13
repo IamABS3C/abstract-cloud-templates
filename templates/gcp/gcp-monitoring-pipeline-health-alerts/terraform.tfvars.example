@@ -1,7 +1,7 @@
 # DEDICATED logging or security project holding this pipeline. Not a workload project. Find it with:
 # gcloud projects list. If no dedicated logging project exists yet, create one first with
 # templates/gcp/gcp-foundation-logging-project (set create_project = true).
-log_project = "acme-security-logging"
+log_project = "LOGGING_PROJECT_ID"
 
 # Topic NAME (not the full path), from gcp-source-audit-logs-organization.
 # topic_id = "abstract-audit-logs"

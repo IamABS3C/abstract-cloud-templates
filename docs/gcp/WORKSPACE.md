@@ -142,23 +142,22 @@ compliance rather than detection.
 
 ## Setup, end to end
 
+With the guided setup, script step 7 does steps 1, 2 and 4 for you and checks the delegation; the template's
+[tutorial](../../templates/gcp/gcp-source-google-workspace-logs/TUTORIAL.md) walks through it. The steps below
+are the Terraform path only.
+
 ### 1. Terraform creates the identity
 
-```bash
-cd templates/gcp/gcp-source-google-workspace-logs
-cat > terraform.tfvars <<EOF
-log_project           = "acme-security-logging"
-workspace_admin_email = "admin@acme.com"
-workspace_app_groups  = ["identity", "admin"]
-EOF
-terraform init && terraform apply
-```
+Follow **Terraform instead** in the template's tutorial: it keeps the state in a bucket, fills in
+`terraform.tfvars` (your logging project and the Workspace admin Abstract acts as) and applies a saved plan.
 
 A **dedicated** service account, deliberately not the Pub/Sub one — domain-wide delegation
 is a far broader trust than reading one subscription, and the two must be revocable
 independently.
 
 ### 2. Read the delegation values
+
+Terraform path only, in the template's folder (read-only):
 
 ```bash
 terraform output workspace_onboarding
@@ -174,8 +173,7 @@ Domain-wide delegation → Add new**
 | Client ID | The **numeric** `unique_id` from the output — **not** the service-account email |
 | OAuth scopes | `https://www.googleapis.com/auth/admin.reports.audit.readonly` |
 
-Comma-separated, **no spaces**. Both are read-only, and verified against Google's OAuth
-scope registry.
+One scope, read-only, and the only one Abstract's Workspace integration requests.
 
 > **A GCP Owner cannot do this step.** There is no API and no Terraform provider for
 > domain-wide delegation. If the person on the call is a cloud admin rather than a
@@ -183,14 +181,26 @@ scope registry.
 
 ### 4. Create the key, out of band
 
-The key goes in `~/abstract-keys`, outside the repository, where only you can read it:
+Terraform path only. The key is deliberately **not** created by Terraform: it would put a private key in state.
+In the template's folder, with LOG_PROJECT set to your logging project's ID, keep the Workspace reader account's
+email in WS_SA:
 
 ```bash
-mkdir -p ~/abstract-keys && chmod 700 ~/abstract-keys
-(umask 077 && gcloud iam service-accounts keys create ~/abstract-keys/abstract-workspace-key.json --iam-account="$(terraform output -json workspace_onboarding | jq -r .service_account_email)")
+WS_SA="$(terraform output -json workspace_onboarding | jq -r .service_account_email)"
 ```
 
-Deliberately **not** created by Terraform: it would put a private key in state.
+Make a folder for the key outside the repository, readable only by you:
+
+```bash
+mkdir -m 700 -p ~/abstract-keys
+```
+
+Create the key, as a file only you can read. This adds one key to the Workspace reader account in your logging
+project; anyone holding the file can read your Workspace audit reports as the admin. Step 6 revokes it:
+
+```bash
+(umask 077 && gcloud iam service-accounts keys create ~/abstract-keys/abstract-workspace-key.json --iam-account="$WS_SA" --project="$LOG_PROJECT")
+```
 
 In Cloud Shell, download it to the computer you use for Abstract:
 
@@ -210,6 +220,21 @@ rm -f ~/abstract-keys/abstract-workspace-key.json
 Watch for Workspace events in Abstract. Delegation can take a few minutes to propagate, and Google
 publishes some Workspace reports hours late. Do not sign `gcloud` in as the reader account to test
 it: that switches your own session to the reader.
+
+### 6. Revoke the key later
+
+For a rotation, or when you remove the integration. List the Workspace reader account's keys (read-only); the one
+Abstract holds has the ID in the `private_key_id` of the file you uploaded:
+
+```bash
+gcloud iam service-accounts keys list --iam-account="$WS_SA" --project="$LOG_PROJECT" --managed-by=user
+```
+
+Then delete it, replacing KEY_ID with that ID. Abstract can no longer read Workspace reports from that moment:
+
+```bash
+gcloud iam service-accounts keys delete KEY_ID --iam-account="$WS_SA" --project="$LOG_PROJECT"
+```
 
 ---
 

@@ -2,6 +2,9 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+> [!WARNING]
+> Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records. Abstract's Google Cloud integration keeps only Cloud Audit Logs, which asset and IAM-policy change records are not.
+
 Cloud Asset Inventory publishes to Pub/Sub through its own feed, which no log sink can carry. It records what an IAM policy now is and what it was before, the diff a detection wants, alongside the audit log of who called which API.
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
@@ -34,7 +37,7 @@ In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, s
 
 - Abstract's service account from gcp-source-audit-logs-organization, read from its state or pasted as subscriber_service_account_email
 - An empty asset_types feeds every asset type and is refused without acknowledge_all_asset_types
-- roles/cloudasset.owner at the organization, and the Cloud Asset API on the billing project, whose service agent (service-&lt;project-number&gt;@gcp-sa-cloudasset.iam.gserviceaccount.com) publishes
+- roles/cloudasset.owner at the organization, and the Cloud Asset API on the billing project, whose service agent (service-PROJECT_NUMBER@gcp-sa-cloudasset.iam.gserviceaccount.com, with PROJECT_NUMBER that project's number) publishes
 - A separate Abstract configuration for this subscription with parsers/cloud-asset-inventory.yml attached to it, never to the audit-log configuration: a configuration-level parser replaces the managed one
 
 ## Cost
@@ -59,6 +62,8 @@ Asset feeds are free; Pub/Sub throughput follows the rate of IAM and resource ch
 ## Permissions
 
 - **roles/cloudasset.owner** on The organization: Deployer: Create the organization feed.
+- **roles/pubsub.admin** on The logging project: Deployer: Create the topic, the subscription and their IAM bindings.
+- **roles/serviceusage.serviceUsageAdmin** on The logging project: Deployer: Turn on the APIs this template uses, and create the Cloud Asset Inventory service agent. Terraform turns on only the APIs still off.
 - **roles/pubsub.publisher** on The topic: Cloud Asset Inventory service agent: The feed publishes as its own agent; without the grant it delivers nothing.
 - **roles/pubsub.subscriber** on The asset subscription: Abstract service account: Pull the changes.
 

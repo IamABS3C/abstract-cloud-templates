@@ -1,5 +1,5 @@
 variable "create_project" {
-  description = "FALSE (default) only enables APIs on an existing project. TRUE also creates it, which needs billing_account_id and project-creator rights."
+  description = "FALSE (default) only enables APIs on an existing project. TRUE also creates it, which needs project-creator rights; billing_account_id is optional (see its description)."
   type        = bool
   default     = false
 }

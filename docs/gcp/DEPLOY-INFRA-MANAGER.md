@@ -77,13 +77,14 @@ Run [`tools/gcp-guided-setup/preflight.sh`](../../tools/gcp-guided-setup/preflig
 
 ## Step 1 — Enable the APIs
 
-`LOCATION` is a standard Google Cloud region. `gcloud infra-manager locations list` does not
-exist; check the Infra Manager locations page if you need the authoritative list.
+Replace LOGGING_PROJECT_ID with your logging project's ID, YOUR_ORG_ID with your organization's ID, and
+INFRA_MANAGER_REGION with a Google Cloud region your organization allows. `gcloud infra-manager locations list`
+does not exist; check the Infra Manager locations page if you need the authoritative list.
 
 ```bash
-export LOG_PROJECT=acme-security-logging
-export ORG_ID=123456789012
-export LOCATION=us-central1
+export LOG_PROJECT=LOGGING_PROJECT_ID
+export ORG_ID=YOUR_ORG_ID
+export LOCATION=INFRA_MANAGER_REGION
 export SA=infra-manager-abstract
 
 gcloud config set project "$LOG_PROJECT"
@@ -91,7 +92,8 @@ gcloud services enable \
   config.googleapis.com \
   cloudbuild.googleapis.com \
   pubsub.googleapis.com \
-  logging.googleapis.com
+  logging.googleapis.com \
+  --project="$LOG_PROJECT"
 ```
 
 `config.googleapis.com` **is** the Infrastructure Manager API — the naming is not obvious,
@@ -101,7 +103,8 @@ and it is why the agent role is called `roles/config.agent`.
 
 ```bash
 gcloud iam service-accounts create "$SA" \
-  --display-name="Infra Manager — Abstract log export"
+  --display-name="Infra Manager — Abstract log export" \
+  --project="$LOG_PROJECT"
 
 export SA_EMAIL="$SA@$LOG_PROJECT.iam.gserviceaccount.com"
 ```
@@ -137,7 +140,8 @@ Add `roles/resourcemanager.organizationAdmin` **only** if you are also deploying
 ```bash
 gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
   --member="user:$(gcloud config get-value account)" \
-  --role="roles/iam.serviceAccountUser"
+  --role="roles/iam.serviceAccountUser" \
+  --project="$LOG_PROJECT"
 ```
 
 ### If the service account lives in a different project from the resources
@@ -223,7 +227,8 @@ read only with `data_access_all`, and on its own routes nothing.
 Either way, turn the Data Access logs on at the source too, with
 `gcp-foundation-data-access-audit-logs`. Firewall and DNS logs do not belong in this root:
 Abstract's managed GCP parser keeps only Cloud Audit Log records, so they would be pulled and
-discarded. Deploy `gcp-source-network-threat-logs` for them.
+discarded. `gcp-source-network-threat-logs` routes them to a topic of their own, but Abstract does not keep
+them there either today: deploying it costs money in Google Cloud and adds nothing in Abstract.
 
 ```bash
 gcloud infra-manager deployments apply ... \
@@ -239,7 +244,7 @@ either commit it intentionally (`git add -f`) or keep the defaults.
 ## Deploying from git instead of local
 
 `--local-source` uploads whatever is on your laptop, which is a one-shot. Point at the
-repo to make it a controlled pipeline:
+repo to make it a controlled pipeline. Replace RELEASE_TAG with the release tag to deploy:
 
 ```bash
 gcloud infra-manager deployments apply \
@@ -247,7 +252,7 @@ gcloud infra-manager deployments apply \
   --service-account="projects/$LOG_PROJECT/serviceAccounts/$SA_EMAIL" \
   --git-source-repo="https://github.com/IamABS3C/abstract-cloud-templates" \
   --git-source-directory="templates/gcp/gcp-source-audit-logs-organization" \
-  --git-source-ref="<tag>" \
+  --git-source-ref="RELEASE_TAG" \
   --input-values="org_id=$ORG_ID,log_project=$LOG_PROJECT"
 ```
 

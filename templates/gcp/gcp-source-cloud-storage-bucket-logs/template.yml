@@ -11,6 +11,21 @@ formats:
 - script
 - cloud-shell
 permissions:
+- role: roles/pubsub.admin
+  where: The logging project
+  why: 'Deployer: Create the topic, subscription and IAM bindings.'
+- role: roles/iam.serviceAccountAdmin
+  where: The logging project
+  why: 'Deployer: Create Abstract''s service account, unless an existing one is passed.'
+- role: roles/storage.admin
+  where: Each bucket
+  why: 'Deployer: Add the notification and the reader grant to the bucket.'
+- role: roles/serviceusage.serviceUsageAdmin
+  where: The logging project
+  why: 'Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.'
+- role: roles/cloudkms.admin
+  where: The KMS key, CMEK buckets only
+  why: 'Deployer: Only with cmek_crypto_key_id: grant Abstract''s reader Decrypter on that key. Any role holding cloudkms.cryptoKeys.setIamPolicy on the key does; the key''s owner decides.'
 - role: roles/pubsub.publisher
   where: The topic
   why: 'GCS service agent (one per owning project): The notification publishes as the service agent; without
@@ -65,7 +80,7 @@ parameters:
     it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project
     (set create_project = true).'
   find_it: gcloud projects list --format='value(projectId)'
-  example: acme-security-logging
+  example: LOGGING_PROJECT_ID
 - name: object_name_prefix
   type: string
   required: false
@@ -100,14 +115,14 @@ abstract:
   parser: null
 verify:
 - check: The notification config exists and is scoped as intended
-  command: gsutil notification list gs://<bucket>
-  healthy: One config for the expected topic, event type OBJECT_FINALIZE, and the expected prefix.
+  command: gcloud storage buckets notifications list gs://YOUR_BUCKET
+  healthy: One config for the abstract-gcs-notifications topic, event type OBJECT_FINALIZE, and your prefix.
 - check: The service agents that must publish
   command: terraform output gcs_service_agents
   healthy: Each bucket-owning project's agent is listed and granted.
-- check: A real producer file parses end to end
-  command: gsutil cp <real-sample-file> gs://<bucket>/logs/
-  healthy: Its contents appear as correctly parsed events in Abstract.
+- check: The producer's next file parses end to end
+  healthy: Once its format parser is on the integration, its contents appear as parsed events in Abstract. Never
+    write a test file into the bucket; wait for the producer.
 cost: 'Object count rather than size: each object is a notification plus at least one Class B read, so
   thousands of tiny files cost far more than the same bytes in a few large ones.'
 when_to_use: A vendor or internal system writes log files to a bucket and cannot stream, or an archive

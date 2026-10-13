@@ -2,7 +2,7 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
-A second organization sink writing to a Cloud Storage bucket for evidence and backfill, because a sink has exactly one destination. It is not the detection path: storage batches, so latency is minutes to hours.
+A second organization sink writing to a Cloud Storage bucket, for evidence you keep and search there (Abstract does not read it today), because a sink has exactly one destination. It is not the detection path: storage batches, so latency is minutes to hours.
 
 **Cloud:** gcp · **Role:** archive · **Scope:** organization
 
@@ -12,7 +12,7 @@ Editable source: [diagram.drawio](diagram.drawio)
 
 ## When to use
 
-Evidence retention and backfill alongside the Pub/Sub stream.
+Evidence you keep in Cloud Storage alongside the Pub/Sub stream; Abstract does not read the archive today.
 
 **Not for:** Anything you alert on; keep Pub/Sub for detection.
 
@@ -62,6 +62,8 @@ Cloud Storage at Standard, then Nearline after archive_nearline_after_days; no r
 ## Permissions
 
 - **roles/storage.admin** on The logging project: Deployer: Create the bucket.
+- **roles/logging.configWriter** on The organization: Deployer: Create the organization archive sink.
+- **roles/serviceusage.serviceUsageAdmin** on The logging project: Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.
 - **roles/storage.objectCreator** on The bucket: Archive sink writer identity: Distinct from the streaming sink's identity; each sink needs its own grant.
 
 ## Creates

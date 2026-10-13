@@ -12,11 +12,21 @@ Your answers are saved in an answers file, `~/.abstract-gcp-setup.env`. You can 
 
 If your run may pause, open Cloud Shell from the Google Cloud console instead, where your home folder is kept, and get the repository with `git clone https://github.com/IamABS3C/abstract-cloud-templates && cd abstract-cloud-templates`.
 
-Cloud Shell opened from this link starts signed out, because Google does not give a repository it does not own your credentials. Sign in, which also gives the scripts the same sign-in, and make the scripts runnable:
+Cloud Shell opened from this link starts signed out, because Google does not give a repository it does not own your credentials. Sign in, which also gives the scripts the same sign-in:
 
 ```bash
 gcloud auth login --update-adc
+```
+
+Go to the top folder of the repository; every command in this walkthrough runs from there:
+
+```bash
 cd "$(git rev-parse --show-toplevel)"
+```
+
+Make the scripts runnable:
+
+```bash
 chmod +x tools/gcp-guided-setup/*.sh
 ```
 
@@ -75,7 +85,21 @@ Google documentation: [gcloud auth login](https://docs.cloud.google.com/sdk/gclo
 
 **You should see:** A ✓ for creating the log sink at your scope. A ✗ names the role you lack and the command an admin runs to grant it. A ! saying the logging project is not checked yet is expected the first time: script step 3 checks it.
 
-Google documentation: [Cloud Logging roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/logging#logging.configWriter) · [Access control with IAM](https://docs.cloud.google.com/logging/docs/access-control) · [Method: organizations.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/organizations/testIamPermissions) · [Method: folders.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/folders/testIamPermissions) · [Method: projects.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/testIamPermissions)
+**Who needs what.** `--grant` lists every role the setup needs, what each is for, and whether it is required or optional, at your scope, on a billing account and on the logging project. Replace EMAIL with the address of the person who runs the setup (a bare address is a user; put `group:` or `serviceAccount:` before it for those). This checks which of those roles they hold directly, and changes nothing:
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL --check
+```
+
+Someone who can set IAM policy at your scope (an Organization Admin, a Folder Admin, or a project Owner) then grants them. It asks before each role, required ones first; optional ones default to no. Each role is one binding added with add-iam-policy-binding, nothing else in the policy changes, and each is recorded in the answers file so the full reset can take exactly those away. Without that right, it prints the commands to hand to someone who has it:
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL
+```
+
+Roles held through a group, or inherited from a folder or the organization, do not show in a resource's own IAM policy, so `--check` may report a role as missing that is held that way. Security Admin (optional, for script step 6) can change IAM anywhere at your scope; grant it only to someone who should have that.
+
+Google documentation: [Cloud Logging roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/logging#logging.configWriter) · [Pub/Sub roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/pubsub) · [Identity and Access Management roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/iam) · [Manage access to projects, folders, and organizations](https://docs.cloud.google.com/iam/docs/granting-changing-revoking-access#grant-single-role) · [Access control with IAM](https://docs.cloud.google.com/logging/docs/access-control) · [Method: organizations.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/organizations/testIamPermissions) · [Method: folders.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/folders/testIamPermissions) · [Method: projects.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/testIamPermissions)
 
 ## Script step 3: Logging project
 
@@ -121,9 +145,9 @@ _The publisher grant is the step most often missed. Without it the sink looks he
 ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4
 ```
 
-**You should see:** A ✓ for the sink sending to the topic, its filter, and "the sink's own identity can publish". To see the grant yourself, `gcloud pubsub topics get-iam-policy abstract-audit-logs --project=<logging-project-id>` lists the writer identity under roles/pubsub.publisher.
+**You should see:** A ✓ for the sink sending to the topic, its filter, and "the sink's own identity can publish". To see the grant yourself, `gcloud pubsub topics get-iam-policy abstract-audit-logs --project=LOGGING_PROJECT_ID`, with LOGGING_PROJECT_ID your logging project's ID, lists the writer identity under roles/pubsub.publisher.
 
-Prefer Terraform? The same piece is `templates/gcp/gcp-source-audit-logs-organization, gcp-source-audit-logs-folder or gcp-source-audit-logs-project`.
+Prefer Terraform? The same piece is `templates/gcp/gcp-source-audit-logs-organization`, `templates/gcp/gcp-source-audit-logs-folder` or `templates/gcp/gcp-source-audit-logs-project`, for your scope.
 
 Google documentation: [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks) · [Route logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/configure_export_v2#dest-auth) · [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription) · [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)
 
@@ -195,7 +219,7 @@ Google documentation: [Cloud Audit Logs overview](https://docs.cloud.google.com/
 
 Answer **no** at the first question to skip it.
 
-**You should see:** A ✓ "delegation works: the Reports API answered as" your admin. Delegation can take a few minutes after the super admin saves it; run this step again until it does.
+**You should see:** A ✓ "delegation works: the Reports API answered as" your admin. Delegation can take a few minutes after the super admin saves it; check again with `--step 7 --check` until it does. Check before you upload or delete the key: the check signs in with the key file.
 
 Prefer Terraform? The same piece is `templates/gcp/gcp-source-google-workspace-logs`.
 
@@ -247,7 +271,12 @@ Google documentation: [View logs routed to Pub/Sub](https://docs.cloud.google.co
 
 ```bash
 cloudshell download ~/abstract-keys/abstract-pubsub-key.json
-ls ~/abstract-keys/abstract-workspace-key.json 2>/dev/null && cloudshell download ~/abstract-keys/abstract-workspace-key.json
+```
+
+If you set up Workspace (script step 7), download its key too:
+
+```bash
+cloudshell download ~/abstract-keys/abstract-workspace-key.json
 ```
 
 **In Abstract,** add the **GCP Pub/Sub Source** integration:
@@ -266,11 +295,16 @@ rm -f ~/abstract-keys/abstract-pubsub-key.json ~/abstract-keys/abstract-workspac
 
 **You should see:** Events from the integration in Abstract's event search within a few minutes. The first are the test events script step 9 wrote, which waited on the subscription. Re-check the cloud side any time with: ./tools/gcp-guided-setup/abstract-gcp-setup.sh --check
 
-Then download your answers. A Cloud Shell session opened from this link is temporary, and the clean-up needs them to know what the setup made. If script step 6 changed your audit settings, download its backup of the earlier settings too:
+Then download your answers. A Cloud Shell session opened from this link is temporary, and the clean-up needs them to know what the setup made:
 
 ```bash
 cloudshell download ~/.abstract-gcp-setup.env
-ls ~/abstract-audit-config-backup-*.json 2>/dev/null && cloudshell download ~/abstract-audit-config-backup-*.json
+```
+
+If script step 6 changed your audit settings, download its backup of the earlier settings too:
+
+```bash
+cloudshell download ~/abstract-audit-config-backup-*.json
 ```
 
 Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys) · [View logs routed to Pub/Sub](https://docs.cloud.google.com/logging/docs/export/pubsub)
@@ -285,7 +319,7 @@ To remove the setup later, delete the integrations in Abstract first, so they st
 
 Each item is marked would remove, kept or by hand. If a name is not one this setup made, stop: the answers file is the wrong one.
 
-Lost the answers file? `--remove --project <logging-project-id>` lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself.
+Lost the answers file? `--remove --project LOGGING_PROJECT_ID`, with your logging project's ID, lists everything that carries the setup's names, with the command to remove each, and deletes nothing itself.
 
 When the list is right, remove it:
 
@@ -293,9 +327,25 @@ When the list is right, remove it:
 ./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm
 ```
 
-It removes only what this setup created: the sink, topic and subscription, the service accounts, the health alerts and the key files. It never deletes the logging project. Data Access audit settings, and anything that existed before you started, are listed by hand for you to change. Every item then shows as removed, kept or by hand; act on each by-hand line.
+It removes only what this setup created: the sink, topic and subscription, the service accounts, the health alerts and the key files. It never deletes the logging project. Data Access audit settings, the roles `--grant` added, and anything that existed before you started, are listed by hand, each with the command that changes it. Every item then shows as removed, kept or by hand; act on each by-hand line.
 
-Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) · [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation) · [Create and delete service account keys](https://docs.cloud.google.com/iam/docs/keys-create-delete#creating)
+**Start again from scratch.** `--teardown` is the full reset. It does not need the answers file: it looks across your organization for what this setup and the templates make (sinks named abstract-… or sending to a topic named abstract-audit-logs, at the organization and in its folders and projects; the abstract-… topics in every project and every subscription on them; the Security Command Center notification configs and Cloud Asset feeds at the organization that send to one of those topics; the reader service accounts named abstract-…-reader, whose keys go with them; the "Abstract log pipeline" alerts). It never deletes a project or Terraform state: it prints the commands for those. Cloud Storage bucket notifications cannot be found without reading every bucket, so for each abstract-… topic it prints how to find and delete the ones that send to it. List what it would delete; this deletes nothing:
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --teardown
+```
+
+Your Data Access audit settings, and the roles `--grant` added, are listed and kept; each grant is listed with the `remove-iam-policy-binding` command that takes it back. Add `--include-audit-settings` to take off exactly the log types script step 6 recorded adding, at the scope where it added them (a copy of the settings is saved first, and everything else stays, including a log type that was on before). Without that record (no answers file, or step 6 never changed the settings) it changes nothing, and prints where step 6's copy is and how to take a log type off by hand. Add `--include-grants` to remove the bindings `--grant` recorded. With more than one organization visible, name it with `--org` and its ID.
+
+When the list is right, delete it. It asks you to type the organization ID before anything is deleted, then deletes the sinks, notification configs and asset feeds first, so nothing is sent to a topic that is about to go, then subscriptions, topics, service accounts and alerts. A listing it cannot read is reported as a failure, never as nothing found, and your answers file then stays where it is (a project with the Pub/Sub or IAM API off holds none of these, and is not a failure):
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --teardown --confirm
+```
+
+Then act on the by-hand lines: `terraform state rm` in each template folder that still has state, so Terraform stops believing the resources exist, and `gcloud projects delete` for a logging project you no longer need (Google deletes a shut-down project for good after 30 days).
+
+Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) · [Create projects](https://docs.cloud.google.com/resource-manager/docs/creating-managing-projects) · [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation) · [Create and delete service account keys](https://docs.cloud.google.com/iam/docs/keys-create-delete#creating)
 
 ## Done
 
@@ -308,3 +358,5 @@ Check everything again at any time. It changes nothing:
 ```
 
 Delete every copy of the key files once they are uploaded to Abstract: in Cloud Shell and on your computer.
+
+If `--grant` gave someone roles for this setup, take them back once the pipeline works: they include Logs Configuration Writer at your scope, the right to make service-account keys, and Pub/Sub Admin, and running the pipeline no longer needs them. Script step 10 lists each role `--grant` recorded, with its `remove-iam-policy-binding` command, and so does `--remove`. Removing the setup later with `--remove` or `--teardown` needs them again: grant them back first with `--grant`, or a sink delete is refused while later deletions still run, which can leave a sink sending to a deleted topic.

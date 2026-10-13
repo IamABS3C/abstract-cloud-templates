@@ -57,6 +57,11 @@ Object count rather than size: each object is a notification plus at least one C
 
 ## Permissions
 
+- **roles/pubsub.admin** on The logging project: Deployer: Create the topic, subscription and IAM bindings.
+- **roles/iam.serviceAccountAdmin** on The logging project: Deployer: Create Abstract's service account, unless an existing one is passed.
+- **roles/storage.admin** on Each bucket: Deployer: Add the notification and the reader grant to the bucket.
+- **roles/serviceusage.serviceUsageAdmin** on The logging project: Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.
+- **roles/cloudkms.admin** on The KMS key, CMEK buckets only: Deployer: Only with cmek_crypto_key_id: grant Abstract's reader Decrypter on that key. Any role holding cloudkms.cryptoKeys.setIamPolicy on the key does; the key's owner decides.
 - **roles/pubsub.publisher** on The topic: GCS service agent (one per owning project): The notification publishes as the service agent; without it the config delivers nothing.
 - **roles/pubsub.subscriber** on The subscription: Abstract service account: Read the pointer.
 - **roles/storage.objectViewer** on The bucket, conditioned on the prefix when set: Abstract service account: Fetch the object the pointer points at.
@@ -84,9 +89,9 @@ Object count rather than size: each object is a notification plus at least one C
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The notification config exists and is scoped as intended | `gsutil notification list gs://<bucket>` | One config for the expected topic, event type OBJECT_FINALIZE, and the expected prefix. |
+| The notification config exists and is scoped as intended | `gcloud storage buckets notifications list gs://YOUR_BUCKET` | One config for the abstract-gcs-notifications topic, event type OBJECT_FINALIZE, and your prefix. |
 | The service agents that must publish | `terraform output gcs_service_agents` | Each bucket-owning project's agent is listed and granted. |
-| A real producer file parses end to end | `gsutil cp <real-sample-file> gs://<bucket>/logs/` | Its contents appear as correctly parsed events in Abstract. |
+| The producer's next file parses end to end |  | Once its format parser is on the integration, its contents appear as parsed events in Abstract. Never write a test file into the bucket; wait for the producer. |
 
 ## Google documentation
 

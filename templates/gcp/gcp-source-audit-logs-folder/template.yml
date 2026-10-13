@@ -58,7 +58,7 @@ parameters:
   type: string
   required: true
   description: 'Folder ID the sink binds to. Find it with: gcloud resource-manager folders list --organization=ORG_ID'
-  find_it: gcloud resource-manager folders list --organization=<org-id>
+  find_it: gcloud resource-manager folders list --organization=ORG_ID
 - name: log_project
   type: string
   required: true
@@ -68,7 +68,7 @@ parameters:
     exists yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project
     = true) — do not point this at a workload project.'
   find_it: gcloud projects list --format='value(projectId)'
-  example: acme-security-logging
+  example: LOGGING_PROJECT_ID
 - name: log_categories
   type: array
   required: false
@@ -193,31 +193,16 @@ outputs:
 abstract:
   integration: google_cloud_pub_sub
 verify:
-- check: The plan shows what will be routed
-  command: terraform plan -var folder_id=<folder-id> -var log_project=<log-project-id>
-  healthy: effective_filter and volume_profile match what you intend to collect.
+- check: The sink exists on the folder, with the filter you intended
+  command: gcloud logging sinks describe abstract-org-audit-sink --folder="$SCOPE_ID" --format="value(name,includeChildren,filter)"
+  healthy: includeChildren is True, and the filter routes what you intend to collect. SCOPE_ID is the folder, from the answers file.
 - check: A fresh event reaches the topic from the sink
-  command: |-
-    PROBE=abstract-probe-$(date +%s)
-    gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs --project=<log-project-id> --expiration-period=1d
-    gcloud pubsub topics create abstract-probe-topic --project=<log-project-id> --quiet
-    gcloud pubsub topics delete abstract-probe-topic --project=<log-project-id> --quiet
-    END=$(( $(date +%s) + 330 )); FOUND=
-    for i in $(seq 1 20); do
-      sleep 15
-      while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
-        N=$(gcloud pubsub subscriptions pull "$PROBE" --project=<log-project-id> --limit=1000 --auto-ack --format=json 2>/dev/null \
-          | python3 -c 'import base64, json, sys; m = json.load(sys.stdin) or []; print("FOUND" if any(sys.argv[1].encode() in base64.b64decode(x.get("message", {}).get("data", "")) for x in m) else len(m))' abstract-probe-topic 2>/dev/null)
-        case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
-      done
-      [ -n "$FOUND" ] && { echo "FOUND: the sink routes and the topic delivers"; break; }
-    done
-    gcloud pubsub subscriptions delete "$PROBE" --project=<log-project-id> --quiet
-  healthy: 'FOUND is printed within five minutes: your own CreateTopic and DeleteTopic reached the probe
-    subscription. Wait five minutes after creating the sink before testing. Never
-    pull from Abstract''s own subscription: --auto-ack there deletes events before Abstract reads them.'
+  command: ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 9
+  healthy: 'A ✓ "the test event arrived" within five minutes, from the top folder of the repository. It writes a
+    fresh event in your scope and waits on a probe subscription of its own, which it deletes; it never reads
+    Abstract''s subscription. Wait five minutes after creating the sink before testing.'
 - check: No sink errors
-  command: gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project=<log-project-id>
+  command: gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project="$LOG_PROJECT"
   healthy: No sink_error entries.
 cost: Pub/Sub throughput for the folder's audit logs; Data Access logs, when enabled, dominate it.
 when_to_use: Organization-scope logging.configWriter is not yet available.

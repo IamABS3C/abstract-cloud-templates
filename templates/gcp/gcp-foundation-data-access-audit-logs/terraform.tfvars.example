@@ -6,7 +6,7 @@
 # org_id = ""
 
 # Folder ID, when scope = folder. Find it with: gcloud resource-manager folders list
-# --organization=<org-id>
+# --organization=ORG_ID
 # folder_id = ""
 
 # Project ID, when scope = project.

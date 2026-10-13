@@ -18,10 +18,26 @@
 #  Usage
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh              guided: every step, asks before each change
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6     one step
+#    ... --step 7 --new-key      make another Workspace key even though the one made for Abstract still exists
+#                                 (a lost or rotated key); step 7 never offers one unasked while it does
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --check      verify everything, change nothing
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --reset      forget the saved answers and start over
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove     list what clean-up would delete; --remove --confirm deletes it
 #    ... --remove --project <id>                                 no saved answers: list what carries the setup's names
+#    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --teardown   FULL RESET, to start from scratch: list everything the
+#                                 setup and the templates make across the organization; deletes only with
+#                                 --teardown --confirm (asks you to type the organization ID; with no terminal it
+#                                 also needs --yes-i-mean-it). Never deletes a project or Terraform state: prints
+#                                 their commands, and bucket notifications by hand. Options: --org <id>,
+#                                 --project <id> (repeatable), --include-audit-settings (take off only the log
+#                                 types step 6 recorded adding, a copy saved first; with no record, nothing),
+#                                 --include-grants (remove the bindings --grant recorded)
+#    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant <email>
+#                                 the roles the setup needs, for that person (user:, group: or serviceAccount:
+#                                 before the email; a bare email is a user): what each is for, required or
+#                                 optional; asks before each, adds one binding per role, records it. Run by
+#                                 someone who can set IAM policy at the scope; otherwise it prints the commands
+#    ... --grant <email> --check  which of those roles they hold directly; changes nothing
 #
 #  Nothing changes without a "y". Every command is printed before it runs. Answers are
 #  kept in ~/.abstract-gcp-setup.env so you can stop and resume. No secret is printed;
@@ -57,6 +73,9 @@ defaults() {
   SINK_CREATED_AT=0
   # Set to 1 only when THIS script creates the piece, so --remove never deletes something it found.
   TOPIC_CREATED=0; SUB_CREATED=0; SA_CREATED=0; WS_SA_CREATED=0
+  # The role bindings --grant added, as kind:id:role:member joined by ";", so --teardown --include-grants removes
+  # exactly those and never a grant that existed before.
+  GRANTS=""
 }
 defaults; FIND_PROJECT=""
 # Keys go outside any checkout, in a folder only you can read, so they cannot be committed by accident.
@@ -65,7 +84,7 @@ KEY_FILE="$KEY_DIR/abstract-pubsub-key.json"; WS_KEY_FILE="$KEY_DIR/abstract-wor
 # The answers this script saves, in this order. Nothing else may appear in an answers file.
 ANSWER_KEYS="ORG_ID SCOPE SCOPE_ID LOG_PROJECT BILLING TOPIC SUB SINK SA RETENTION_DAYS DATA_ACCESS DA_SERVICES DA_TYPES
   WORKSPACE WS_SA WS_ADMIN ALERTS ALERT_EMAIL SINK_CREATED_AT TOPIC_CREATED SUB_CREATED SA_CREATED WS_SA_CREATED
-  ALERT_POLICIES ALERT_CHANNELS DA_CHANGED DA_BACKUP DA_ADDED DA_ALL_READ_ACK KEY_ID WS_KEY_ID"
+  ALERT_POLICIES ALERT_CHANNELS DA_CHANGED DA_BACKUP DA_ADDED DA_ALL_READ_ACK KEY_ID WS_KEY_ID GRANTS"
 
 # Load an answers file only if every line is one this script could have written: a comment, a blank line, or
 # KEY=value for a key above, with the value as printf %q writes it (plain characters, or one character escaped
@@ -96,9 +115,11 @@ say()   { printf '%s\n' "$*"; }
 why()   { printf '%s   %s%s\n' "$D" "$*" "$O"; }
 pass()  { printf '  %s✓%s %s\n' "$G" "$O" "$*"; PASSES=$((PASSES+1)); }
 warn()  { printf '  %s!%s %s\n' "$Y" "$O" "$*"; WARNS=$((WARNS+1)); }
-bad()   { printf '  %s✗%s %s\n' "$R" "$O" "$*"; FAILS=$((FAILS+1)); }
+# A failure also leaves a line in FAIL_LOG when one is set (--teardown sets it), so a bad() inside $(...) - whose
+# FAILS+1 dies with the subshell - is still counted: td_count_fails reads the file back.
+bad()   { printf '  %s✗%s %s\n' "$R" "$O" "$*"; FAILS=$((FAILS+1)); if [[ -n "${FAIL_LOG:-}" ]]; then echo x >>"$FAIL_LOG"; fi; }
 PASSES=0; WARNS=0; FAILS=0
-CHECK_ONLY=false; ONLY_STEP=""; REMOVE=false; CONFIRM=false
+CHECK_ONLY=false; ONLY_STEP=""; REMOVE=false; CONFIRM=false; NEW_KEY=false
 
 save() {
   $CHECK_ONLY && return 0
@@ -109,7 +130,7 @@ save() {
   # A temporary Cloud Shell session deletes this file with it, and clean-up needs it. A copy downloaded at step 1
   # holds none of what later steps create, so it is offered again whenever a save records something clean-up
   # reads: what was created, the logging project, a key id, a change to the audit settings.
-  local rec; rec="$LOG_PROJECT|$SINK_CREATED_AT|$TOPIC_CREATED|$SUB_CREATED|$SA_CREATED|$WS_SA_CREATED|$KEY_ID|$WS_KEY_ID|$DA_CHANGED|$DA_BACKUP|$ALERT_POLICIES|$ALERT_CHANNELS"
+  local rec; rec="$LOG_PROJECT|$SINK_CREATED_AT|$TOPIC_CREATED|$SUB_CREATED|$SA_CREATED|$WS_SA_CREATED|$KEY_ID|$WS_KEY_ID|$DA_CHANGED|$DA_BACKUP|$ALERT_POLICIES|$ALERT_CHANNELS|$GRANTS"
   if [[ "${CLOUD_SHELL:-}" == true && "$rec" != "$ANSWERS_OFFERED" ]]; then
     ANSWERS_OFFERED="$rec"; offer_download "$STATE" "your answers file (again: it now records more)"
   fi
@@ -312,7 +333,7 @@ switch_account() {
 
 start_over() {
   local old; old="$STATE.old-$(date +%Y%m%d%H%M%S)"
-  # Moved, never deleted: it records what this script created, which --remove --state <that file> still cleans up.
+  # Moved, never deleted: it records what this script created, which --remove --state with its path still cleans up.
   [[ -f "$STATE" ]] && mv "$STATE" "$old" && say "  saved answers moved to $old (clean-up of what they created: --remove --state $old)"
   defaults
 }
@@ -473,6 +494,10 @@ step2() {
   else
     warn "not checked yet: your rights in the logging project, and whether an org policy blocks the key step 5 makes. Step 3 checks both as soon as the project is chosen, before step 4 builds anything."
   fi
+  local me; me=$(gcloud config get-value account 2>/dev/null)
+  why "Who needs what: every role these steps need, what each is for and where it goes, is listed (and checked,"
+  why "changing nothing) by:  $(again --grant "${me:-you@example.com}" --check)"
+  why "Someone who can set IAM policy at the $SCOPE grants them one at a time with:  $(again --grant "${me:-you@example.com}")"
 }
 
 # What steps 4 and 5 need in the logging project. Step 2 runs it when the project is already known,
@@ -525,8 +550,8 @@ step3() {
     local pick; pick=$(choose_existing project "gcloud projects describe {}" "Which project holds the pipeline?" "$(project_list)" "create a new project for Abstract (recommended when none exists)" "$sent" '^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
     if [[ "$pick" == +new ]]; then
       # Where a new project goes comes from step 1. Without it, choosing an existing project still works.
-      [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { warn "creating a project needs step 1 first (or --state <answers file>), to know where it goes; or choose an existing project"; continue; }
-      local new; new=$(ask "New project ID (globally unique, e.g. <company>-security-logging)" "" valid_project_id)
+      [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { warn "creating a project needs step 1 first (or --state ANSWERS_FILE, the path of an answers file step 1 saved), to know where it goes; or choose an existing project"; continue; }
+      local new; new=$(ask "New project ID (globally unique, e.g. COMPANY-security-logging)" "" valid_project_id)
       local -a parent=()
       if [[ "$SCOPE" == folder ]]; then parent=("--folder=$SCOPE_ID")
       elif [[ -n "$ORG_ID" ]]; then parent=("--organization=$ORG_ID"); fi
@@ -625,6 +650,85 @@ existing_audit_sinks() {  # existing_audit_sinks <scope flag> <our destination>
   (( found )) || pass "no other sink at the $SCOPE exports audit logs"
 }
 
+# Is the sink at the scope Terraform's? "yes" when its description carries the module's marker, "maybe" when its
+# filter has the module's "\n  OR " join or it has the template's default name and this setup did not create it.
+sink_tf() {  # sink_tf <description> <filter>
+  if [[ "$1" == *"managed-by: abstract-cloud-templates (terraform)"* ]]; then echo yes
+  elif [[ "$2" == *$'\n  OR '* || ( "$SINK" == abstract-org-audit-sink && "${SINK_CREATED_AT:-0}" == 0 ) ]]; then echo maybe
+  else echo no; fi
+}
+
+# The sink of this name already sends somewhere else (measured 2026-10-12: a new logging project was chosen while
+# the organization's Terraform sink sent to another, and step 4 said only "sends to A, not B"). Name both ways on;
+# move the sink only when nothing else owns it. Returns 0 once it sends to $2, 1 when it does not: step 4 then
+# stops, because nothing in it may change a sink that feeds another pipeline.
+sink_elsewhere() {  # sink_elsewhere <current destination> <wanted destination> <scope flag>
+  local d="$1" dest="$2" sf="$3" proj="" top="" desc f tf
+  bad "sink $SINK sends to $d, not $dest"
+  if [[ "$d" =~ ^pubsub\.googleapis\.com/projects/([^/]+)/topics/([^/]+)$ ]]; then proj="${BASH_REMATCH[1]}"; top="${BASH_REMATCH[2]}"
+  else
+    say "   That is not a Pub/Sub topic, so it is not a pipeline Abstract reads, and moving the sink would cut off"
+    say "   whatever it feeds. Give Abstract a sink of its own: put a new name in your answers file, $STATE,"
+    say "   as SINK=abstract-audit-sink (any name not used at the $SCOPE), then run:  $(again --step 4)"
+    return 1
+  fi
+  say "   Two ways on:"
+  say "   1) Keep the existing pipeline: use $proj as the logging project. Start over and choose $proj at script step 3:"
+  say "        $(again --reset)"
+  [[ "$top" != "$TOPIC" ]] && say "      Its topic is $top, not $TOPIC: once step 1 has saved new answers, set TOPIC=$top in $STATE before step 4."
+  say "      Your answers so far are kept aside, so what this run made in $LOG_PROJECT can still be cleaned up: start over prints where it keeps them, and --remove --state takes that path."
+  say "   2) Move the sink to this project: it then sends to $TOPIC in $LOG_PROJECT. The topic in $proj gets nothing"
+  say "      new, so whatever reads it (an Abstract integration on $proj) stops receiving events: point that at $LOG_PROJECT."
+  desc=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(description)' 2>/dev/null)
+  f=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(filter)' 2>/dev/null)
+  tf=$(sink_tf "$desc" "$f")
+  if [[ "$tf" != no ]]; then
+    # A gcloud update here would be put back by the next terraform apply, so it is never offered.
+    local dir="$ROOT/templates/gcp/gcp-source-audit-logs-$SCOPE" here
+    here=$(printf '%q' "$dir")
+    if [[ "$tf" == yes ]]; then say "   This sink is managed by Terraform (its description says so). Move it there, not here:"
+    else say "   This sink may be managed by Terraform (the template's filter layout or default name, and this setup did not"
+         say "   create it). If it is, move it there, not here:"; fi
+    say "   a gcloud update would be reverted by the next terraform apply, so this step does not make one."
+    say "     In $dir/terraform.tfvars set:  log_project = \"$LOG_PROJECT\""
+    [[ "$SCOPE" == project ]] && say "     and keep the sink where it is:  sink_project = \"$SCOPE_ID\""
+    say "     The module's topic and subscription carry prevent_destroy, so terraform plan refuses to replace them. Take them,"
+    say "     and Abstract's service account, out of the state first. They stay in $proj, with any events not yet read, and"
+    say "     the integration reading them keeps working until you delete them:"
+    say "       cd $here"
+    say "       terraform state rm 'module.log_export.google_pubsub_topic.abstract' 'module.log_export.google_pubsub_subscription.abstract' 'module.log_export.google_service_account.abstract'"
+    local email="$SA@$LOG_PROJECT.iam.gserviceaccount.com" imports=()
+    gcloud pubsub topics describe "$TOPIC" --project="$LOG_PROJECT" >/dev/null 2>&1 \
+      && imports+=("terraform import 'module.log_export.google_pubsub_topic.abstract' projects/$LOG_PROJECT/topics/$TOPIC")
+    gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT" >/dev/null 2>&1 \
+      && imports+=("terraform import 'module.log_export.google_pubsub_subscription.abstract' projects/$LOG_PROJECT/subscriptions/$SUB")
+    gcloud iam service-accounts describe "$email" --project="$LOG_PROJECT" >/dev/null 2>&1 \
+      && imports+=("terraform import 'module.log_export.google_service_account.abstract' projects/$LOG_PROJECT/serviceAccounts/$email")
+    if (( ${#imports[@]} )); then
+      say "     This setup already made these in $LOG_PROJECT; import them, or terraform apply stops at \"already exists\":"
+      local i; for i in "${imports[@]}"; do say "       $i"; done
+    fi
+    say "     Then preview, read the plan (it moves the sink and the grants to $LOG_PROJECT), and apply it:"
+    say "       terraform plan -out=abstract.tfplan"
+    say "       terraform apply abstract.tfplan"
+    return 1
+  fi
+  if ! gcloud pubsub topics describe "$TOPIC" --project="$LOG_PROJECT" >/dev/null 2>&1; then
+    say "   The topic $TOPIC does not exist in $LOG_PROJECT yet, so the sink cannot be moved there; this step creates it first."
+    bad "topic $TOPIC does not exist in $LOG_PROJECT: run $(again --step 4) and say yes to the topic, then to the move"
+    return 1
+  fi
+  why "The update changes only where the sink sends; its filter and exclusions stay as they are."
+  run gcloud logging sinks update "$SINK" "$dest" "$sf" || return 1
+  local now; now=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(destination)' 2>/dev/null)
+  if [[ "$now" == "$dest" ]]; then
+    pass "sink $SINK now sends to $TOPIC in $LOG_PROJECT (read back from the sink)"
+    warn "the topic in $proj gets nothing new from now on: whatever reads it there stops receiving events"
+    return 0
+  fi
+  bad "the update ran, but sink $SINK still reads as sending to ${now:-an unreadable destination}"; return 1
+}
+
 step4() {
   title 4 "Log pipeline"
   why "A sink at the ${SCOPE:-chosen scope} copies matching audit logs, as they are written, to a Pub/Sub topic."
@@ -663,7 +767,11 @@ step4() {
   if gcloud logging sinks describe "$SINK" "$sf" >/dev/null 2>&1; then
     local d f ic desc ex; d=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(destination)')
     ic=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(includeChildren)')
-    [[ "$d" == "$dest" ]] && pass "sink $SINK sends to $TOPIC" || bad "sink $SINK sends to $d, not $dest"
+    if [[ "$d" == "$dest" ]]; then pass "sink $SINK sends to $TOPIC"
+    else
+      # Until it is moved, the sink feeds another pipeline: nothing below may change its filter or grant it here.
+      sink_elsewhere "$d" "$dest" "$sf" || return
+    fi
     if [[ "$SCOPE" != project ]]; then
       [[ "$ic" == True ]] && pass "sink covers every project under the $SCOPE (includeChildren)" \
         || bad "sink $SINK does not include child projects: logs from projects under the $SCOPE never reach Abstract. Recreate it with --include-children (or set include_children in Terraform)."
@@ -733,7 +841,12 @@ print(" ".join(e.get("name","?") for e in d.get("exclusions",[]) if not e.get("d
       pass "the sink's own identity can publish to $TOPIC"
     else
       bad "the sink's identity cannot publish yet — the #1 missed step. The sink looks healthy and sends nothing."
-      run gcloud pubsub topics add-iam-policy-binding "$TOPIC" --project="$LOG_PROJECT" --member="$w" --role=roles/pubsub.publisher >/dev/null && pass "publisher granted to the sink identity"
+      if run gcloud pubsub topics add-iam-policy-binding "$TOPIC" --project="$LOG_PROJECT" --member="$w" --role=roles/pubsub.publisher --format=none; then
+        # Read back, not assumed: the grant is what makes the sink deliver.
+        if gcloud pubsub topics get-iam-policy "$TOPIC" --project="$LOG_PROJECT" --format=json 2>/dev/null | grep -q "\"$w\""; then
+          pass "publisher granted to the sink identity (read back from the topic's policy)"
+        else bad "the grant ran, but the topic's policy does not list $w yet. Check again in a minute: $(again --step 4 --check)"; fi
+      fi
     fi
   fi
 }
@@ -800,6 +913,8 @@ step5() {
     n=$(grep -c . <<<"$ids")
     if (( n > 1 )); then
       warn "$n keys exist for $email. Abstract needs one; every other key is one more credential to the subscription. Step 10 shows ${KEY_ID:+which one ($KEY_ID) was made for Abstract and }the ones you can delete."
+    elif [[ -n "$KEY_ID" ]] && grep -qx "$KEY_ID" <<<"$ids"; then
+      pass "the key made for Abstract ($KEY_ID) still exists; Abstract uses the one you uploaded. Make another only if it was lost."
     elif (( n == 1 )); then pass "1 key already exists; Abstract uses the one you uploaded. Make another only if it was lost."; fi
     if (( n > 0 )); then ! $CHECK_ONLY && yes_no "Create a new key anyway?" && make_key "$email" "$KEY_FILE" KEY_ID
     else warn "no key yet. Abstract needs one to sign in."; ! $CHECK_ONLY && make_key "$email" "$KEY_FILE" KEY_ID; fi
@@ -841,10 +956,11 @@ make_key() {  # make_key <service-account email> <file> <variable that records i
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-audit_config_json() {  # the current auditConfigs at the scope, as JSON; on failure, why, and status 1
-  [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { printf 'no scope chosen'; return 1; }
+audit_config_json() {  # [resource url, default the scope's]: its auditConfigs as JSON; on failure, why, and status 1
+  local url="${1:-}"
+  if [[ -z "$url" ]]; then [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { printf 'no scope chosen'; return 1; }; url=$(scope_url); fi
   local body; body=$(curl -s -w '\n%{http_code}' -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" \
-    -d '{}' "$(scope_url):getIamPolicy") || { printf 'the request did not complete'; return 1; }
+    -d '{}' "$url:getIamPolicy") || { printf 'the request did not complete'; return 1; }
   # An error, an empty body or a policy with no etag is never read as "no audit settings": a write built on
   # it would replace every audit config at the scope, unguarded by an etag.
   python3 -c 'import json, sys
@@ -1039,9 +1155,36 @@ EOF
       [[ -n "$rv" ]] && why "Its key stays valid in Google after the file is deleted. Once you know nothing uses it: $rv"
       mv "$WS_KEY_FILE" "$aside" && make_key "$email" "$WS_KEY_FILE" WS_KEY_ID
     fi
-  else ! $CHECK_ONLY && make_key "$email" "$WS_KEY_FILE" WS_KEY_ID; fi
+  else ws_key_gone "$email"; fi
   if [[ -f "$WS_KEY_FILE" && -n "$WS_ADMIN" ]] && key_for "$WS_KEY_FILE" "$email"; then
     verify_workspace "$WS_KEY_FILE" "$WS_ADMIN"
+  fi
+}
+
+# ws_key_gone <email>: no key file. That is normal once the key is uploaded to Abstract and deleted, so the keys
+# in Google decide. A key that exists is never replaced unasked: every Workspace key reads the audit reports as
+# the admin, through domain-wide delegation. Only the first key is offered; another needs --step 7 --new-key.
+ws_key_gone() {
+  local email="$1" ids n old="$WS_KEY_ID" live=false
+  if ! ids=$(gcloud iam service-accounts keys list --iam-account="$email" --managed-by=user --format='value(name.basename())' 2>&1); then
+    warn "could not list the keys of $email (${ids%%$'\n'*}). No key was made: run this step again."; return
+  fi
+  n=$(grep -c . <<<"$ids")
+  if (( n == 0 )); then
+    warn "no key yet. Abstract needs one to sign in."; ! $CHECK_ONLY && make_key "$email" "$WS_KEY_FILE" WS_KEY_ID; return
+  fi
+  if [[ -n "$old" ]] && grep -qx "$old" <<<"$ids"; then live=true
+    pass "the key made for Abstract ($old) still exists in Google. Step 7 wrote it to $WS_KEY_FILE; it is gone from here, as it should be once you downloaded it and uploaded it to Abstract."
+    why "Delegation is checked with that file, so it cannot be checked again here: Workspace events in Abstract are the check now."
+  else
+    warn "$email has $n key(s), and none is the one this setup recorded making for Abstract${old:+ ($old)}. Each one reads your Workspace audit reports as $WS_ADMIN; step 10 lists them."
+  fi
+  if ! $NEW_KEY; then
+    why "Lost the key, or rotating it? Make another only then:  $(again --step 7 --new-key)"; return
+  fi
+  make_key "$email" "$WS_KEY_FILE" WS_KEY_ID
+  if $live && [[ "$WS_KEY_ID" != "$old" ]]; then
+    why "Once Abstract has the new key, revoke the old one:  gcloud iam service-accounts keys delete $old --iam-account=$email"
   fi
 }
 
@@ -1386,6 +1529,12 @@ EOF
     say "    and delete any copy you downloaded or handed over."
     say ""
   fi
+  if [[ -n "$GRANTS" ]]; then
+    say "  ${B}Take back the roles --grant added${O} once Abstract shows events: running the pipeline no longer needs them."
+    say "  Removing the setup later (--remove, --teardown) needs them again: grant them back first:  $(again --grant EMAIL), with that person's email."
+    each_grant grant_say
+    say ""
+  fi
   say "  Re-check everything any time:  $(again --check)"
 }
 
@@ -1432,10 +1581,10 @@ look() {
 # mon_list <collection> <what>: sets MON_NAMES to the Monitoring objects named "Abstract log pipeline…",
 # or reports a failure. Not called through $(…): a bad() inside a subshell is never counted.
 MON_NAMES=""
-mon_list() {
-  local body code; body=$(curl -s -w '\n%{http_code}' -H "Authorization: Bearer $(token)" \
-    "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/$1?pageSize=200"); code=${body##*$'\n'}
-  if [[ "$code" != 200 ]]; then bad "could not list $2 in $LOG_PROJECT (HTTP $code)"; MON_NAMES=""; return 1; fi
+mon_list() {  # mon_list <collection> <what> [project, default the logging project]
+  local p="${3:-$LOG_PROJECT}" body code; body=$(curl -s -w '\n%{http_code}' -H "Authorization: Bearer $(token)" \
+    "https://monitoring.googleapis.com/v3/projects/$p/$1?pageSize=200"); code=${body##*$'\n'}
+  if [[ "$code" != 200 ]]; then bad "could not list $2 in $p (HTTP $code)"; MON_NAMES=""; return 1; fi
   MON_NAMES=$(python3 -c '
 import json, sys
 for o in json.loads(sys.argv[1]).get(sys.argv[2], []):
@@ -1464,7 +1613,7 @@ discover_all() {
     for n in $MON_NAMES; do found "alert policy $n" "delete it under Monitoring > Alerting in the console"; done; fi
   if mon_list notificationChannels "notification channels"; then
     for n in $MON_NAMES; do found "alert channel $n" "delete it under Monitoring > Alerting > Edit notification channels"; done; fi
-  byhand "the log sink lives on your organization, folder or project, not here. Find it with: gcloud logging sinks list --organization=<org-id> --filter='destination:$TOPIC' (or --folder / --project)"
+  byhand "the log sink lives on your organization, folder or project, not here. Find it with: gcloud logging sinks list --organization=ORG_ID --filter='destination:$TOPIC', with ORG_ID your organization's ID (or --folder=FOLDER_ID / --project=PROJECT_ID)"
   kept "logging project $LOG_PROJECT: this script never deletes it."
 }
 
@@ -1487,7 +1636,7 @@ remove_all() {
   why "Delete the integration in Abstract first, so it stops reading the subscription."
   if [[ -z "$LOG_PROJECT" ]]; then
     [[ -n "$FIND_PROJECT" ]] && { discover_all; return; }
-    bad "No saved answers in $STATE, so this session cannot tell what the setup made. Cloud Shell sessions opened from the templates button are temporary. Load the answers file you downloaded with --state <file>, or run again with --project <logging-project-id> to list what carries the setup's names."
+    bad "No saved answers in $STATE, so this session cannot tell what the setup made. Cloud Shell sessions opened from the templates button are temporary. Load the answers file you downloaded with --state ANSWERS_FILE (its path), or run again with --project LOGGING_PROJECT_ID (your logging project's ID) to list what carries the setup's names."
     return
   fi
   local sf; sf=$(scope_flag)
@@ -1530,6 +1679,7 @@ remove_all() {
   elif [[ "$DATA_ACCESS" == yes && -z "${DA_CHANGED:-}" ]]; then
     byhand "Data Access audit settings may have been changed in step 6 (this answers file predates the record of it). If they were, a copy of the earlier settings was saved as abstract-audit-config-backup-*.json in the folder step 6 ran in. Compare it with get-iam-policy before changing anything."
   fi
+  each_grant grant_byhand
   kept "logging project $LOG_PROJECT: this script never deletes it. If you created it only for Abstract: gcloud projects delete $LOG_PROJECT"
   if $CONFIRM && (( FAILS == 0 )); then
     local moved; moved="$STATE.removed-$(date +%Y%m%d%H%M%S)"; mv "$STATE" "$moved"
@@ -1545,6 +1695,665 @@ remove_all() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# --grant <principal>: the roles this setup needs, granted by someone who can set IAM policy, one binding per role
+# (add-iam-policy-binding; never a write of the whole policy, which would replace every other binding). Each binding this run adds is
+# recorded in GRANTS, and only those: a role the principal already held directly is not recorded, so
+# --teardown --include-grants never takes away a grant that existed before.
+GRANT=""
+
+# A principal as IAM writes it; a bare email is a user. Prints it, or returns 1. ":" and ";" are refused in the
+# address, because GRANTS separates its fields with them.
+grant_member() {
+  local p="$1"; [[ "$p" == *:* ]] || p="user:$p"
+  [[ "$p" =~ ^(user|group|serviceAccount):[^@[:space:]:\;]+@[^@[:space:]:\;]+\.[^@[:space:]:\;]+$ ]] || return 1
+  printf '%s' "$p"
+}
+
+# binding_cmd <organization|folder|project|billing> <id> <role> <member> <add|remove>: sets BCMD to the gcloud
+# command for one binding. Billing accounts take no --condition (gcloud billing accounts add-iam-policy-binding
+# --help, SDK 588.0.0); the others get --condition=None, so a policy holding conditional bindings never makes
+# gcloud stop to ask which one is meant.
+binding_cmd() {
+  local v="$5-iam-policy-binding"
+  case "$1" in
+    organization) BCMD=(gcloud organizations "$v" "$2") ;;
+    folder)       BCMD=(gcloud resource-manager folders "$v" "$2") ;;
+    project)      BCMD=(gcloud projects "$v" "$2") ;;
+    billing)      BCMD=(gcloud billing accounts "$v" "$2") ;;
+  esac
+  BCMD+=("--member=$4" "--role=$3")
+  [[ "$1" == billing ]] || BCMD+=(--condition=None)
+}
+
+# each_grant <function>: calls <function> <kind> <id> <role> <member> for each binding --grant recorded in GRANTS.
+each_grant() {
+  [[ -n "$GRANTS" ]] || return 0
+  local -a gl; local g kind rest id role member
+  IFS=';' read -ra gl <<<"$GRANTS"
+  for g in "${gl[@]}"; do
+    kind=${g%%:*}; rest=${g#*:}; id=${rest%%:*}; rest=${rest#*:}; role=${rest%%:*}; member=${rest#*:}
+    [[ -n "$kind" && -n "$id" && -n "$role" && -n "$member" ]] || continue
+    "$1" "$kind" "$id" "$role" "$member"
+  done
+}
+# grant_undo <kind> <id> <role> <member>: prints the one command that takes that binding back. Never run here.
+grant_undo() { binding_cmd "$1" "$2" "$3" "$4" remove; printf '%s' "${BCMD[*]}"; }
+# The roles --grant added outlive the setup unless someone takes them back, so clean-up and step 10 name each one.
+grant_byhand() { byhand "$3 for $4 on the ${1/billing/billing account} $2 was added by --grant. Once the pipeline works and nobody needs it: $(grant_undo "$@")"; }
+grant_say()    { say "    $(grant_undo "$@")"; }
+
+# policy_of <organization|folder|project|billing> <id>: that resource's IAM policy as JSON (status 1 and the
+# error when it cannot be read). Read-only.
+policy_of() {
+  case "$1" in
+    organization) gcloud organizations get-iam-policy "$2" --format=json 2>&1 ;;
+    folder)       gcloud resource-manager folders get-iam-policy "$2" --format=json 2>&1 ;;
+    project)      gcloud projects get-iam-policy "$2" --format=json 2>&1 ;;
+    billing)      gcloud billing accounts get-iam-policy "$2" --format=json 2>&1 ;;
+  esac
+}
+
+# The roles, in the order the steps need them: GR_KIND (scope|billing|project), GR_ROLE, GR_NEED, GR_WHY.
+# Every role here was checked with `gcloud iam roles describe` (2026-10-12, all GA), and is checked again at run time.
+# At the organization the viewer role is roles/browser: roles/resourcemanager.organizationViewer holds only
+# resourcemanager.organizations.get, so it cannot list the folders and projects steps 1 and 3 show.
+gr() { GR_KIND+=("$1"); GR_ROLE+=("$2"); GR_NEED+=("$3"); GR_WHY+=("$4"); }
+grant_plan() {
+  GR_KIND=(); GR_ROLE=(); GR_NEED=(); GR_WHY=()
+  case "$SCOPE" in
+    organization) gr scope roles/browser required "see the organization, its folders and projects (steps 1 and 3)" ;;
+    folder)       gr scope roles/resourcemanager.folderViewer required "see the folder and its projects (steps 1 and 3)" ;;
+    project)      gr scope roles/browser required "see the project (steps 1 and 3)" ;;
+  esac
+  gr scope roles/logging.configWriter required "create the log sink (step 4)"
+  gr scope roles/orgpolicy.policyViewer required "read the organization policies that can block the key (step 3)"
+  gr scope roles/iam.securityReviewer required "read IAM policies and the audit settings (steps 2, 5 and 6)"
+  [[ "$SCOPE" != project ]] && gr scope roles/resourcemanager.projectCreator optional "create a new logging project (step 3)"
+  gr scope roles/iam.securityAdmin optional "turn on Data Access logs (step 6). Powerful: it can change IAM anywhere at the $SCOPE"
+  gr billing roles/billing.user optional "link a billing account to the logging project (step 3)"
+  if [[ -n "$LOG_PROJECT" ]]; then
+    gr project roles/pubsub.admin required "create the topic and subscription, and grant on them (steps 4 and 5)"
+    gr project roles/iam.serviceAccountAdmin required "create Abstract's service accounts (steps 5 and 7)"
+    gr project roles/iam.serviceAccountKeyAdmin required "create the key Abstract signs in with (steps 5 and 7)"
+    gr project roles/serviceusage.serviceUsageAdmin required "turn on the APIs (steps 3, 7 and 8)"
+    gr project roles/monitoring.editor optional "create the health alerts (step 8)"
+  fi
+  return 0
+}
+gr_kind() { case "$1" in scope) echo "$SCOPE" ;; project) echo project ;; billing) echo billing ;; esac; }
+gr_id()   { case "$1" in scope) echo "$SCOPE_ID" ;; project) echo "$LOG_PROJECT" ;; billing) echo "$BILLING" ;; esac; }
+gr_where() { case "$1" in scope) echo "the $SCOPE $SCOPE_ID" ;; project) echo "the logging project $LOG_PROJECT" ;;
+  billing) echo "the billing account${BILLING:+ $BILLING}" ;; esac; }
+# Who can grant there, for the hand-over line.
+gr_admin() { case "$1" in
+  scope) case "$SCOPE" in organization) echo "an Organization Admin" ;; folder) echo "a Folder Admin" ;; *) echo "a project Owner or Project IAM Admin" ;; esac ;;
+  project) echo "a project Owner or Project IAM Admin" ;; billing) echo "a Billing Account Administrator" ;; esac; }
+gr_url() { case "$1" in
+  scope) scope_url ;; project) echo "https://cloudresourcemanager.googleapis.com/v3/projects/$LOG_PROJECT" ;;
+  billing) echo "https://cloudbilling.googleapis.com/v1/billingAccounts/$BILLING" ;; esac; }
+gr_perm() { case "$1" in
+  scope) echo "resourcemanager.$( [[ $SCOPE == organization ]] && echo organizations || echo "${SCOPE}s" ).setIamPolicy" ;;
+  project) echo resourcemanager.projects.setIamPolicy ;; billing) echo billing.accounts.setIamPolicy ;; esac; }
+
+grant_roles() {
+  local member="$GRANT" i k last="" out
+  title "+" "Grant the roles the setup needs"
+  why "Run by someone who can set IAM policy where each role goes. Each role is one binding, added on its own;"
+  why "nothing else in a policy changes. The bindings this run adds are recorded, so --teardown --include-grants removes them."
+  if [[ -z "$SCOPE" || -z "$SCOPE_ID" ]]; then
+    interactive || { bad "no scope saved: choose one with $(again --step 1), or load an answers file with --state"; return; }
+    step1
+    [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || return
+  fi
+  if [[ -z "$LOG_PROJECT" ]] && interactive; then
+    local pick; pick=$(choose_existing project "gcloud projects describe {}" "Which project holds (or will hold) the pipeline?" "$(project_list)" \
+      "not chosen yet: skip the logging-project roles" "" '^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
+    [[ -n "$pick" && "$pick" != +new ]] && { LOG_PROJECT="$pick"; save; }
+  fi
+  [[ -n "$LOG_PROJECT" ]] || why "No logging project yet, so its roles are left out. A project you create in step 3 makes you its Owner."
+  grant_plan
+  say ""; say "  ${B}Roles for $member${O}"
+  for ((i = 0; i < ${#GR_ROLE[@]}; i++)); do
+    k=${GR_KIND[$i]}
+    [[ "$k" != "$last" ]] && { say "   on $(gr_where "$k"):"; last="$k"; }
+    printf '    %2d) %-42s %-8s  %s\n' $((i + 1)) "${GR_ROLE[$i]}" "${GR_NEED[$i]}" "${GR_WHY[$i]}"
+  done
+  # Only roles Google knows are offered. A failed lookup that is not NOT_FOUND says nothing either way.
+  GR_OK=()
+  for ((i = 0; i < ${#GR_ROLE[@]}; i++)); do
+    GR_OK[$i]=1
+    if ! out=$(gcloud iam roles describe "${GR_ROLE[$i]}" --format='value(name)' 2>&1); then
+      if grep -qiE 'NOT_FOUND|INVALID_ARGUMENT' <<<"$out"; then bad "${GR_ROLE[$i]} was not found in Google Cloud's roles; it is left out"; GR_OK[$i]=0
+      else warn "could not confirm ${GR_ROLE[$i]} exists ($(first_line "$out"))"; fi
+    fi
+  done
+  why "Roles held through a group, or inherited from a folder or the organization, do not show in a resource's own IAM"
+  why "policy: a role not held directly may still be held that way."
+  if $CHECK_ONLY; then grant_check "$member"; else grant_apply "$member"; fi
+}
+
+# held_directly <policy JSON> <member> <role>
+held_directly() { [[ " $(member_roles "$2" <<<"$1") " == *" $3 "* ]]; }
+
+grant_check() {
+  local member="$1" i k pol="" polk="" ok=true
+  for ((i = 0; i < ${#GR_ROLE[@]}; i++)); do
+    (( GR_OK[i] )) || continue
+    k=${GR_KIND[$i]}
+    if [[ "$k" != "$polk" ]]; then
+      polk="$k"; ok=true
+      if [[ "$k" == billing && -z "$BILLING" ]]; then ok=false; say "  - no billing account saved, so roles/billing.user was not checked"
+      elif ! pol=$(policy_of "$(gr_kind "$k")" "$(gr_id "$k")") || ! member_roles "$member" <<<"$pol" >/dev/null; then
+        ok=false; warn "could not read the IAM policy of $(gr_where "$k") ($(first_line "$pol")); its roles were not checked"
+      fi
+    fi
+    $ok || continue
+    if held_directly "$pol" "$member" "${GR_ROLE[$i]}"; then pass "$member holds ${GR_ROLE[$i]} directly on $(gr_where "$k")"
+    elif [[ "${GR_NEED[$i]}" == required ]]; then warn "$member does not hold ${GR_ROLE[$i]} directly on $(gr_where "$k")"
+    else say "  - $member does not hold ${GR_ROLE[$i]} directly on $(gr_where "$k") (optional)"; fi
+  done
+  say ""; say "  Nothing was changed. To grant what is missing:  $(again --grant "$member")"
+}
+
+grant_apply() {
+  local member="$1" i k polk="" pol="" can=false h out def kind id rec accounts
+  local -a handover=()
+  interactive || warn "no terminal, so nothing can be asked and nothing is granted. Run this in a terminal, or see what is held with --check."
+  for ((i = 0; i < ${#GR_ROLE[@]}; i++)); do
+    (( GR_OK[i] )) || continue
+    k=${GR_KIND[$i]}
+    if [[ "$k" == billing ]]; then
+      interactive && yes_no "Grant ${GR_ROLE[$i]} (link billing to the logging project; optional) on a billing account?" n || continue
+      if [[ -z "$BILLING" ]]; then
+        accounts=$(listing gcloud billing accounts list --filter=open=true --format='value(name.basename(),displayName)')
+        [[ -n "$accounts" ]] || { warn "no open billing account is visible to you; roles/billing.user was not granted"; continue; }
+        BILLING=$(choose "Which billing account?" "$accounts" "" "" '^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$'); save
+      fi
+      polk=""   # the billing account's own checks follow
+    fi
+    if [[ "$k" != "$polk" ]]; then
+      polk="$k"; can=false
+      if ! h=$(held "$(gr_url "$k")" "$(gr_perm "$k")"); then warn "could not check whether you can set the IAM policy of $(gr_where "$k"): $h"
+      elif has "$h" "$(gr_perm "$k")"; then can=true
+      else warn "you cannot set the IAM policy of $(gr_where "$k") (needs $(gr_perm "$k"), e.g. as $(gr_admin "$k"))"; fi
+      $can || { say "  You cannot set the IAM policy of $(gr_where "$k"). Hand these commands to $(gr_admin "$k"):"; handover+=("$k"); }
+      pol=$(policy_of "$(gr_kind "$k")" "$(gr_id "$k")") && member_roles "$member" <<<"$pol" >/dev/null || pol=""
+    fi
+    kind=$(gr_kind "$k"); id=$(gr_id "$k")
+    binding_cmd "$kind" "$id" "${GR_ROLE[$i]}" "$member" add
+    if ! $can; then
+      [[ "${GR_NEED[$i]}" == optional ]] && say "    optional, ${GR_WHY[$i]}:"
+      say "      $(printf '%q ' "${BCMD[@]}")"; continue
+    fi
+    if [[ -n "$pol" ]] && held_directly "$pol" "$member" "${GR_ROLE[$i]}"; then
+      pass "$member already holds ${GR_ROLE[$i]} on $(gr_where "$k"); nothing to do"; continue
+    fi
+    [[ "${GR_NEED[$i]}" == required ]] && def=y || def=n
+    interactive || continue
+    # Billing was asked already, before the account was chosen.
+    [[ "$k" == billing ]] || yes_no "Grant ${GR_ROLE[$i]} on $(gr_where "$k") (${GR_NEED[$i]}: ${GR_WHY[$i]})?" "$def" || { say "  not granted"; continue; }
+    BCMD+=(--format=none)
+    printf '%s   $' "$D"; printf ' %q' "${BCMD[@]}"; printf '%s\n' "$O"
+    if out=$("${BCMD[@]}" 2>&1); then
+      pass "granted ${GR_ROLE[$i]} to $member on $(gr_where "$k")"
+      rec="$kind:$id:${GR_ROLE[$i]}:$member"
+      [[ ";$GRANTS;" == *";$rec;"* ]] || GRANTS="${GRANTS:+$GRANTS;}$rec"
+      save
+    else bad "could not grant ${GR_ROLE[$i]} on $(gr_where "$k"): $(first_line "$out")"; fi
+  done
+  (( ${#handover[@]} )) && why "Copy those lines as they are; each adds one binding and changes nothing else."
+  return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# --teardown: a FULL reset, to start from scratch. Unlike --remove (only what the answers file recorded creating),
+# it looks across the organization for what this setup and the templates make, by their names and by where sinks
+# send. A dry run unless --confirm. Projects and Terraform state are never deleted: their commands are printed.
+# Data Access audit settings change only with --include-audit-settings, and --grant's bindings only with
+# --include-grants. Deletes run in the order that stops routing first: sinks, subscriptions, topics, service
+# accounts, alerts, then the flagged settings and grants.
+TEARDOWN=false; TD_ORG=""; TD_AUDIT=false; TD_GRANTS=false; YES_I_MEAN_IT=false; FIND_PROJECTS=""
+TD_MAX_CONTAINERS=50; TD_MAX_PROJECTS=200
+TD_GROUPS=("Log sinks and what else sends to the topics" "Subscriptions" "Topics" "Service accounts and key files" "Alerts and notification channels"
+  "Data Access audit settings" "Role grants made by --grant" "Terraform state" "Projects")
+TD_G=(); TD_K=(); TD_WHAT=(); TD_CMD=(); TD_SHOW=(); TD_ARGV=(); TD_OFF=(); TD_LEN=()
+# td_add <group 1-9> <remove|byhand|kept> <what> [command...]: one line of the list. The command's words are kept
+# as words (TD_ARGV, from TD_OFF for TD_LEN), and td_run runs exactly those words: a name a listing returned is
+# never read back as shell. TD_CMD is the same words %q-quoted, only to print. A function (mon_delete,
+# td_audit_remove) prints its name and arguments, never the token its request carries.
+td_add() {
+  local g="$1" k="$2" w="$3"; shift 3
+  TD_G+=("$g"); TD_K+=("$k"); TD_WHAT+=("$w")
+  TD_OFF+=("${#TD_ARGV[@]}"); TD_LEN+=("$#")
+  if (( $# )); then TD_CMD+=("$(printf '%q ' "$@")"); TD_ARGV+=("$@"); else TD_CMD+=(""); fi
+  TD_SHOW+=("")
+}
+td_show() { TD_SHOW[$(( ${#TD_SHOW[@]} - 1 ))]="$1"; }   # what the list prints in place of the last item's command
+add_word() { [[ " ${!1} " == *" $2 "* ]] || printf -v "$1" '%s' "${!1:+${!1} }$2"; }
+
+# td_audit_plan <policy JSON> <pairs>: the auditConfigs left once exactly those service:logType pairs are taken off
+# (DA_ADDED: what step 6 recorded adding, and Google confirmed). Nothing else changes: a log type that was on before
+# step 6, on any service, stays, and so do other services and every exemption not on a removed log type. An entry is
+# dropped only when nothing is left in it.
+td_audit_plan() {
+  python3 - "$1" "$2" <<'PY'
+import json, sys
+cur = json.loads(sys.argv[1]); drop = {}
+for p in sys.argv[2].split():
+    svc, _, t = p.rpartition(":")
+    if svc and t: drop.setdefault(svc, set()).add(t)
+out = []
+for c in cur.get("auditConfigs", []):
+    off = drop.get(c.get("service"))
+    if off:
+        keep = [l for l in c.get("auditLogConfigs", []) if l.get("logType") not in off]
+        if keep: out.append({**c, "auditLogConfigs": keep})
+    else:
+        out.append(c)
+print(json.dumps(out))
+PY
+}
+# td_audit_record <org>: status 0 when the answers file holds a record of what step 6 added that applies to this
+# organization; otherwise prints why not (for the by-hand line) and returns 1.
+td_audit_record() {
+  if [[ "${DA_CHANGED:-}" != 1 || -z "${DA_ADDED// /}" ]]; then printf 'no record of the log types script step 6 added'; return 1; fi
+  if [[ -z "$SCOPE" || -z "$SCOPE_ID" ]]; then printf 'no record of where script step 6 changed them'; return 1; fi
+  if [[ "$ORG_ID" != "$1" ]]; then printf 'the answers file records step 6 in organization %s, not %s' "${ORG_ID:-(none)}" "$1"; return 1; fi
+  return 0
+}
+td_policy_kind() { case "$1" in organization) echo organizations ;; folder) echo "resource-manager folders" ;; project) echo projects ;; esac; }
+# td_audit_remove <resource url> <label>: re-read the settings (a fresh etag), save a copy next to the answers file,
+# then setIamPolicy with that etag and updateMask=auditConfigs, so role bindings are never touched.
+td_audit_remove() {
+  local cur left backup body out code
+  cur=$(audit_config_json "$1") || { printf 'could not read the audit settings: %s\n' "$cur"; return 1; }
+  left=$(td_audit_plan "$cur" "$DA_ADDED") || { echo "could not compute the change"; return 1; }
+  backup="$(dirname "$STATE")/abstract-audit-config-backup-teardown-$(date +%Y%m%d%H%M%S)-$(tr -c 'a-z0-9' '-' <<<"$2" | tr -s '-' | sed 's/-$//').json"
+  ( umask 077; printf '%s\n' "$cur" > "$backup" ) || { echo "could not save a copy of the settings first; nothing was sent"; return 1; }
+  body=$(python3 -c 'import json, sys
+cur = json.loads(sys.argv[1])
+print(json.dumps({"policy": {"etag": cur["etag"], "auditConfigs": json.loads(sys.argv[2])}, "updateMask": "auditConfigs"}))' "$cur" "$left") \
+    || { echo "the settings had no etag; nothing was sent"; return 1; }
+  out=$(curl -s -w '\n%{http_code}' -X POST -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" \
+    -d "$body" "$1:setIamPolicy"); code=${out##*$'\n'}; out=${out%$'\n'*}
+  # Google answers with the stored policy; with no audit config left it carries none, so the etag is the proof.
+  if [[ "$code" == 200 ]] && python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("etag") and "error" not in d else 1)' <<<"$out" 2>/dev/null; then
+    printf 'the copy taken first is %s\n' "$backup"; return 0
+  fi
+  printf 'HTTP %s; the copy taken first is %s\n' "${code:-?}" "$backup"; return 1
+}
+
+# td_tree <org>: every folder (breadth first) and project under the organization, bounded and said so.
+# Sets TD_FOLDERS and TD_PROJECTS (words), and TD_PNUMS (number:id words, so a topic named by project number is
+# recognised). A listing that fails is a failure, never an empty list.
+td_tree() {
+  local -a queue=("organization:$1"); local i=0 t id out f n num
+  TD_FOLDERS=""; TD_PROJECTS=""; TD_PNUMS=""
+  while (( i < ${#queue[@]} )); do
+    if (( i >= TD_MAX_CONTAINERS )); then
+      warn "looked under $TD_MAX_CONTAINERS of ${#queue[@]} organization and folders found; the rest were not checked"; break
+    fi
+    t=${queue[$i]%%:*}; id=${queue[$i]#*:}; i=$((i + 1))
+    if out=$(gcloud resource-manager folders list "--$t=$id" --format='value(ID)' 2>&1); then
+      for f in $out; do queue+=("folder:$f"); add_word TD_FOLDERS "$f"; done
+    else bad "could not list the folders under $t $id: $(first_line "$out")"; fi
+    if out=$(gcloud projects list --filter="parent.type=$t AND parent.id=$id AND lifecycleState:ACTIVE" --format='value(projectId,projectNumber)' 2>&1); then
+      while IFS=$'\t' read -r f num; do
+        [[ -n "$f" ]] || continue
+        add_word TD_PROJECTS "$f"; [[ -n "$num" ]] && add_word TD_PNUMS "$num:$f"
+      done <<<"$out"
+    else bad "could not list the projects under $t $id: $(first_line "$out")"; fi
+  done
+  n=$(wc -w <<<"$TD_PROJECTS" | tr -d ' ')
+  if (( n > TD_MAX_PROJECTS )); then
+    warn "found $n projects; only the first $TD_MAX_PROJECTS are checked for sinks and topics"
+    TD_PROJECTS=$(tr ' ' '\n' <<<"$TD_PROJECTS" | head -n "$TD_MAX_PROJECTS" | paste -sd' ' -)
+  fi
+  say "  looked at the organization, $(wc -w <<<"$TD_FOLDERS" | tr -d ' ') folder(s) and $(wc -w <<<"$TD_PROJECTS" | tr -d ' ') project(s)"
+}
+
+# td_sinks <scope flag> <label>: this setup's sinks there: named abstract-*, or sending to a topic named $TOPIC.
+td_sinks() {
+  local out name dest
+  if ! out=$(gcloud logging sinks list "$1" --format='value(name,destination)' 2>&1); then
+    bad "could not list the sinks at $2: $(first_line "$out")"; return
+  fi
+  while IFS=$'\t' read -r name dest; do
+    [[ -z "$name" || "$name" == _Required || "$name" == _Default ]] && continue
+    [[ "$name" == abstract-* || "$dest" == */topics/"$TOPIC" ]] || continue
+    td_add 1 remove "sink $name at $2 (sends to $dest)" gcloud logging sinks delete "$name" "$1" --quiet
+    [[ "$dest" =~ ^pubsub\.googleapis\.com/projects/([^/]+)/topics/ ]] && add_word TD_LOGPROJ "${BASH_REMATCH[1]}"
+  done <<<"$out"
+}
+
+# td_topics <project>: sets TD_TOPIC_LIST to the project's topics, one per line, or reports why they cannot be listed
+# and returns 1. A project with the Pub/Sub API off has no topics; that is not an error. Never called through $(...):
+# a bad() in a subshell is lost, and its message would be captured into the list instead of shown.
+td_topics() {
+  local out; TD_TOPIC_LIST=""
+  if out=$(gcloud pubsub topics list --project="$1" --format='value(name.basename())' 2>&1); then TD_TOPIC_LIST=$out; return 0; fi
+  grep -qiE 'SERVICE_DISABLED|has not been used in project|it is disabled' <<<"$out" && return 0
+  bad "could not list the topics in $1: $(first_line "$out")"; return 1
+}
+
+# td_scan <project>: list the project's topics once. Each named abstract-* (or the answers' topic name) is kept in
+# TD_TOPICS as projects/P/topics/T, and the project joins TD_LOGPROJ: a standalone pipeline (SCC findings, asset
+# changes, bucket notifications) has its own topic and no Logging sink, so a topic is the only trace it leaves here.
+TD_TOPICS=""; TD_SCANNED=""; TD_SCAN_FAILED=""
+td_scan() {
+  local p="$1" t mine=false
+  has "$TD_SCANNED" "$p" && return 0
+  add_word TD_SCANNED "$p"
+  td_topics "$p" || { add_word TD_SCAN_FAILED "$p"; return 1; }
+  while IFS= read -r t; do
+    [[ -n "$t" && ( "$t" == abstract-* || "$t" == "$TOPIC" ) ]] || continue
+    add_word TD_TOPICS "projects/$p/topics/$t"; mine=true
+  done <<<"$TD_TOPIC_LIST"
+  $mine && add_word TD_LOGPROJ "$p"
+  return 0
+}
+
+# td_senders <org>: what publishes to those topics from the organization without a Logging sink: Security Command
+# Center notification configs and Cloud Asset feeds. Only those sending to one of TD_TOPICS are listed, and they go
+# in the first group, so they are deleted before their topics. A listing that is refused is never "none" - an API
+# that is off names the project gcloud bills the call to, not this organization (measured 2026-10-13: SCC answered
+# SERVICE_DISABLED) - but it does not block the teardown either: a config left behind only points at a topic that is
+# gone. It becomes a by-hand line that says how to check.
+td_senders() {
+  local out rows name topic loc
+  if [[ -z "$TD_TOPICS" ]]; then
+    td_add 1 kept "no abstract-* topic found, so no Security Command Center notification or Cloud Asset feed can send to one; neither was listed"
+    return
+  fi
+  if ! out=$(gcloud scc notifications list --organization="$1" --location=global --format=json 2>&1); then
+    td_add 1 byhand "could not list the Security Command Center notification configs at the organization $1 ($(first_line "$out")). If you deployed the SCC template, check with: gcloud scc notifications list --organization=$1 --location=global$(td_quota_hint "Security Command Center")"
+  elif ! rows=$(td_rows "$out" notificationConfigs pubsubTopic); then
+    bad "could not read the Security Command Center notification configs at the organization $1"
+  else
+    while IFS=$'\t' read -r name topic; do
+      topic=$(td_topic_id "$topic"); [[ -n "$name" ]] && has "$TD_TOPICS" "$topic" || continue
+      loc=global; [[ "$name" =~ /locations/([^/]+)/ ]] && loc=${BASH_REMATCH[1]}
+      td_add 1 remove "Security Command Center notification config ${name##*/} at the organization $1 (sends to $topic)" \
+        gcloud scc notifications delete "${name##*/}" --organization="$1" --location="$loc" --quiet
+    done <<<"$rows"
+  fi
+  # gcloud asset feeds list prints the whole ListFeedsResponse ({"feeds": [...]}), not one row per feed.
+  if ! out=$(gcloud asset feeds list --organization="$1" --format=json 2>&1); then
+    td_add 1 byhand "could not list the Cloud Asset feeds at the organization $1 ($(first_line "$out")). If you deployed the asset template, check with: gcloud asset feeds list --organization=$1$(td_quota_hint "Cloud Asset")"
+  elif ! rows=$(td_rows "$out" feeds feedOutputConfig.pubsubDestination.topic); then
+    bad "could not read the Cloud Asset feeds at the organization $1"
+  else
+    while IFS=$'\t' read -r name topic; do
+      topic=$(td_topic_id "$topic"); [[ -n "$name" ]] && has "$TD_TOPICS" "$topic" || continue
+      td_add 1 remove "Cloud Asset feed ${name##*/} at the organization $1 (sends to $topic)" \
+        gcloud asset feeds delete "${name##*/}" --organization="$1" --quiet
+    done <<<"$rows"
+  fi
+}
+# td_topic_id <topic>: projects/NUMBER/topics/T written as projects/ID/topics/T when the walk saw that project.
+td_topic_id() {
+  local w
+  if [[ "$1" =~ ^projects/([0-9]+)/topics/(.+)$ ]]; then
+    for w in $TD_PNUMS; do [[ "${w%%:*}" == "${BASH_REMATCH[1]}" ]] && { printf 'projects/%s/topics/%s' "${w#*:}" "${BASH_REMATCH[2]}"; return; }; done
+  fi
+  printf '%s' "$1"
+}
+# td_quota_hint <api>: what to do when an organization-level listing is refused. Such a call has no project of its
+# own, so gcloud bills it to billing/quota_project, or else the current project (gcloud config set --help).
+td_quota_hint() { printf ' - if the %s API is off in the project gcloud bills this call to, turn it on there or name one where it is on (gcloud config set billing/quota_project PROJECT_ID), then run this again' "$1"; }
+# td_rows <json> <list key> <dotted topic field>: name<TAB>topic per item, from a JSON list or {"<key>": [...]}.
+td_rows() {
+  python3 -c 'import json, sys
+d = json.loads(sys.argv[1] or "[]")
+items = d.get(sys.argv[2], []) if isinstance(d, dict) else d
+for i in items:
+    t = i
+    for k in sys.argv[3].split("."): t = t.get(k, {}) if isinstance(t, dict) else {}
+    print(i.get("name", "") + "\t" + (t if isinstance(t, str) else ""))' "$@"
+}
+
+# td_project <project>: what the setup makes in a logging project: subscriptions and topics (from td_scan), alerts.
+td_project() {
+  local p="$1" path t subs s n
+  has "$TD_SCAN_FAILED" "$p" && return     # its topics could not be listed: reported once, by td_scan
+  for path in $TD_TOPICS; do
+    [[ "$path" == "projects/$p/topics/"* ]] || continue
+    t=${path##*/}
+    if subs=$(gcloud pubsub topics list-subscriptions "$t" --project="$p" --format=json 2>&1) \
+       && subs=$(python3 -c 'import json, sys
+for s in json.loads(sys.stdin.read().strip() or "[]"):
+    print(s if isinstance(s, str) else s.get("name", ""))' <<<"$subs" 2>/dev/null); then
+      while IFS= read -r s; do
+        [[ -n "$s" ]] || continue
+        local note=""; [[ "$s" == "projects/$p/subscriptions/$SUB" ]] && note=" - Abstract reads this one: delete the integration in Abstract first"
+        td_add 2 remove "subscription $s (on topic $t)$note" gcloud pubsub subscriptions delete "$s" --quiet
+      done <<<"$subs"
+    else bad "could not list the subscriptions on topic $t in $p: $(first_line "$subs")"; fi
+    td_add 3 remove "topic $t in $p" gcloud pubsub topics delete "$t" --project="$p" --quiet
+    td_add 1 byhand "Cloud Storage notifications sending to $path are not listed here: finding them means reading every bucket. The projects whose buckets can send to it are the gs-project-accounts publishers in: gcloud pubsub topics get-iam-policy $t --project=$p. In each such bucket: gcloud storage buckets notifications list gs://BUCKET, then gcloud storage buckets notifications delete with the name of each one whose topic is this one (deleting the topic stops them publishing, but they stay on the bucket)"
+  done
+  if td_mon alertPolicies "alert policies" "$p"; then
+    for n in $MON_NAMES; do td_add 5 remove "alert policy $n" mon_delete "$n"; td_show "DELETE https://monitoring.googleapis.com/v3/$n"; done
+    td_mon notificationChannels "notification channels" "$p" && for n in $MON_NAMES; do
+      td_add 5 remove "alert channel $n" mon_delete "$n" force=true; td_show "DELETE https://monitoring.googleapis.com/v3/$n?force=true"; done
+  fi
+  td_add 9 byhand "logging project $p: never deleted here. If it holds nothing else: gcloud projects delete $p (Google keeps a deleted project for 30 days, and gcloud projects undelete $p restores it until then)"
+}
+
+# td_sas <project>: the setup's and the templates' reader accounts there (abstract-*-reader, or the answers' names).
+# A project with the IAM API off has none of them: the setup and the templates create accounts through that API.
+td_sas() {
+  local p="$1" out email a
+  if ! out=$(gcloud iam service-accounts list --project="$p" --format='value(email)' 2>&1); then
+    grep -qiE 'SERVICE_DISABLED|has not been used in project|it is disabled' <<<"$out" && return
+    bad "could not list the service accounts in $p: $(first_line "$out")"; return
+  fi
+  while IFS= read -r email; do
+    [[ "$email" == *@"$p".iam.gserviceaccount.com ]] || continue
+    a=${email%%@*}
+    [[ "$a" == abstract-*-reader || "$a" == "$SA" || "$a" == "$WS_SA" ]] || continue
+    td_add 4 remove "service account $email (deleting it deletes its keys, so whatever signs in with them stops)" \
+      gcloud iam service-accounts delete "$email" --project="$p" --quiet
+  done <<<"$out"
+}
+
+# td_mon <collection> <what> <project>: like mon_list, except that a project with the Monitoring API off has no
+# alerts (script step 8 is optional, and only it turns the API on): said, and not a failure. Status 1 then, and for
+# any other failure, which mon_list reports.
+td_mon() {
+  local body code
+  body=$(curl -s -w '\n%{http_code}' -H "Authorization: Bearer $(token)" "https://monitoring.googleapis.com/v3/projects/$3/$1?pageSize=200")
+  code=${body##*$'\n'}
+  if [[ "$code" == 403 ]] && grep -qiE 'SERVICE_DISABLED|has not been used in project|it is disabled' <<<"${body%$'\n'*}"; then
+    [[ "$1" == alertPolicies ]] && td_add 5 kept "no alerts in $3: the Monitoring API is off there (script step 8 never ran)"
+    MON_NAMES=""; return 1
+  fi
+  mon_list "$@"
+}
+
+# td_audit <resource url> <label>: the Data Access settings there, listed. Never changed here: see td_audit_change.
+td_audit() {
+  local cur listed
+  if ! cur=$(audit_config_json "$1"); then bad "could not read the audit settings at $2: $cur"; return; fi
+  listed=$(python3 -c 'import json, sys
+for c in json.loads(sys.argv[1]).get("auditConfigs", []):
+    print(c["service"] + " (" + ", ".join(l["logType"] for l in c.get("auditLogConfigs", [])) + ")")' "$cur") \
+    || { bad "could not read the audit settings at $2"; return; }
+  [[ -n "$listed" ]] || { td_add 6 kept "no Data Access settings at $2"; return; }
+  local line; while IFS= read -r line; do td_add 6 kept "configured at $2: $line"; done <<<"$listed"
+}
+
+# td_audit_change <org>: what --include-audit-settings changes: ONLY the service:logType pairs step 6 recorded adding
+# (DA_ADDED), at the scope where it added them. With no record that applies, nothing is changed: the settings are
+# listed above, and the by-hand line says how to take log types off and where step 6's copy is.
+td_audit_change() {
+  local why kind id
+  if ! why=$(td_audit_record "$1"); then
+    kind="${SCOPE:-organization}"; id="${SCOPE_ID:-$1}"; [[ "$ORG_ID" == "$1" ]] || { kind=organization; id="$1"; }
+    local hint; hint="${DA_BACKUP:+ The copy of the settings step 6 saved before its change is $DA_BACKUP; never set it back over changes made since.}"
+    if $TD_AUDIT; then
+      td_add 6 byhand "Data Access settings: $why, so --include-audit-settings changes nothing (what is on now is listed above).$hint To take off a log type you turned on: gcloud $(td_policy_kind "$kind") get-iam-policy $id --format=json > policy.json, remove only that entry under auditConfigs, then gcloud $(td_policy_kind "$kind") set-iam-policy $id policy.json (the file keeps the etag, so a change made since is refused, not overwritten)"
+    else td_add 6 kept "Data Access settings stay: $why, so --include-audit-settings would change nothing either.$hint"; fi
+    return
+  fi
+  local url label cur left same; url=$(scope_url); label="the $SCOPE $SCOPE_ID"
+  if ! cur=$(audit_config_json "$url"); then bad "could not read the audit settings at $label: $cur"; return; fi
+  left=$(td_audit_plan "$cur" "$DA_ADDED") || { bad "could not work out what to take off the audit settings at $label"; return; }
+  same=$(python3 -c 'import json, sys
+print("yes" if json.loads(sys.argv[1]).get("auditConfigs", []) == json.loads(sys.argv[2]) else "")' "$cur" "$left") \
+    || { bad "could not compare the audit settings at $label with what would be left"; return; }
+  if [[ -n "$same" ]]; then td_add 6 kept "Data Access settings at $label: none of what script step 6 added (${DA_ADDED// /, }) is on now"; return; fi
+  local what; what="Data Access settings at $label: take off only what script step 6 added (${DA_ADDED// /, }); everything else stays, and a copy is saved first"
+  if $TD_AUDIT; then td_add 6 remove "$what" td_audit_remove "$url" "$label"
+    td_show "POST $url:getIamPolicy, save a copy, then POST $url:setIamPolicy with its etag and updateMask=auditConfigs"
+  else td_add 6 kept "$what - only with --include-audit-settings"; fi
+}
+
+# td_state: Terraform state in this repository's template folders. Never deleted; the commands that make Terraform
+# forget what was deleted above are printed.
+td_state() {
+  local d name addrs n=0
+  for d in "$ROOT"/templates/gcp/*/; do
+    d=${d%/}; name=$(basename "$d")
+    if [[ -f "$d/terraform.tfstate" ]]; then
+      addrs=$(python3 -c 'import json, sys
+d = json.load(open(sys.argv[1]))
+for r in d.get("resources", []):
+    if r.get("mode") != "managed": continue
+    a = (r["module"] + "." if r.get("module") else "") + r["type"] + "." + r["name"]
+    for i in r.get("instances", [{}]):
+        k = i.get("index_key")
+        print(a if k is None else a + ("[%d]" % k if isinstance(k, int) else "[\"%s\"]" % k))' "$d/terraform.tfstate" 2>/dev/null) || addrs="?"
+      if [[ "$addrs" == "?" ]]; then byhand_td "$name: terraform.tfstate could not be read; look at it with terraform state list in $d"; n=$((n + 1)); continue; fi
+      [[ -n "$addrs" ]] || continue
+      local rm="terraform state rm"; local a; while IFS= read -r a; do rm+=" '$a'"; done <<<"$addrs"
+      td_add 8 byhand "$name holds $(grep -c . <<<"$addrs") resource(s) in its local state. Run in $d (state rm forgets them; it deletes nothing):"$'\n'"      cd $(printf '%q' "$d")"$'\n'"      $rm"
+      n=$((n + 1))
+    elif [[ -f "$d/backend.tf" || -d "$d/.terraform" ]]; then
+      td_add 8 byhand "$name has been initialised and keeps its state elsewhere (backend.tf). In $d, list what it believes exists with terraform state list, then terraform state rm each address"
+      n=$((n + 1))
+    fi
+  done
+  (( n )) && td_add 8 byhand "the templates' topic, subscription and sink carry prevent_destroy, so terraform destroy refuses them: state rm is how Terraform forgets what was deleted here, so the next apply creates it again"
+  (( n )) || td_add 8 kept "no Terraform state in $ROOT/templates/gcp"
+}
+byhand_td() { td_add 8 byhand "$1"; }
+
+td_print() {  # td_print <dry|confirm>
+  local g i any label
+  for ((g = 1; g <= ${#TD_GROUPS[@]}; g++)); do
+    any=false
+    for ((i = 0; i < ${#TD_WHAT[@]}; i++)); do
+      [[ "${TD_G[$i]}" == "$g" ]] || continue
+      $any || { say ""; say "  ${B}${TD_GROUPS[$((g - 1))]}${O}"; any=true; }
+      case "${TD_K[$i]}" in
+        remove) [[ "$1" == dry ]] && label="would remove" || label="will remove"
+                WOULD=$((WOULD + 1)); printf '  %s%s%s %s\n' "$Y" "$label" "$O" "${TD_WHAT[$i]}"
+                printf '%s   $ %s%s\n' "$D" "${TD_SHOW[$i]:-${TD_CMD[$i]% }}" "$O" ;;
+        byhand) byhand "${TD_WHAT[$i]}" ;;
+        kept)   kept "${TD_WHAT[$i]}" ;;
+      esac
+    done
+  done
+}
+
+# teardown: the full reset. Every failure is counted, wherever it happened (FAIL_LOG): one that went uncounted
+# once reported success and moved the answers file aside while resources remained.
+teardown() {
+  FAIL_LOG=$(mktemp) || { FAIL_LOG=""; bad "could not make a temporary file to count failures in; nothing was listed or deleted"; return; }
+  TD_FAILS0=$FAILS
+  td_main
+  td_count_fails; rm -f "$FAIL_LOG"; FAIL_LOG=""
+}
+td_count_fails() { FAILS=$(( TD_FAILS0 + $(wc -l <"$FAIL_LOG") )); }
+
+td_main() {
+  local org="${TD_ORG:-$ORG_ID}" orgs n f p
+  title "x" "Full reset"
+  why "Lists what this setup and the templates made across the organization, so you can start from scratch."
+  why "Projects and Terraform state are never deleted; their commands are printed. Nothing is deleted without --confirm."
+  why "Delete the integrations in Abstract first, so they stop reading."
+  if [[ -z "$org" ]]; then
+    orgs=$(listing gcloud organizations list --format='value(ID)') || { bad "could not list your organizations; name one with --org ORG_ID"; return; }
+    n=$(grep -c . <<<"$orgs")
+    if (( n == 1 )); then org=$(trim "$orgs")
+    elif (( n == 0 )); then bad "no organization is visible to you; name one with --org ORG_ID"; return
+    else bad "$n organizations are visible ($(paste -sd' ' - <<<"$orgs")): name the one to reset with --org ORG_ID"; return; fi
+  fi
+  say "  organization $org"
+  TD_LOGPROJ=""; TD_TOPICS=""; TD_SCANNED=""; TD_SCAN_FAILED=""
+  td_tree "$org"
+  td_sinks "--organization=$org" "the organization $org"
+  for f in $TD_FOLDERS; do td_sinks "--folder=$f" "the folder $f"; done
+  for p in $TD_PROJECTS; do td_sinks "--project=$p" "the project $p"; td_scan "$p"; done
+  [[ -n "$LOG_PROJECT" ]] && add_word TD_LOGPROJ "$LOG_PROJECT"
+  for p in $FIND_PROJECTS; do add_word TD_LOGPROJ "$p"; done
+  for p in $TD_LOGPROJ; do td_scan "$p"; done     # outside the walk: a sink's destination, --project, the answers
+  td_senders "$org"
+  for p in $TD_LOGPROJ; do td_project "$p"; done
+  local all="$TD_PROJECTS"; for p in $TD_LOGPROJ; do add_word all "$p"; done
+  for p in $all; do td_sas "$p"; done
+  for f in "$KEY_FILE" "$WS_KEY_FILE" $(aside_keys); do [[ -f "$f" ]] && td_add 4 remove "key file $f" rm -f "$f"; done
+  td_audit "https://cloudresourcemanager.googleapis.com/v3/organizations/$org" "the organization $org"
+  [[ "$SCOPE" == folder || ( "$SCOPE" == project && -n "$SCOPE_ID" ) ]] && td_audit "$(scope_url)" "the $SCOPE $SCOPE_ID"
+  td_audit_change "$org"
+  local g kind rest id role member
+  if [[ -n "$GRANTS" ]]; then
+    local -a gl; IFS=';' read -ra gl <<<"$GRANTS"
+    for g in "${gl[@]}"; do
+      kind=${g%%:*}; rest=${g#*:}; id=${rest%%:*}; rest=${rest#*:}; role=${rest%%:*}; member=${rest#*:}
+      [[ -n "$kind" && -n "$id" && -n "$role" && -n "$member" ]] || continue
+      if $TD_GRANTS; then binding_cmd "$kind" "$id" "$role" "$member" remove
+        td_add 7 remove "$role for $member on the ${kind/billing/billing account} $id" "${BCMD[@]}" --format=none
+      else td_add 7 kept "$role for $member on the ${kind/billing/billing account} $id (added by --grant) - only with --include-grants, or take it back yourself: $(grant_undo "$kind" "$id" "$role" "$member")"; fi
+    done
+  else td_add 7 kept "no role grants recorded by --grant in $STATE"; fi
+  td_state
+  (( ${#TD_LOGPROJ} )) || td_add 9 kept "no logging project found (no topic named abstract-* or $TOPIC, and none named with --project)"
+
+  td_print "$($CONFIRM && echo confirm || echo dry)"
+  say ""
+  if ! $CONFIRM; then
+    local flags="--teardown"; [[ -n "$TD_ORG" ]] && flags+=" --org $TD_ORG"; $TD_AUDIT && flags+=" --include-audit-settings"
+    $TD_GRANTS && flags+=" --include-grants"; for p in $FIND_PROJECTS; do flags+=" --project $p"; done
+    # shellcheck disable=SC2086  # the flags are words
+    if (( WOULD > 0 )); then say "  Nothing was deleted. To delete the items marked 'would remove':  $(again $flags --confirm)"
+    else say "  Nothing is marked 'would remove'. Act on the by-hand lines yourself."; fi
+    return
+  fi
+  (( WOULD > 0 )) || { say "  Nothing to delete. Act on the by-hand lines yourself."; return; }
+  if $HAVE_TTY; then
+    local typed
+    to_tty '  %sType the organization ID (%s) to delete the %d item(s) marked "will remove", or press Enter to stop:%s ' "$B" "$org" "$WOULD" "$O"
+    IFS= read -r typed </dev/tty || typed=""
+    [[ "$(trim "$typed")" == "$org" ]] || { say "  That is not $org. Nothing was deleted."; return; }
+  fi
+  local i
+  for ((g = 1; g <= 7; g++)); do
+    for ((i = 0; i < ${#TD_WHAT[@]}; i++)); do
+      [[ "${TD_G[$i]}" == "$g" && "${TD_K[$i]}" == remove ]] || continue
+      td_run "$i"
+    done
+  done
+  say ""
+  td_count_fails
+  if (( FAILS == 0 )); then
+    if [[ -f "$STATE" ]]; then local moved; moved="$STATE.teardown-$(date +%Y%m%d%H%M%S)"; mv "$STATE" "$moved" && say "  saved answers moved aside to $moved"; fi
+    say "  Done. Act on the by-hand lines above (projects, Terraform state), then start again with:  $0"
+  else say "  Some items could not be removed; your answers file stays, so this can be run again:  $(again --teardown)"; fi
+}
+
+# td_run <item>: one delete, and its result. Already gone counts as removed. It runs the words td_add kept, as an
+# argument list: nothing is parsed again, so no name can become a command.
+td_run() {
+  local i="$1" out what; what="${TD_WHAT[$1]%% (*}"
+  (( TD_LEN[i] > 0 )) || { bad "could not remove $what: no command was recorded for it"; return; }
+  if out=$("${TD_ARGV[@]:TD_OFF[i]:TD_LEN[i]}" 2>&1); then pass "removed $what"
+  elif grep -qiE 'NOT_FOUND|not found|does not exist' <<<"$out"; then pass "$what was already gone"
+  else bad "could not remove $what: $(first_line "$out")"; fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 ARGS=("$@")
 RESET=false
 # shellcheck disable=SC1090  # the state file is chosen at run time
@@ -1553,11 +2362,22 @@ while [[ $# -gt 0 ]]; do case "$1" in
   --remove) REMOVE=true; shift ;;
   --confirm) CONFIRM=true; shift ;;
   --step) ONLY_STEP="$2"; shift 2 ;;
+  --new-key) NEW_KEY=true; shift ;;
   # A file that is not there is a stop, never the default answers: those may describe a different, live pipeline.
   --state) [[ -n "${2:-}" && -f "$2" ]] || { echo "no answers file at ${2:-(no path given)}: nothing was read, checked or removed"; exit 2; }
            STATE="$2"; defaults; load_answers "$STATE"; shift 2 ;;
-  --project) FIND_PROJECT="$2"; shift 2 ;;
+  --project) [[ -n "${2:-}" ]] || { echo "--project needs a project ID"; exit 2; }
+             [[ -n "$FIND_PROJECT" ]] || FIND_PROJECT="$2"; FIND_PROJECTS="${FIND_PROJECTS:+$FIND_PROJECTS }$2"; shift 2 ;;
+  --teardown) TEARDOWN=true; shift ;;
+  --org) [[ "${2:-}" =~ ^[0-9]{6,}$ ]] || { echo "--org needs an organization ID (digits): --org 123456789012"; exit 2; }
+         TD_ORG="$2"; shift 2 ;;
+  --include-audit-settings) TD_AUDIT=true; shift ;;
+  --include-grants) TD_GRANTS=true; shift ;;
+  --yes-i-mean-it) YES_I_MEAN_IT=true; shift ;;
   --reset) RESET=true; shift ;;
+  --grant) [[ -n "${2:-}" && "$2" != --* ]] || { echo "--grant needs a principal: --grant name@example.com (a user), or group:, serviceAccount: before the email"; exit 2; }
+           GRANT=$(grant_member "$2") || { echo "\"$2\" is not a principal: use an email address (a user), or user:, group: or serviceAccount: and the email"; exit 2; }
+           shift 2 ;;
   -h|--help) sed -n '2,/^# =====/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "unknown option $1 (try --help)"; exit 2 ;; esac; done
 
@@ -1569,12 +2389,29 @@ need_sign_in() {
   summary; exit 1
 }
 
+if $NEW_KEY && { $CHECK_ONLY || [[ "$ONLY_STEP" != 7 ]]; }; then
+  echo "--new-key goes only with --step 7, and not with --check: it makes another Workspace key. Nothing was checked or changed."; exit 2
+fi
 need gcloud; need python3; need curl
+if $TEARDOWN && $REMOVE; then echo "--teardown and --remove do not go together: --remove takes away what the answers file recorded, --teardown everything the setup makes"; exit 2; fi
+if $TEARDOWN && $CONFIRM && ! $HAVE_TTY && ! $YES_I_MEAN_IT; then
+  echo "--teardown --confirm deletes across the organization. With no terminal to type the organization ID into, it also needs --yes-i-mean-it. Nothing was listed or deleted."; exit 2
+fi
 $RESET && start_over
-if $REMOVE; then
+if $TEARDOWN; then
+  signed_in || launch
+  need_sign_in "listed or removed"
+  python3 "$HERE/brand.py" header "Google Cloud setup" "full reset$($CONFIRM || echo ' - dry run, nothing will be deleted')" "info|answers: $STATE"
+  teardown
+elif $REMOVE; then
   signed_in || launch
   need_sign_in "listed or removed"
   python3 "$HERE/brand.py" header "Google Cloud setup" "clean-up" "info|answers: $STATE"; remove_all
+elif [[ -n "$GRANT" ]]; then
+  signed_in || launch
+  need_sign_in "checked or granted"
+  python3 "$HERE/brand.py" header "Google Cloud setup" "$($CHECK_ONLY && echo 'grant roles - check only, nothing will change' || echo 'grant roles')" "info|answers: $STATE"
+  grant_roles
 elif $CONFIRM; then echo "--confirm only goes with --remove"; exit 2
 else launch; need_sign_in checked
   if [[ -n "$ONLY_STEP" ]]; then "step$ONLY_STEP"; else for s in 1 2 3 4 5 6 7 8 9 10; do "step$s"; done; fi; fi

@@ -2,6 +2,9 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+> [!WARNING]
+> Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records. Abstract's Google Cloud integration keeps only Cloud Audit Logs, which Security Command Center findings are not.
+
 Security Command Center does not flow through the Log Router; it publishes to Pub/Sub through its own notification config, so no sink will ever collect it. This deployment creates that config and a dedicated topic and subscription, reusing Abstract's existing service account.
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
@@ -57,6 +60,8 @@ SCC notifications are free; Pub/Sub throughput is small (findings, not logs).
 ## Permissions
 
 - **roles/securitycenter.notificationConfigEditor** on The organization: Deployer: Create the notification config.
+- **roles/pubsub.admin** on The logging project: Deployer: Create the topic, the subscription and their IAM bindings.
+- **roles/serviceusage.serviceUsageAdmin** on The logging project: Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.
 - **roles/pubsub.subscriber** on The findings subscription: Abstract service account: Pull the findings.
 
 ## Creates
@@ -77,16 +82,12 @@ SCC notifications are free; Pub/Sub throughput is small (findings, not logs).
 
 ## Verify
 
+These read, and change nothing. They use LOG_PROJECT and ORG_ID from the guided setup's answers: run `source ~/.abstract-gcp-setup.env` first, or `export` each one. An UPPERCASE word such as YOUR_BUCKET or BILLING_ACCOUNT_ID is yours to replace.
+
 | Check | Command | Healthy when |
 |---|---|---|
-| The notification config and subscription exist | see below | The config is listed and the subscription exists. |
-
-**The notification config and subscription exist:**
-
-```bash
-gcloud scc notifications list --organization=<org-id>
-gcloud pubsub subscriptions describe abstract-audit-logs-sub-scc --project=<log-project-id>
-```
+| The notification config exists | `gcloud scc notifications list --organization="$ORG_ID"` | abstract-findings is listed. |
+| The subscription exists | `gcloud pubsub subscriptions describe abstract-audit-logs-sub-scc --project="$LOG_PROJECT"` | The subscription is described, on the findings topic. |
 
 ## Google documentation
 

@@ -3,7 +3,7 @@ title: 'Archive Google Cloud logs to Cloud Storage: second sink'
 cloud: gcp
 role: archive
 scope: organization
-summary: 'A second organization sink writing to a Cloud Storage bucket for evidence and backfill, because
+summary: 'A second organization sink writing to a Cloud Storage bucket, for evidence you keep and search there (Abstract does not read it today), because
   a sink has exactly one destination. It is not the detection path: storage batches, so latency is minutes
   to hours.'
 formats:
@@ -14,6 +14,12 @@ permissions:
 - role: roles/storage.admin
   where: The logging project
   why: 'Deployer: Create the bucket.'
+- role: roles/logging.configWriter
+  where: The organization
+  why: 'Deployer: Create the organization archive sink.'
+- role: roles/serviceusage.serviceUsageAdmin
+  where: The logging project
+  why: 'Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.'
 - role: roles/storage.objectCreator
   where: The bucket
   why: 'Archive sink writer identity: Distinct from the streaming sink''s identity; each sink needs its
@@ -42,7 +48,7 @@ parameters:
     list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project
     (set create_project = true) — do not point this at a workload project.'
   find_it: gcloud projects list --format='value(projectId)'
-  example: acme-security-logging
+  example: LOGGING_PROJECT_ID
 - name: archive_bucket_name
   type: string
   required: true
@@ -125,7 +131,7 @@ verify:
   healthy: The bucket fills; if it stays empty, check the archive writer identity's binding.
 cost: Cloud Storage at Standard, then Nearline after archive_nearline_after_days; no retention lock and
   no deletion by default, so storage grows until a lifecycle or retention policy is chosen.
-when_to_use: Evidence retention and backfill alongside the Pub/Sub stream.
+when_to_use: 'Evidence you keep in Cloud Storage alongside the Pub/Sub stream; Abstract does not read the archive today.'
 when_not_to_use: Anything you alert on; keep Pub/Sub for detection.
 live_test: static
 references:

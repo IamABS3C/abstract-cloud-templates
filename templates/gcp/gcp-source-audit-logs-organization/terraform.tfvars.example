@@ -1,12 +1,12 @@
 # Organization ID. Find it with: gcloud organizations list
-org_id = "<org_id>"
+org_id = "ORG_ID"
 
 # DEDICATED logging or security project holding the topic and subscription. Not a workload project —
 # Pub/Sub publish quota is consumed here, and a workload owner should not be able to read or break
 # the security pipeline. Find it with: gcloud projects list. If no dedicated logging project exists
 # yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project =
 # true) — do not point this at a workload project.
-log_project = "acme-security-logging"
+log_project = "LOGGING_PROJECT_ID"
 
 # Named sources to route, from the catalog in templates/gcp/_modules/log-export/log_catalog.tf. The
 # default is the three Cloud Audit Logs that Abstract's managed GCP Pub/Sub parser stores (Admin

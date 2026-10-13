@@ -93,30 +93,12 @@ Pub/Sub throughput for one project's audit logs.
 
 ## Verify
 
+These read, and change nothing. They use LOG_PROJECT from the guided setup's answers: run `source ~/.abstract-gcp-setup.env` first, or `export` each one. An UPPERCASE word such as YOUR_BUCKET or BILLING_ACCOUNT_ID is yours to replace.
+
 | Check | Command | Healthy when |
 |---|---|---|
-| A fresh event reaches the topic from the sink | see below | FOUND is printed within five minutes: your own CreateTopic and DeleteTopic reached the probe subscription. Wait five minutes after creating the sink before testing. Never pull from Abstract's own subscription: --auto-ack there deletes events before Abstract reads them. |
-| No sink errors | `gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project=<log-project-id>` | No sink_error entries. |
-
-**A fresh event reaches the topic from the sink:**
-
-```bash
-PROBE=abstract-probe-$(date +%s)
-gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs --project=<log-project-id> --expiration-period=1d
-gcloud pubsub topics create abstract-probe-topic --project=<log-project-id> --quiet
-gcloud pubsub topics delete abstract-probe-topic --project=<log-project-id> --quiet
-END=$(( $(date +%s) + 330 )); FOUND=
-for i in $(seq 1 20); do
-sleep 15
-while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
-N=$(gcloud pubsub subscriptions pull "$PROBE" --project=<log-project-id> --limit=1000 --auto-ack --format=json 2>/dev/null \
-| python3 -c 'import base64, json, sys; m = json.load(sys.stdin) or []; print("FOUND" if any(sys.argv[1].encode() in base64.b64decode(x.get("message", {}).get("data", "")) for x in m) else len(m))' abstract-probe-topic 2>/dev/null)
-case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
-done
-[ -n "$FOUND" ] && { echo "FOUND: the sink routes and the topic delivers"; break; }
-done
-gcloud pubsub subscriptions delete "$PROBE" --project=<log-project-id> --quiet
-```
+| A fresh event reaches the topic from the sink | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 9` | A ✓ "the test event arrived" within five minutes, from the top folder of the repository. It writes a fresh event in your scope and waits on a probe subscription of its own, which it deletes; it never reads Abstract's subscription. Wait five minutes after creating the sink before testing. |
+| No sink errors | `gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project="$LOG_PROJECT"` | No sink_error entries. |
 
 ## Google documentation
 

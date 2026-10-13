@@ -13,10 +13,23 @@ The GCP side creates the pipeline. This is what you type into Abstract.
 
 **Integration:** `default.google_cloud_pub_sub` · Event Source · **PULL**
 
-Three fields. Get all of them from one command:
+Three fields. With the guided setup, script step 10 prints all three and the line that downloads the key. Run it
+from the top folder of the templates repository:
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 10
+```
+
+Terraform path only (you deployed `gcp-source-audit-logs-organization` with Terraform, so its state has the values).
+Go to the template's folder:
 
 ```bash
 cd templates/gcp/gcp-source-audit-logs-organization
+```
+
+Print the three values (read-only):
+
+```bash
 terraform output -json abstract_onboarding
 ```
 
@@ -26,24 +39,35 @@ terraform output -json abstract_onboarding
 | **Subscription ID** | the **short name** only | Not `projects/…/subscriptions/…`. Pasting the full path produces an auth-shaped error, not a validation one |
 | **Credentials** | service-account JSON key, **under 1 MB** | Must be the key for the SA that holds `roles/pubsub.subscriber` **on the subscription** |
 
-To print the short name:
+To print the short name (read-only; LOG_PROJECT is your logging project's ID, from the answers file
+`~/.abstract-gcp-setup.env`):
 
 ```bash
-gcloud pubsub subscriptions list --project="$LOG_PROJECT" \
-  --format='value(name.basename())'
+gcloud pubsub subscriptions list --project="$LOG_PROJECT" --format='value(name.basename())'
 ```
 
 ### Creating the key
 
-Deliberately **not** created by Terraform — it would put a private key in state, and on the
-Cloud Shell path that state is a file in a home directory.
+With the guided setup, script step 5 makes the key and records its ID, so step 10 never offers it for deletion.
 
-The key goes in `~/abstract-keys`, outside the repository, where only you can read it:
+Terraform path only: the key is deliberately **not** created by Terraform, because it would put a private key in
+the state. Make it with gcloud, once, in the template's folder. Keep the reader account's email in SA:
 
 ```bash
-SA=$(terraform output -json abstract_onboarding | jq -r .service_account_email)
-mkdir -p ~/abstract-keys && chmod 700 ~/abstract-keys
-(umask 077 && gcloud iam service-accounts keys create ~/abstract-keys/abstract-pubsub-key.json --iam-account="$SA")
+SA="$(terraform output -json abstract_onboarding | jq -r .service_account_email)"
+```
+
+Make a folder for the key outside the repository, readable only by you:
+
+```bash
+mkdir -m 700 -p ~/abstract-keys
+```
+
+Create the key, as a file only you can read. This adds one key to the reader account in your logging project;
+anyone holding the file can read the subscription. The last command on this page revokes it:
+
+```bash
+(umask 077 && gcloud iam service-accounts keys create ~/abstract-keys/abstract-pubsub-key.json --iam-account="$SA" --project="$LOG_PROJECT")
 ```
 
 In Cloud Shell, download it to the computer you use for Abstract:
@@ -59,32 +83,34 @@ file, and this one:
 rm -f ~/abstract-keys/abstract-pubsub-key.json
 ```
 
+To revoke the key later (a rotation, or removing the integration), list the reader account's keys (read-only).
+The one Abstract holds has the ID in the `private_key_id` of the file you uploaded:
+
+```bash
+gcloud iam service-accounts keys list --iam-account="$SA" --project="$LOG_PROJECT" --managed-by=user
+```
+
+Then delete it, replacing KEY_ID with that ID. Abstract can no longer read from that moment; nothing else changes:
+
+```bash
+gcloud iam service-accounts keys delete KEY_ID --iam-account="$SA" --project="$LOG_PROJECT"
+```
+
 > **Abstract PULLS.** It needs `roles/pubsub.subscriber` on the **subscription** — not
 > publisher, not project-wide. An existing internal document says publisher, and following
 > it gives you `PERMISSION_DENIED` with no obvious cause.
 
 ### Verify before you blame the integration
 
+Script step 9 writes a harmless admin event inside your scope (it creates and deletes a log-based metric) and
+waits for it on a throwaway subscription on the same topic, never on Abstract's, and deletes that subscription
+afterwards. It reads your scope from the answers file script step 1 saved. From the top folder of the repository:
+
 ```bash
-PROBE=abstract-probe-$(date +%s)
-gcloud pubsub subscriptions create "$PROBE" --topic=abstract-audit-logs \
-  --project="$LOG_PROJECT" --expiration-period=1d
-gcloud pubsub topics create abstract-probe-topic --project="$LOG_PROJECT" --quiet
-gcloud pubsub topics delete abstract-probe-topic --project="$LOG_PROJECT" --quiet
-END=$(( $(date +%s) + 330 )); FOUND=
-for i in $(seq 1 20); do
-  sleep 15
-  while [ -z "$FOUND" ] && [ "$(date +%s)" -lt "$END" ]; do
-    N=$(gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=1000 --auto-ack --format=json 2>/dev/null \
-      | python3 -c 'import base64, json, sys; m = json.load(sys.stdin) or []; print("FOUND" if any(sys.argv[1].encode() in base64.b64decode(x.get("message", {}).get("data", "")) for x in m) else len(m))' abstract-probe-topic 2>/dev/null)
-    case "$N" in FOUND) FOUND=1 ;; ""|0) break ;; esac
-  done
-  [ -n "$FOUND" ] && { echo "FOUND: the sink routes and the topic delivers"; break; }
-done
-gcloud pubsub subscriptions delete "$PROBE" --project="$LOG_PROJECT" --quiet
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 9
 ```
 
-Never pull from `abstract-audit-logs-sub`: Abstract reads that subscription, and `--auto-ack` there deletes events before Abstract sees them. The probe subscription above is yours and expires in a day.
+Never pull from `abstract-audit-logs-sub` yourself: Abstract reads that subscription, and an acknowledged pull there deletes events before Abstract sees them.
 
 Events here but not in Abstract → credentials or config. Nothing here → the cloud side, and
 the integration is not the problem.
@@ -95,8 +121,16 @@ the integration is not the problem.
 
 **Integration:** `default.google_workspace` · Event Source · **PULL**
 
+With the guided setup, script step 10 prints the values (script step 7 made the key). Terraform path only: go to
+the template's folder:
+
 ```bash
 cd templates/gcp/gcp-source-google-workspace-logs
+```
+
+Print the values (read-only):
+
+```bash
 terraform output -json workspace_onboarding
 ```
 
@@ -123,10 +157,22 @@ Add `gmail`/`drive` only after measuring; they dwarf everything else combined.
 
 ## Security Command Center — findings
 
+**Not collected by Abstract yet.** Abstract's Google Cloud integration keeps only Cloud Audit Logs, which
+Security Command Center findings are not, so deploying this template costs money in Google Cloud and adds
+nothing in Abstract today.
+
 **Its own topic and subscription**, because findings are a different shape from audit logs.
 
+Terraform path only (this template has no guided step). Go to the template's folder:
+
 ```bash
-cd templates/gcp/gcp-source-security-command-center-findings && terraform output
+cd templates/gcp/gcp-source-security-command-center-findings
+```
+
+Print its values (read-only):
+
+```bash
+terraform output
 ```
 
 Configure as a **separate source** in Abstract. Do not expect the audit-log parser to handle
@@ -137,8 +183,20 @@ Cloud Audit Log, after counting it as collected. Findings are collected and neve
 
 ## Asset inventory — resource and IAM-policy changes
 
+**Not collected by Abstract yet.** Abstract's Google Cloud integration keeps only Cloud Audit Logs, which
+asset and IAM-policy change records are not, so deploying this template costs money in Google Cloud and adds
+nothing in Abstract today. The guided setup no longer offers it.
+
+Terraform path only (this template has no guided step). Go to the template's folder:
+
 ```bash
-cd templates/gcp/gcp-source-asset-and-iam-changes && terraform output -json abstract_onboarding
+cd templates/gcp/gcp-source-asset-and-iam-changes
+```
+
+Print its values (read-only):
+
+```bash
+terraform output -json abstract_onboarding
 ```
 
 Also a separate source, and it needs its own parser. The managed **GCP Pub/Sub Source** parser
@@ -162,8 +220,16 @@ Three API paths to the same IAM binding give three audit entries and one identic
 
 ## Bucket notifications — logs already in a bucket
 
+Terraform path only (this template has no guided step). Go to the template's folder:
+
 ```bash
-cd templates/gcp/gcp-source-cloud-storage-bucket-logs && terraform output -json abstract_onboarding
+cd templates/gcp/gcp-source-cloud-storage-bucket-logs
+```
+
+Print its values (read-only):
+
+```bash
+terraform output -json abstract_onboarding
 ```
 
 Same three fields as the Pub/Sub source. The difference is that Abstract must also **fetch

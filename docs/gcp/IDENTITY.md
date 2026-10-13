@@ -63,15 +63,15 @@ audit settings. If you only want identity events, answer the services prompt wit
 `iam.googleapis.com,sts.googleapis.com`.
 
 It then reports `switch 1` (the audit settings) and `switch 2` (the sink filter), naming
-`iamcredentials.googleapis.com` and `sts.googleapis.com`. To read both yourself:
+`iamcredentials.googleapis.com` and `sts.googleapis.com`. To read both yourself (read-only; ORG_ID comes from the answers file, `source ~/.abstract-gcp-setup.env`):
 
 ```bash
-gcloud logging sinks describe abstract-org-audit-sink --organization=123456789012 --format="value(filter)" | grep -o "iamcredentials.googleapis.com\|sts.googleapis.com"
-gcloud organizations get-iam-policy 123456789012 --format="yaml(auditConfigs)"
+gcloud logging sinks describe abstract-org-audit-sink --organization="$ORG_ID" --format="value(filter)" | grep -o "iamcredentials.googleapis.com\|sts.googleapis.com"
+gcloud organizations get-iam-policy "$ORG_ID" --format="yaml(auditConfigs)"
 ```
 
 Both service names must show in the filter, and the audit settings must list `iam.googleapis.com`
-and `sts.googleapis.com` with `ADMIN_READ`. Use `--folder=<id>` or `--project=<id>` for those
+and `sts.googleapis.com` with `ADMIN_READ`. Use `--folder=FOLDER_ID` or `--project=PROJECT_ID` for those
 scopes.
 
 ### With Terraform
@@ -190,8 +190,10 @@ removes it on exit, even if you interrupt it. If the shell dies before it can, r
 commands at the end by hand, because the grant stays until someone removes it. It checks every 30
 seconds, for up to 5 minutes.
 
+Replace LOGGING_PROJECT_ID with your logging project's ID.
+
 ```bash
-export LOG_PROJECT=acme-security-logging
+export LOG_PROJECT=LOGGING_PROJECT_ID
 TEST_SA=probe-identity@${LOG_PROJECT}.iam.gserviceaccount.com
 ME=$(gcloud config get-value account)
 PROBE=abstract-probe-$(date +%s)
@@ -229,14 +231,20 @@ print(len(m))' "$TEST_SA" 2>/dev/null)
 done
 ```
 
-If the shell stops before the trap runs, remove the grant and the leftovers by hand:
+If the shell stops before the trap runs, remove the grant and the leftovers by hand, with YOUR_ACCOUNT_EMAIL the account you ran it as:
 
 ```bash
-gcloud iam service-accounts remove-iam-policy-binding probe-identity@acme-security-logging.iam.gserviceaccount.com \
-  --project=acme-security-logging --member="user:<your-account>" --role="roles/iam.serviceAccountTokenCreator"
-gcloud iam service-accounts delete probe-identity@acme-security-logging.iam.gserviceaccount.com \
-  --project=acme-security-logging --quiet
-gcloud pubsub subscriptions list --project=acme-security-logging --filter="name:abstract-probe"
+gcloud iam service-accounts remove-iam-policy-binding "probe-identity@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT" --member="user:YOUR_ACCOUNT_EMAIL" --role="roles/iam.serviceAccountTokenCreator"
+```
+
+```bash
+gcloud iam service-accounts delete "probe-identity@$LOG_PROJECT.iam.gserviceaccount.com" --project="$LOG_PROJECT" --quiet
+```
+
+List any probe subscription left behind (read-only); each one expires a day after it was made:
+
+```bash
+gcloud pubsub subscriptions list --project="$LOG_PROJECT" --filter="name:abstract-probe"
 ```
 
 `FOUND` means the identity path works: the message body names both the method and your test service account. Nothing found means the same as any quiet feed: it is a

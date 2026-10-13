@@ -36,7 +36,7 @@ That proves structure. It does not prove runtime.
 | Not yet executed | Why it matters |
 |---|---|
 | `gcp-source-google-workspace-logs` | Domain-wide delegation is a Workspace super-admin action; untested end to end |
-| `gcp-source-security-command-center-findings` | Needs SCC Premium/Enterprise |
+| `gcp-source-security-command-center-findings` | Needs SCC Premium/Enterprise. Abstract's Google Cloud integration keeps only Cloud Audit Logs, which SCC findings are not (inferred from the integration's pipeline rule, not tested live), so the guide lists it as not collected |
 | `gcp-archive-log-bucket`, `gcp-source-cloud-storage-bucket-logs`, `gcp-source-asset-and-iam-changes` | Not applied |
 | `gcp-source-billing-account-logs` | Validated only; needs `billing.admin` on the billing account. Billing-account audit logs are AuditLog records, so the managed parser keeps them |
 | `gcp-source-network-threat-logs` | Validated only, and **Abstract's managed GCP parser does not yet store these logs** (firewall, DNS, Cloud Armor and Cloud IDS are not AuditLog records). It needs a configuration-level parser built from a captured payload |

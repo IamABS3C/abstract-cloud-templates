@@ -1,12 +1,12 @@
 # Organization ID. SCC NotificationConfig is organization-scoped. Find it with: gcloud organizations
 # list
-org_id = "<org_id>"
+org_id = "ORG_ID"
 
 # Project holding the findings topic and subscription. Find it with: gcloud projects list. If no
 # dedicated logging project exists yet, create one first with
 # templates/gcp/gcp-foundation-logging-project (set create_project = true) — do not point this at a
 # workload project.
-log_project = "acme-security-logging"
+log_project = "LOGGING_PROJECT_ID"
 
 # Fallback when remote_state_bucket is empty. Abstract's identity from
 # gcp-source-audit-logs-organization — reusing it means ONE identity reads every feed instead of

@@ -14,6 +14,9 @@ permissions:
 - role: roles/iam.serviceAccountAdmin
   where: The logging project
   why: 'Deployer: Create the delegated service account.'
+- role: roles/serviceusage.serviceUsageAdmin
+  where: The logging project
+  why: 'Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.'
 - role: Grant domain-wide delegation
   where: admin.google.com
   why: 'Workspace super admin: No API or Terraform provider exists for it; a Google Cloud Owner cannot
@@ -37,7 +40,7 @@ parameters:
   description: 'Project that owns the connector service account. Can be the same one used for the Pub/Sub
     pipeline. Find it with: gcloud projects list'
   find_it: gcloud projects list --format='value(projectId)'
-  example: acme-security-logging
+  example: LOGGING_PROJECT_ID
 - name: workspace_admin_email
   type: string
   required: true

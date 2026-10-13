@@ -1,10 +1,10 @@
 # Organization ID the inventory feed binds to. Find it with: gcloud organizations list
-org_id = "<org_id>"
+org_id = "ORG_ID"
 
 # DEDICATED logging or security project holding this pipeline. Not a workload project. Find it with:
 # gcloud projects list. If no dedicated logging project exists yet, create one first with
 # templates/gcp/gcp-foundation-logging-project (set create_project = true).
-log_project = "acme-security-logging"
+log_project = "LOGGING_PROJECT_ID"
 
 # GCS bucket holding gcp-source-audit-logs-organization's state. Set this and Abstract's identity is
 # READ rather than retyped. Empty falls back to subscriber_service_account_email.

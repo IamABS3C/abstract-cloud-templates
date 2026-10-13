@@ -14,6 +14,9 @@ permissions:
 - role: roles/monitoring.editor
   where: The logging project
   why: 'Deployer: Create the alert policies.'
+- role: roles/serviceusage.serviceUsageAdmin
+  where: The logging project
+  why: 'Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.'
 creates:
 - An alert policy for the sink failing to export (critical)
 - An alert policy for Abstract not consuming, firing at one hour against the retention window (critical)
@@ -33,7 +36,7 @@ parameters:
     it with: gcloud projects list. If no dedicated logging project exists yet, create one first with templates/gcp/gcp-foundation-logging-project
     (set create_project = true).'
   find_it: gcloud projects list --format='value(projectId)'
-  example: acme-security-logging
+  example: LOGGING_PROJECT_ID
 - name: topic_id
   type: string
   required: false
@@ -86,9 +89,8 @@ outputs:
 - alert_policies
 verify:
 - check: Every policy is enabled and wired to a channel
-  command: "TOKEN=$(gcloud auth print-access-token)\ncurl -s \"https://monitoring.googleapis.com/v3/projects/<log-project-id>/alertPolicies\"\
-    \ \\\n  -H \"Authorization: Bearer $TOKEN\""
-  healthy: Each policy shows enabled true and at least one notification channel.
+  command: 'curl -s "https://monitoring.googleapis.com/v3/projects/$LOG_PROJECT/alertPolicies" -H "Authorization: Bearer $(gcloud auth print-access-token)"'
+  healthy: Each "Abstract log pipeline" policy shows enabled true and at least one notification channel.
 - check: The stall alert before Abstract is connected
   healthy: It fires, correctly, because nothing consumes the subscription yet.
 cost: Alert policies are free; Cloud Monitoring bills only for metrics beyond the free allotment, which
@@ -101,3 +103,4 @@ references:
 - monitoring-alert-policies-create
 - pubsub-monitoring
 - pubsub-metrics-reference
+- monitoring-notification-channels

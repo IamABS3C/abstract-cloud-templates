@@ -45,7 +45,7 @@ BigQuery DATA_READ on a BigQuery-heavy estate can move total volume by one to tw
 |---|---|---|---|---|
 | `scope` | string | no | organization \| folder \| project. Inheritance is ONE-WAY — a project can add Data Access logging but cannot disable what the organization enabled. |  |
 | `org_id` | string | no | Organization ID, when scope = organization. Find it with: gcloud organizations list | `gcloud organizations list --format='value(ID)'` |
-| `folder_id` | string | no | Folder ID, when scope = folder. Find it with: gcloud resource-manager folders list --organization=&lt;org-id&gt; | `gcloud resource-manager folders list --organization=<org-id>` |
+| `folder_id` | string | no | Folder ID, when scope = folder. Find it with: gcloud resource-manager folders list --organization=ORG_ID | `gcloud resource-manager folders list --organization=ORG_ID` |
 | `project_id` | string | no | Project ID, when scope = project. |  |
 | `log_types` | array | no | ADMIN_READ \| DATA_WRITE \| DATA_READ. ADMIN_WRITE is rejected — that is Admin Activity, always on. |  |
 | `services` | array | no | Services to turn Data Access logs on for. Name them; the guided setup's five are the example. Empty means allServices, which is authoritative for every service at this scope and, with DATA_READ, the expensive option that needs acknowledge_data_read. Service account token minting and impersonation is recorded only through iam.googleapis.com (ADMIN_READ); iamcredentials.googleapis.com is refused at plan, because it does nothing. Add sts.googleapis.com for Workload Identity Federation. The template applies ONE log_types list and ONE exempted_members list to every service it names, so leave out any service that already has DATA_READ or exempted members, or manage it only from a separate root with its own backend prefix, after removing it from this root's services. |  |
@@ -74,9 +74,11 @@ BigQuery DATA_READ on a BigQuery-heavy estate can move total volume by one to tw
 
 ## Verify
 
+These read, and change nothing. They use LOG_PROJECT and ORG_ID from the guided setup's answers: run `source ~/.abstract-gcp-setup.env` first, or `export` each one. An UPPERCASE word such as YOUR_BUCKET or BILLING_ACCOUNT_ID is yours to replace.
+
 | Check | Command | Healthy when |
 |---|---|---|
-| See what is already enabled | `tools/gcp-guided-setup/preflight.sh --project <project-id> --org-id <org-id>` | The audit config lists exactly the services and log types you chose. |
+| See what is already enabled | `./tools/gcp-guided-setup/preflight.sh --project "$LOG_PROJECT" --org-id "$ORG_ID"` | The audit config lists exactly the services and log types you chose. |
 
 ## Google documentation
 

@@ -61,6 +61,7 @@ Billing-account audit logs are low volume; Pub/Sub throughput is negligible.
 - **roles/logging.configWriter** on The billing account: Deployer: Create the billing-account sink.
 - **roles/pubsub.admin** on The logging project: Deployer: Create the topic, subscription and IAM bindings.
 - **roles/iam.serviceAccountAdmin** on The logging project: Deployer: Create Abstract's service account.
+- **roles/serviceusage.serviceUsageAdmin** on The logging project: Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.
 - **roles/pubsub.publisher** on The topic: Sink writer identity: granted by this template.
 - **roles/pubsub.subscriber** on The subscription only: Abstract service account: Abstract pulls; not publisher, not project-wide.
 
@@ -89,10 +90,12 @@ Billing-account audit logs are low volume; Pub/Sub throughput is negligible.
 
 ## Verify
 
+These read, and change nothing. They use LOG_PROJECT from the guided setup's answers: run `source ~/.abstract-gcp-setup.env` first, or `export` each one. An UPPERCASE word such as YOUR_BUCKET or BILLING_ACCOUNT_ID is yours to replace.
+
 | Check | Command | Healthy when |
 |---|---|---|
-| The sink exists and points at the topic | `gcloud logging sinks describe abstract-billing-audit-sink --billing-account=<billing-account-id> --format="value(name,destination,writerIdentity)"` | The destination is the abstract-billing-audit-logs topic. |
-| No sink errors | `gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project=<log-project-id>` | No sink_error entries. |
+| The sink exists and points at the topic | `gcloud logging sinks describe abstract-billing-audit-sink --billing-account=BILLING_ACCOUNT_ID --format="value(name,destination,writerIdentity)"` | The destination is the abstract-billing-audit-logs topic. |
+| No sink errors | `gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project="$LOG_PROJECT"` | No sink_error entries. |
 
 ## Google documentation
 
@@ -102,3 +105,5 @@ Google's own pages on what this template sets up:
 - [Cloud Billing audit logging](https://docs.cloud.google.com/billing/docs/audit-logging)
 - [Route logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/configure_export_v2#dest-auth)
 - [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)
+- [Cloud Billing access control and permissions](https://docs.cloud.google.com/billing/docs/how-to/billing-access)
+- [Modify your Cloud Billing account](https://docs.cloud.google.com/billing/docs/how-to/modify-billing-account#rename_account)

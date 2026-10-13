@@ -16,7 +16,10 @@ permissions:
   why: 'Deployer: Only with create_project=true.'
 - role: roles/billing.user
   where: The billing account
-  why: 'Deployer: Only with create_project=true.'
+  why: 'Deployer: Only with create_project=true and a billing_account_id.'
+- role: roles/serviceusage.serviceUsageAdmin
+  where: The logging project
+  why: 'Deployer: Turn on the APIs the pipeline uses in the logging project. Terraform reads which are on and turns on only those still off.'
 creates:
 - The required APIs enabled on the logging project
 - Optionally, a new logging project with deletion_policy PREVENT (create_project=true)
@@ -30,8 +33,7 @@ parameters:
 - name: create_project
   type: bool
   required: false
-  description: FALSE (default) only enables APIs on an existing project. TRUE also creates it, which needs
-    billing_account_id and project-creator rights.
+  description: 'FALSE (default) only enables APIs on an existing project. TRUE also creates it, which needs project-creator rights; billing_account_id is optional (see its description).'
   default: false
 - name: project_id
   type: string
@@ -55,7 +57,7 @@ parameters:
   required: false
   description: Create the project under this folder instead of directly under the organization.
   default: ''
-  find_it: gcloud resource-manager folders list --organization=<org-id>
+  find_it: gcloud resource-manager folders list --organization=ORG_ID
 - name: billing_account_id
   type: string
   required: false

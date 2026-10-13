@@ -35,6 +35,68 @@ directly, which counts every route.
 
 ---
 
+## Grant exactly these roles, with `--grant`
+
+The guided setup lists, checks and grants the roles it needs. Replace EMAIL with the address of the person who
+runs the setup (a bare address is a user; put `group:` or `serviceAccount:` before it for those). See which of
+them that person holds directly; this changes nothing:
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL --check
+```
+
+Someone who can set IAM policy at the scope then grants them, one binding per role, asked one at a time
+(optional roles default to no). Without that right it prints the commands to hand to someone who has it:
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL
+```
+
+Every role below was checked to exist with `gcloud iam roles describe` on 2026-10-12, and the script asks
+Google again before it offers one.
+
+| Role | Where | Required | For |
+|---|---|---|---|
+| `roles/browser` (organization or project scope) or `roles/resourcemanager.folderViewer` (folder scope) | the scope | required | See the scope, its folders and projects (script steps 1 and 3). Not `roles/resourcemanager.organizationViewer`: it holds only `resourcemanager.organizations.get`, so it cannot list projects |
+| `roles/logging.configWriter` | the scope | required | Create the sink (script step 4) |
+| `roles/orgpolicy.policyViewer` | the scope | required | Read the organization policies that can block the key (script step 3) |
+| `roles/iam.securityReviewer` | the scope | required | Read IAM policies and the audit settings (script steps 2, 5 and 6) |
+| `roles/resourcemanager.projectCreator` | the organization or folder | optional | Create a new logging project (script step 3) |
+| `roles/iam.securityAdmin` | the scope | optional | Turn on Data Access logs (script step 6). **Powerful:** it can change IAM anywhere at the scope |
+| `roles/billing.user` | a billing account | optional | Link billing to the logging project (script step 3) |
+| `roles/pubsub.admin` | the logging project | required | Topic, subscription and their grants (script steps 4 and 5) |
+| `roles/iam.serviceAccountAdmin` | the logging project | required | Abstract's service accounts (script steps 5 and 7) |
+| `roles/iam.serviceAccountKeyAdmin` | the logging project | required | The key Abstract signs in with (script steps 5 and 7) |
+| `roles/serviceusage.serviceUsageAdmin` | the logging project | required | Turn on the APIs (script steps 3, 7 and 8) |
+| `roles/monitoring.editor` | the logging project | optional | The health alerts (script step 8) |
+
+A project you create in script step 3 makes you its Owner, so the logging-project roles matter only for a
+project that already exists. `--check` reads each resource's own IAM policy, so a role held through a group,
+or inherited from a folder or the organization, shows as not held directly; script step 2 asks Google, which
+counts every route. The roles outlive the setup, so take them back once the pipeline works: script step 10,
+`--remove` and `--teardown` each list every binding `--grant` recorded with the `remove-iam-policy-binding`
+command that takes it back, and `--teardown --include-grants` removes those bindings, and only those.
+
+### What `--teardown` needs
+
+`--teardown` reads across the organization before it deletes anything, so the person running it needs to see
+the folders and projects (`roles/browser` at the organization) and, for each kind of piece it finds, the role
+that made it: `roles/logging.configWriter` where the sinks are; `roles/pubsub.admin` and
+`roles/iam.serviceAccountAdmin` in each project holding an `abstract-…` topic or reader account;
+`roles/monitoring.editor` there for the alerts; and, once it has found an `abstract-…` topic, at the
+organization `roles/securitycenter.notificationConfigEditor` for Security Command Center notification configs
+and `roles/cloudasset.owner` for Cloud Asset feeds. A refused listing of the topics, subscriptions or reader
+accounts in a project is a failure, and the answers file stays. A refused listing of Security Command Center
+notification configs or Cloud Asset feeds is not: a config left behind only points at a topic that is gone, so it
+becomes a by-hand line with the command to check, and the teardown still finishes. These two organization-level
+listings have no project of their own, so gcloud bills them to `billing/quota_project`, or else your current
+project; when the API is off there, Google answers SERVICE_DISABLED (measured on a real organization). Turn the
+API on there, or name a project where it is on (`gcloud config set billing/quota_project PROJECT_ID`), to have
+them checked. `--include-audit-settings` also needs
+`roles/iam.securityAdmin` at the scope script step 6 changed, as step 6 did.
+
+---
+
 ## By deployment
 
 ### `gcp-source-audit-logs-organization` / `gcp-source-audit-logs-folder` / `gcp-source-audit-logs-project`
@@ -73,6 +135,8 @@ and it is usually a different person again from the `logging.configWriter` holde
 
 ### `gcp-source-security-command-center-findings`
 
+Not collected by Abstract yet: its Google Cloud integration keeps only Cloud Audit Logs, which SCC findings are not.
+
 | Principal | Role | Scope |
 |---|---|---|
 | deployer | `roles/securitycenter.notificationConfigEditor` | organization |
@@ -82,11 +146,13 @@ Requires **SCC Premium or Enterprise**.
 
 ### `gcp-source-asset-and-iam-changes`
 
+Not collected by Abstract yet: its Google Cloud integration keeps only Cloud Audit Logs, which asset-change records are not.
+
 | Principal | Role | Scope | Why |
 |---|---|---|---|
 | deployer | `roles/cloudasset.owner` | **organization** | Create the organization feed. **Not included in Organization Admin**: without it the topic and subscription are created and the feed is refused with 403 |
 | deployer | `roles/pubsub.admin` | logging project | Topic, subscription, IAM bindings |
-| **Cloud Asset service agent of the logging project** (`service-<project number>@gcp-sa-cloudasset`) | `roles/pubsub.publisher` | the topic | The feed publishes as the agent of its billing project. There is no organization-level Cloud Asset agent |
+| **Cloud Asset service agent of the logging project** (`service-PROJECT_NUMBER@gcp-sa-cloudasset`, PROJECT_NUMBER being the project's number) | `roles/pubsub.publisher` | the topic | The feed publishes as the agent of its billing project. There is no organization-level Cloud Asset agent |
 | abstract | `roles/pubsub.subscriber` | the asset subscription | Read the changes |
 
 ### `gcp-archive-log-bucket`

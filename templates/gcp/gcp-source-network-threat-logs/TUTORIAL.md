@@ -1,30 +1,38 @@
 <img src="../../../docs/brand/abstract-logo-white.svg" alt="Abstract Security" width="150">
 
-# Export Network Threat Telemetry to Abstract Security
+# Export network threat logs (not kept by Abstract yet)
 
 <walkthrough-tutorial-duration duration="20"></walkthrough-tutorial-duration>
 
-Network threat detection is a primary security workload in Google Cloud. This tutorial walks you through deploying an aggregated export pipeline for all four network telemetry pillars:
-
-1. **Cloud Armor WAF decisions**, inside Application Load Balancer request logs (`resource.type` `http_load_balancer`, `http_external_regional_lb_rule` and `internal_http_lb_rule`)
-2. **Cloud IDS threat logs** (`logName:"ids.googleapis.com%2Fthreat"`)
-3. **VPC DNS query logs** (`logName:"dns.googleapis.com%2Fdns_queries"`)
-4. **Firewall rule decisions** (`logName:"compute.googleapis.com%2Ffirewall"`)
-
-All four streams route into a single Pub/Sub topic and pull subscription in your dedicated security logging project.
-
 > [!WARNING]
-> **These logs reach the Pub/Sub topic; Abstract's managed GCP parser does not yet store them.** The managed GCP Pub/Sub parser keeps only Cloud Audit Log records, and firewall, DNS, Cloud Armor and Cloud IDS logs are not audit logs. There is no parser for them yet. Do not rely on them for detection until a parser ships.
+> **Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records.** Abstract's Google Cloud Pub/Sub integration keeps only Cloud Audit Log records, and firewall, Cloud DNS, load balancer (Cloud Armor) and Cloud IDS logs are not audit logs.
+
+<!-- abstract:needs -->
+**This page uses Terraform, because the guided setup script builds only the audit-log sink, and this is a second sink with its own filter and topic.**
+
+Needs: Terraform (Cloud Shell has it), a Cloud Storage bucket for its state (the Terraform section creates it), and the roles under [Check first](#check-first). [Deploy with Terraform](#deploy-with-terraform), at the end of this page, deploys it.
+<!-- /abstract:needs -->
+
+This template adds a second, filtered sink that routes four kinds of network log to their own Pub/Sub topic,
+abstract-network-threats, in your logging project:
+
+1. **Cloud Armor decisions**, inside Application Load Balancer request logs (`resource.type` `http_load_balancer`, `http_external_regional_lb_rule` and `internal_http_lb_rule`)
+2. **Cloud IDS threat logs** (`logName:"ids.googleapis.com%2Fthreat"`)
+3. **Cloud DNS query logs** (`logName:"dns.googleapis.com%2Fdns_queries"`)
+4. **Firewall rule logs** (`logName:"compute.googleapis.com%2Ffirewall"`)
+
+A sink only routes what Google already writes. Each of these sources is off until the team that owns the network
+or the service turns it on, at its own source, and each adds log volume Google bills. This page checks each one,
+read-only, and links Google's page for turning it on; it never changes them. Whether each is turned on per project,
+per network or for the whole organization is in [Where each source is turned on](../../../docs/gcp/FILTERS.md#where-each-source-is-turned-on).
 
 ## Before you start
 
-<walkthrough-project-setup></walkthrough-project-setup>
-
 You need the following permissions:
 
-1. **`roles/logging.configWriter` at ORGANIZATION or FOLDER scope**: Required to create the aggregated log sink across your estate.
-2. **`roles/pubsub.admin`** on the logging project: To manage the Pub/Sub topic and subscription.
-3. **`roles/iam.serviceAccountAdmin`** on the logging project: To create the Abstract subscriber identity.
+1. **`roles/logging.configWriter` at ORGANIZATION or FOLDER scope**: to create the aggregated log sink.
+2. **`roles/pubsub.admin`** on the logging project: to manage the Pub/Sub topic and subscription.
+3. **`roles/iam.serviceAccountAdmin`** on the logging project: to create the Abstract subscriber identity.
 
 <walkthrough-info-message>Always use a **dedicated logging project** rather than a workload project. Workload owners should not possess access to read or modify security pipelines, and Pub/Sub quota is consumed in this project.</walkthrough-info-message>
 
@@ -41,147 +49,228 @@ gcloud auth login --update-adc
 <!-- abstract:check -->
 ## Check first
 
-Read-only: nothing changes. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Script steps 1 and 2 of the guided setup record your scope and check the rights the sink needs; script step 3 checks the logging project, and the organization policy that can block the service-account key.
+Read-only, except the role grants at the end, which say what they add. The estate audit lists your organization, folders, projects, and the log sinks and topics you already have. Script step 1 of the guided setup records your organization and scope (ORG_ID, SCOPE_ID) in its answers file, `~/.abstract-gcp-setup.env`.
+
+Go to the top folder of the templates repository; the guided-setup commands run from there:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-./tools/gcp-guided-setup/audit-gcp-estate.sh
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
-./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
 ```
 
-If a permission row shows ✗, find the person who holds that role before you go on.
+List what you already have (read-only):
 
-The guided setup saves your answers (organization, scope, logging project, topic, subscription). Load them for the commands on this page:
+```bash
+./tools/gcp-guided-setup/audit-gcp-estate.sh
+```
+
+Script step 1: your organization and scope.
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+```
+
+Load the answers into this terminal. It sets ORG_ID, and LOG_PROJECT if you ran the guided setup's script step 3 before:
 
 ```bash
 source ~/.abstract-gcp-setup.env
 ```
+
+This page also needs your logging project, the project that holds the topic and subscription. Check both are set. You should see your organization's number and your logging project's ID; "not set" names what to do:
+
+```bash
+echo "Organization: ${ORG_ID:?not set: run script step 1} Logging project: ${LOG_PROJECT:?not set: export LOG_PROJECT=LOGGING_PROJECT_ID}"
+```
+
+Only if it said the logging project is not set (you have not run script step 3): set it yourself, replacing LOGGING_PROJECT_ID with its ID, then run the check above again:
+
+```bash
+export LOG_PROJECT=LOGGING_PROJECT_ID
+```
+
+### The roles this page needs
+
+The guided setup's own grant option covers only the roles its script steps need, not these. The person who deploys this template needs:
+
+- `roles/logging.configWriter` on the organization (or the folder or project for those scopes): Create the sink.
+- `roles/pubsub.admin` on the logging project: Create the topic, subscription and IAM bindings.
+- `roles/iam.serviceAccountAdmin` on the logging project: Create Abstract's service account.
+- `roles/serviceusage.serviceUsageAdmin` on the logging project: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.
+
+Someone who can set IAM policy there adds each as one binding; nothing else in the policy changes. Replace PRINCIPAL with the person who deploys: `user:` and their email, `group:` and a group's email, or `serviceAccount:` and a service account's email.
+
+Add `roles/logging.configWriter` for PRINCIPAL on your organization (ORG_ID):
+
+```bash
+gcloud organizations add-iam-policy-binding "$ORG_ID" --member="PRINCIPAL" --role="roles/logging.configWriter" --condition=None
+```
+
+To take it back once the deploy is done (this removes only that binding):
+
+```bash
+gcloud organizations remove-iam-policy-binding "$ORG_ID" --member="PRINCIPAL" --role="roles/logging.configWriter" --condition=None
+```
+
+For a folder or project sink, grant it there instead: `gcloud resource-manager folders add-iam-policy-binding FOLDER_ID` or `gcloud projects add-iam-policy-binding PROJECT_ID`, with the same `--member` and `--role`.
+
+Add `roles/pubsub.admin` for PRINCIPAL on your logging project (LOG_PROJECT):
+
+```bash
+gcloud projects add-iam-policy-binding "$LOG_PROJECT" --member="PRINCIPAL" --role="roles/pubsub.admin" --condition=None
+```
+
+To take it back once the deploy is done (this removes only that binding):
+
+```bash
+gcloud projects remove-iam-policy-binding "$LOG_PROJECT" --member="PRINCIPAL" --role="roles/pubsub.admin" --condition=None
+```
+
+Add `roles/iam.serviceAccountAdmin` for PRINCIPAL on your logging project (LOG_PROJECT):
+
+```bash
+gcloud projects add-iam-policy-binding "$LOG_PROJECT" --member="PRINCIPAL" --role="roles/iam.serviceAccountAdmin" --condition=None
+```
+
+To take it back once the deploy is done (this removes only that binding):
+
+```bash
+gcloud projects remove-iam-policy-binding "$LOG_PROJECT" --member="PRINCIPAL" --role="roles/iam.serviceAccountAdmin" --condition=None
+```
+
+Add `roles/serviceusage.serviceUsageAdmin` for PRINCIPAL on your logging project (LOG_PROJECT):
+
+```bash
+gcloud projects add-iam-policy-binding "$LOG_PROJECT" --member="PRINCIPAL" --role="roles/serviceusage.serviceUsageAdmin" --condition=None
+```
+
+To take it back once the deploy is done (this removes only that binding):
+
+```bash
+gcloud projects remove-iam-policy-binding "$LOG_PROJECT" --member="PRINCIPAL" --role="roles/serviceusage.serviceUsageAdmin" --condition=None
+```
+
+Removing this template later (**To remove it later**, at the end of the page) needs these roles again: add them back with the same commands first.
 <!-- /abstract:check -->
 
-## Verify Cloud Armor Logging
+## Find the projects and networks to check
 
-Cloud Armor security policy evaluations (WAF block decisions, OWASP rule matches, rate limits) are recorded inside **Application Load Balancer request logs**: `http_load_balancer` for the global external load balancer, `http_external_regional_lb_rule` for regional external and `internal_http_lb_rule` for internal ones. This deployment routes all three.
+The checks below run against one workload project at a time: a project that runs load balancers, VMs or
+containers. Replace WORKLOAD_PROJECT_ID in each command with its ID.
 
-<walkthrough-info-message>**Crucial Check Before Proceeding:**
-If backend service request logging is disabled, Cloud Armor decisions are **not written** to Cloud Logging and will never reach Abstract.</walkthrough-info-message>
+If gcloud offers to enable an API ("API [...] not enabled on project [...]. Would you like to enable and retry?"),
+answer **N**: the API being off means the source is not set up there, which is the answer you came for. Answering y would turn the API on in a project that is not yours to change, and for Compute Engine
+it would also create that project's default network, with firewall rules that allow SSH and RDP from anywhere.
 
-Inspect existing backend services in your workload projects:
-
-```bash
-# Check if logging is enabled on your backend services:
-gcloud compute backend-services list --format="table(name,enableLogging,logConfig.sampleRate)"
-```
-
-To enable logging on a backend service with 100% sample rate:
+List the projects you can see, with their IDs (read-only):
 
 ```bash
-# Global backend service:
-gcloud compute backend-services update BACKEND_SERVICE_NAME \
-  --global \
-  --enable-logging \
-  --logging-sample-rate=1.0
-
-# Regional backend service:
-gcloud compute backend-services update BACKEND_SERVICE_NAME \
-  --region=REGION \
-  --enable-logging \
-  --logging-sample-rate=1.0
+gcloud projects list --format='table(projectId,name)'
 ```
 
-## Verify Cloud IDS Endpoints
-
-> [!NOTE]
-> **Cloud IDS costs money on its own.** It is billed per endpoint-hour plus per GB of traffic inspected, and it needs Packet Mirroring. These templates do not create the IDS endpoint or the mirroring policy; they only route the threat logs an existing endpoint writes.
-
-Cloud IDS uses Palo Alto Networks threat detection engines to analyze mirrored network traffic for malware, spyware, and exploit CVEs.
-
-Check whether Cloud IDS endpoints are provisioned in your workload VPCs:
+List the VPC networks in one of them (read-only):
 
 ```bash
-gcloud ids endpoints list
+gcloud compute networks list --project=WORKLOAD_PROJECT_ID
 ```
 
-If you do not have an active Cloud IDS endpoint, you can create one with `INFORMATIONAL` severity to log all threat severities:
+## Check load balancer logging (Cloud Armor)
+
+Cloud Armor's decisions (WAF blocks, rule matches, rate limits) are written inside the Application Load Balancer's
+request logs, so they exist only when request logging is on for the backend service. Google turns it on per backend
+service; the person who owns the load balancer decides, because it adds log volume billed by Cloud Logging.
+
+List the backend services in the project with their logging setting (read-only). True under ENABLE means request logs, Cloud Armor decisions included, are written; False or empty means they are not:
 
 ```bash
-# 1. Create the endpoint (takes ~15 minutes to provision):
-gcloud ids endpoints create ids-us-central1 \
-  --zone=us-central1-a \
-  --network=VPC_NETWORK_NAME \
-  --severity=INFORMATIONAL
-
-# 2. Get the collector forwarding rule:
-FORWARDING_RULE=$(gcloud ids endpoints describe ids-us-central1 \
-  --zone=us-central1-a \
-  --format="value(endpointForwardingRule)")
-
-# 3. Create a packet mirroring policy to mirror traffic to the IDS collector:
-gcloud compute packet-mirrorings create ids-packet-mirroring \
-  --region=us-central1 \
-  --network=VPC_NETWORK_NAME \
-  --collector-ilb="$FORWARDING_RULE" \
-  --mirrored-subnets=MONITORED_SUBNET_NAME
+gcloud compute backend-services list --project=WORKLOAD_PROJECT_ID --format="table(name,region.basename(),logConfig.enable:label=ENABLE,logConfig.sampleRate)"
 ```
 
-When threat signatures match, logs are automatically written to `logName:"ids.googleapis.com%2Fthreat"`.
+Turning it on is the load balancer owner's decision: [Global external Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/https/https-logging-monitoring),
+[Regional external Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/https/https-reg-logging-monitoring)
+and [Internal Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/l7-internal/monitoring).
+Once it is on, this template's `load_balancer` and `load_balancer_regional_internal` categories route those logs.
 
-## Verify Cloud DNS Query Logging
+## Check Cloud IDS
 
-DNS query logging captures lookups from VMs and containers, delivering high-signal detection for C2 beaconing, DGA domains, and DNS tunneling exfiltration.
+Cloud IDS inspects mirrored traffic for malware, spyware and exploits. It needs an IDS endpoint in each region you
+monitor and a packet-mirroring policy that copies traffic to it; both are billed, and both change the network, so
+they are the network owner's decision. These templates create neither.
 
-By default, DNS queries are **not logged** until a Cloud DNS server policy is created.
-
-Check for existing DNS server policies:
+If gcloud offers to enable the Cloud IDS API, answer **N**: off means Cloud IDS is not set up there. List the IDS
+endpoints in the project (read-only). An endpoint in state READY is inspecting traffic; an empty list means Cloud IDS is not set up there:
 
 ```bash
-gcloud dns policies list
+gcloud ids endpoints list --project=WORKLOAD_PROJECT_ID
 ```
 
-Enable DNS query logging on your VPC network:
+To set it up, see [Cloud IDS overview](https://docs.cloud.google.com/intrusion-detection-system/docs/overview);
+the threat logs it writes are described in [Cloud IDS logging information](https://docs.cloud.google.com/intrusion-detection-system/docs/logging).
+Once an endpoint is running, this template's `platform_log_filters` entry `ids.googleapis.com%2Fthreat` routes its threat logs.
+
+## Check Cloud DNS query logging
+
+DNS query logs show the lookups VMs and containers make, the trail of command-and-control beacons and DNS
+tunnelling. Google writes them only for a VPC network with a DNS server policy that has logging on (or for a public
+zone with query logging on), and they add log volume billed by Cloud Logging.
+
+If gcloud offers to enable the Cloud DNS API, answer **N**: off means no DNS policy is set up there. List the DNS
+server policies in the project and whether each logs queries (read-only). True under ENABLELOGGING, for a policy attached to a network, means that network's queries are logged; no policy, or False, means they are not:
 
 ```bash
-gcloud dns policies create log-vpc-dns-queries \
-  --description="Enable DNS query logging for security monitoring" \
-  --enable-logging \
-  --networks=VPC_NETWORK_NAME
+gcloud dns policies list --project=WORKLOAD_PROJECT_ID --format="table(name,enableLogging,networks[].networkUrl.basename())"
 ```
 
-Once applied, all queries originating within that VPC are emitted to `logName:"dns.googleapis.com%2Fdns_queries"`.
+Turning it on is the network owner's decision: [Use logging and monitoring](https://docs.cloud.google.com/dns/docs/monitoring#using_logging).
+Once it is on, this template's `dns_queries` category routes those logs.
 
-## Verify Firewall Rule Logging
+## Check firewall rule logging
 
-Firewall rule logging must be enabled on individual VPC firewall rules or within Network Firewall Policies.
+Firewall logs record the connections a rule allowed or denied. Google turns logging on per rule: on each VPC
+firewall rule in a project, and on each rule of a hierarchical firewall policy at an organization or folder. Each
+logged rule adds log volume billed by Cloud Logging, so the network owner chooses which rules to log.
 
-Check whether firewall rules have logging enabled:
+List the VPC firewall rules in the project and whether each is logged (read-only). True under LOGGED means that rule's hits are logged; False or empty means they are not:
 
 ```bash
-gcloud compute firewall-rules list --format="table(name,network,direction,action,logConfig.enable)"
+gcloud compute firewall-rules list --project=WORKLOAD_PROJECT_ID --format="table(name,network.basename(),direction,logConfig.enable:label=LOGGED)"
 ```
 
-Enable logging on critical rules (especially default deny rules):
+List the hierarchical firewall policies at the organization (read-only; ORG_ID comes from the answers file loaded above):
 
 ```bash
-gcloud compute firewall-rules update FIREWALL_RULE_NAME \
-  --enable-logging \
-  --logging-metadata=include-all
+gcloud compute firewall-policies list --organization="$ORG_ID"
 ```
 
-Matched connections will be emitted to `logName:"compute.googleapis.com%2Ffirewall"`.
+List one policy's rules and whether each is logged (read-only). Replace POLICY_ID with an ID from the list above:
+
+```bash
+gcloud compute firewall-policies list-rules POLICY_ID --organization="$ORG_ID" --format="table(priority,action,direction,enableLogging)"
+```
+
+Turning it on is the network owner's decision: [Manage VPC firewall rules logging](https://docs.cloud.google.com/firewall/docs/manage-vpc-firewall-rules-logging#enable-vpc-firewall-rule-logging)
+and [Firewall policy rules logging overview](https://docs.cloud.google.com/firewall/docs/firewall-policy-rules-logging-overview).
+Once it is on, this template's `firewall` category routes those logs.
 
 ## Choose the log categories
 
-Set these in terraform.tfvars:
+If you still deploy it, knowing Abstract keeps none of it today, choose which of the four streams the sink routes:
+`firewall`, `dns_queries`, `load_balancer` and `load_balancer_regional_internal` (Cloud Armor, global and regional),
+and the Cloud IDS threat logs. Deploy with Terraform, step 2, says where each goes.
 
-```hcl
-sink_scope           = "organization"
-log_categories       = ["firewall", "dns_queries", "load_balancer", "load_balancer_regional_internal"]
-platform_log_filters = ["ids.googleapis.com%2Fthreat"]
+<walkthrough-info-message>`dns_queries`, `load_balancer` and `load_balancer_regional_internal` (Cloud Armor) are high-volume streams, so the first deploy stops on purpose until you acknowledge the volume. Measure a baseline first.</walkthrough-info-message>
+
+Measure a baseline: count one hour of one stream in one workload project (read-only; it stops at 10,000 entries, so
+10000 means at least that many an hour). Replace WORKLOAD_PROJECT_ID, and LOG_FILTER with the stream's filter:
+`logName:"compute.googleapis.com%2Ffirewall"` for firewall, `logName:"dns.googleapis.com%2Fdns_queries"` for DNS,
+`resource.type="http_load_balancer"` for the global load balancer, `logName:"ids.googleapis.com%2Fthreat"` for Cloud IDS:
+
+```bash
+gcloud logging read 'LOG_FILTER' --project=WORKLOAD_PROJECT_ID --freshness=1h --limit=10000 --format='value(timestamp)' | wc -l
 ```
 
-<walkthrough-info-message>`dns_queries`, `load_balancer` and `load_balancer_regional_internal` (Cloud Armor) are high-volume streams, so the first deploy stops on purpose. Measure a baseline first; then add `acknowledge_high_volume = true` to `terraform.tfvars`.</walkthrough-info-message>
+Multiply by 24 for a day and by the number of projects that log the stream. Cloud Logging bills the volume a sink
+routes on top of what each project already stores, so this is the number the network owner signs off.
 
-Read the `effective_filter` before you apply. It binds all four telemetry streams into one aggregated Cloud Logging sink.
+Read the `effective_filter` before you apply: it is the one filter the new sink uses for all four streams.
 
 <!-- abstract:deploy -->
 ## Deploy
@@ -191,117 +280,49 @@ This piece is not part of the guided setup script. Deploy it with Terraform: fol
 
 ## Verify
 
-<walkthrough-info-message>**Log sinks evaluate routing at write time.** Google Cloud takes 2 to 3 minutes to propagate a new aggregated sink across the fleet. Events emitted in the first minutes before propagation finishes will not be captured.</walkthrough-info-message>
+<walkthrough-info-message>**Log sinks evaluate routing at write time.** A new sink routes nothing for about three minutes. Events written before then are not routed, and no later change recovers them.</walkthrough-info-message>
 
-Inspect output parameters:
+Wait three minutes after the apply. These checks read, and change nothing, except where a command says otherwise.
+
+In this template's folder, print the sink's writer identity:
 
 ```bash
 terraform output -raw sink_writer_identity
-terraform output -raw topic_id
 ```
 
-Wait 3 minutes before testing:
+The sink exists and is aggregated: you should see abstract-network-threats-sink, True, and the topic. This is the
+organization sink; with `sink_scope = "folder"` use `--folder=FOLDER_ID` instead of `--organization`, and with
+`"project"` use `--project=PROJECT_ID`:
 
 ```bash
-echo "Waiting for Log Router sink propagation..."
-sleep 180
+gcloud logging sinks describe abstract-network-threats-sink --organization="$ORG_ID" --format="value(name,includeChildren,destination)"
 ```
 
-### 1. Check the Log Sink and Aggregation
-
-Verify that the sink exists and `includeChildren` is `True`:
+The writer identity holds roles/pubsub.publisher on the topic, the most common silent failure. You should see the identity printed above under roles/pubsub.publisher:
 
 ```bash
-gcloud logging sinks describe abstract-network-threats-sink \
-  --organization="$ORG_ID" \
-  --format="value(name,includeChildren,destination)"
+gcloud pubsub topics get-iam-policy abstract-network-threats --project="$LOG_PROJECT"
 ```
 
-### 2. Check Publisher IAM Permissions (The #1 Silent Failure Mode)
-
-Verify that the sink's writer identity holds `roles/pubsub.publisher` on the topic:
+If it is missing, run `terraform apply` again: the template grants it. Google records a sink's delivery failures as
+log entries; nothing printed means none was recorded:
 
 ```bash
-gcloud pubsub topics get-iam-policy abstract-network-threats \
-  --project="$LOG_PROJECT" \
-  --filter="bindings.role:roles/pubsub.publisher"
+gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --project="$LOG_PROJECT" --limit=10
 ```
 
-If the writer identity is missing from the output, grant it:
-```bash
-WRITER_SA=$(terraform output -raw sink_writer_identity)
-gcloud pubsub topics add-iam-policy-binding abstract-network-threats \
-  --project="$LOG_PROJECT" \
-  --member="${WRITER_SA}" \
-  --role="roles/pubsub.publisher"
-```
+## Connect to Abstract
 
-### 3. Check for Sink Delivery Errors
-
-Confirm that no sink errors are reported:
-
-```bash
-gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' \
-  --project="$LOG_PROJECT" \
-  --limit=10
-```
-
-### 4. End-to-End Delivery Test
-
-Create a probe subscription, then perform a DNS query or trigger a firewall probe from a VM in your VPC:
-
-```bash
-# Never pull from abstract-network-threats-sub: with --auto-ack that deletes events before Abstract
-# reads them, and without it hides them from Abstract for the ack deadline.
-# Pull from a throwaway subscription on the same topic instead. Create it BEFORE the
-# test event: a new subscription only receives messages published after it exists.
-PROBE="abstract-probe-$(date +%s)"
-gcloud pubsub subscriptions create "$PROBE" --topic=abstract-network-threats \
-  --project="$LOG_PROJECT" --expiration-period=1d --message-retention-duration=10m
-# Now make a DNS query or trigger a logged firewall rule from a VM, then wait.
-for i in $(seq 1 20); do
-  sleep 15
-  N=$(gcloud pubsub subscriptions pull "$PROBE" --project="$LOG_PROJECT" --limit=1000 --auto-ack --format="value(ackId)" 2>/dev/null | grep -c .)
-  [ "${N:-0}" -gt 0 ] && { echo "FOUND: $N message(s) reached the topic"; break; }
-done
-gcloud pubsub subscriptions delete "$PROBE" --project="$LOG_PROJECT" --quiet
-```
-
-## Connect to Abstract Security
-
-Extract the integration parameters:
-
-```bash
-terraform output abstract_onboarding
-```
-
-Generate the credentials key for the Abstract service account:
-
-```bash
-SA_EMAIL=$(terraform output -raw service_account_email)
-mkdir -p ~/abstract-keys && chmod 700 ~/abstract-keys   # outside the repo clone
-gcloud iam service-accounts keys create ~/abstract-keys/abstract-network-key.json --iam-account="$SA_EMAIL"
-chmod 600 ~/abstract-keys/abstract-network-key.json
-```
-
-In the Abstract Security Platform:
-1. Navigate to **Data Sources** → **Add Data Source** → **Google Cloud Pub/Sub**.
-2. Enter the **Project ID** (`$LOG_PROJECT`).
-3. Enter the **Subscription ID**:
-   ```bash
-   terraform output -raw subscription_id
-   ```
-4. Upload `~/abstract-keys/abstract-network-key.json`.
-5. Remove the local key file:
-   ```bash
-   rm -f ~/abstract-keys/abstract-network-key.json
-   ```
+Not yet. Abstract's Google Cloud integration keeps only Cloud Audit Logs, so a Pub/Sub source on
+abstract-network-threats-sub would read these logs and discard them. When Abstract supports them, the values come from
+`terraform output abstract_onboarding` in this template's folder.
 
 ## Done
 
 <walkthrough-conclusion-trophy></walkthrough-conclusion-trophy>
 
-The pipeline delivers Cloud Armor, Cloud IDS, DNS and firewall logs to the `abstract-network-threats` topic. Abstract's managed GCP parser does not yet store these logs, so do not rely on them for detection until a parser ships.
+The sink routes the network logs whose sources are turned on to the `abstract-network-threats` topic. Abstract does
+not keep them today; remove the template (below) if you deployed it only for Abstract.
 
 <!-- abstract:cleanup -->
 ## Clean up
@@ -314,47 +335,171 @@ Delete the integration in Abstract first, if this piece feeds one. Then follow *
 
 Run every command in this template's folder.
 
-**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it. The bucket goes in the logging project by default, and Google's Cloud Storage guides ask for billing on a project before you create a bucket in it (this repo has not tested a project without). If the logging project has no billing (the guided setup allows that), first run `export STATE_PROJECT=<project-id-with-billing>` to put the bucket in a project that has it.
+**1. Keep the state outside this session.** Cloud Shell deletes its files when the session ends, state included. Create a versioned bucket in your logging project once, and point `backend.tf` at it. The state key in `backend.tf.example` is fixed: do not change it. The bucket goes in the logging project by default, and Google's Cloud Storage guides ask for billing on a project before you create a bucket in it (this repo has not tested a project without). If the logging project has no billing (the guided setup allows that), first run `export STATE_PROJECT=PROJECT_ID_WITH_BILLING`, with your own project ID, to put the bucket in a project that has it.
+
+Go to this template's folder:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-network-threat-logs"
-source ~/.abstract-gcp-setup.env 2>/dev/null   # the guided setup's saved answers, if you ran it
-echo "Logging project: ${LOG_PROJECT:?not set: run export LOG_PROJECT=<your-logging-project-id> first}"
+```
+
+Load the guided setup's answers, if you ran it (it sets LOG_PROJECT and ORG_ID):
+
+```bash
+source ~/.abstract-gcp-setup.env
+```
+
+Check the logging project is set. If it says not set, run `export LOG_PROJECT=` and your logging project ID first:
+
+```bash
+echo "Logging project: ${LOG_PROJECT:?not set}"
+```
+
+Name the state bucket, in the logging project unless STATE_PROJECT is set:
+
+```bash
 export STATE_PROJECT="${STATE_PROJECT:-$LOG_PROJECT}" STATE_BUCKET="$LOG_PROJECT-abstract-tfstate"
-gcloud storage buckets describe "gs://$STATE_BUCKET" >/dev/null 2>&1 || \
-  gcloud storage buckets create "gs://$STATE_BUCKET" --project="$STATE_PROJECT" --location=US --uniform-bucket-level-access
+```
+
+Choose where the state bucket lives. Replace LOCATION with a Cloud Storage location your organization allows ([Bucket locations](https://docs.cloud.google.com/storage/docs/locations) lists them): the multi-region or region your data-residency rules name. An organization policy on resource locations refuses any other. A state bucket you created before stays where it is; this does not move it:
+
+```bash
+export STATE_LOCATION=LOCATION
+```
+
+Create the bucket, in STATE_PROJECT at STATE_LOCATION (to undo it once nothing uses the state, delete the bucket). If you made it before, Google answers that it already exists; go on:
+
+```bash
+gcloud storage buckets create "gs://$STATE_BUCKET" --project="$STATE_PROJECT" --location="$STATE_LOCATION" --uniform-bucket-level-access
+```
+
+Keep every version of the state:
+
+```bash
 gcloud storage buckets update "gs://$STATE_BUCKET" --versioning
+```
+
+Point `backend.tf` at the bucket:
+
+```bash
 sed "s/acme-abstract-tfstate/$STATE_BUCKET/" backend.tf.example > backend.tf
 ```
 
-**2. Fill in your values.** Every value is explained in the file and in this template's README:
+**2. Fill in your values.**
+
+Copy the example:
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
-cloudshell edit terraform.tfvars
 ```
 
-**3. Preview, then apply exactly what you previewed:**
+Each value is described in the file. The required ones are not commented out, and hold an UPPERCASE placeholder until you replace it. Terraform does not notice one left behind, so **3. Preview** below checks for them before the plan.
+
+Replace:
+
+- `log_project`: your logging project ID (LOG_PROJECT; `echo "$LOG_PROJECT"` prints it)
+
+Edit it in Cloud Shell's editor:
+
+```bash
+cloudshell edit terraform.tfvars
+```
+<!-- /abstract:terraform -->
+
+Set the scope and the streams, with ORG_ID your organization's ID. Keep only the streams whose source is turned on:
+
+```hcl
+sink_scope           = "organization"
+org_id               = "ORG_ID"
+log_categories       = ["firewall", "dns_queries", "load_balancer", "load_balancer_regional_internal"]
+platform_log_filters = ["ids.googleapis.com%2Fthreat"]
+```
+
+For a folder sink set `sink_scope = "folder"` and `folder_id` instead of `org_id`. With `dns_queries`,
+`load_balancer` or `load_balancer_regional_internal`, the first plan stops on purpose: once the baseline is measured
+and signed off, add `acknowledge_high_volume = true`.
+
+<!-- abstract:tfapply -->
+**3. Preview, then apply exactly what you previewed.**
+
+Check no placeholder is left (read-only). You should see nothing; a line it prints still holds a placeholder, so replace it in terraform.tfvars and run this again:
+
+```bash
+grep -nE '^[^#]*\b(LOGGING_PROJECT_ID|ORG_ID)\b' terraform.tfvars
+```
+
+Download the providers and connect to the state bucket:
 
 ```bash
 terraform init
+```
+
+Preview, and save the plan. It ends with the outputs, `effective_filter` among them: the filter the sink will use, which decides your coverage and your bill:
+
+```bash
 terraform plan -out=abstract.tfplan
+```
+
+Apply exactly that plan. It creates what the plan listed; **To remove it later**, below, says how to take it away:
+
+```bash
 terraform apply abstract.tfplan
 ```
 
-**To remove it later**, delete the integration in Abstract first. The topic, the subscription and the sink carry `prevent_destroy`, so a stray `terraform destroy`, or a rename that would replace them, cannot drop security logs Abstract has not read yet; `terraform destroy` on its own is refused. Take them out of the state, destroy the rest, then delete them with gcloud, the sink first so nothing is written to a topic that is about to go, then the subscription, then the topic. Use your own names if you changed them in terraform.tfvars:
+Print the filter the sink uses (read-only). You should see one Cloud Logging filter, naming the sources you chose in `log_categories` and `platform_log_filters`, and no audit logs (`cloudaudit.googleapis.com`): `audit_streams` is empty here because the audit-log templates route those, and adding them would send a second copy, billed again; it is the filter that decides your coverage and your bill:
+
+```bash
+terraform output -raw effective_filter
+```
+<!-- /abstract:tfapply -->
+
+<!-- abstract:tfremove -->
+**To remove it later**, delete the integration in Abstract first. The topic, the subscription and the sink carry `prevent_destroy`, so a stray `terraform destroy`, or a rename that would replace them, cannot drop security logs Abstract has not read yet; `terraform destroy` on its own is refused. Take them out of the state, destroy the rest, then delete them with gcloud, the sink first so nothing is written to a topic that is about to go, then the subscription, then the topic. Use your own names if you changed them in terraform.tfvars.
+
+The commands below use the guided setup's answers (LOG_PROJECT, ORG_ID, SCOPE_ID), saved in `~/.abstract-gcp-setup.env`. Load them in this terminal; without the guided setup, `export` each one instead:
+
+```bash
+source ~/.abstract-gcp-setup.env
+```
+
+In this template's folder:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-network-threat-logs"
-terraform state rm 'module.log_export.google_pubsub_topic.abstract' 'module.log_export.google_pubsub_subscription.abstract' 'module.log_export.google_logging_organization_sink.abstract[0]'
-terraform destroy
-gcloud logging sinks delete abstract-network-threats-sink --organization=<org-id>
-gcloud pubsub subscriptions delete abstract-network-threats-sub --project=<log-project-id>
-gcloud pubsub topics delete abstract-network-threats --project=<log-project-id>
 ```
 
-These commands are for the default `sink_scope`, `organization`. With another scope, use that scope's sink in both places: `'module.log_export.google_logging_folder_sink.abstract[0]'` and `--folder=<folder-id>`; `'module.log_export.google_logging_project_sink.abstract[0]'` and `--project=<sink-project-id>`.
-<!-- /abstract:terraform -->
+Take them out of the state (this deletes nothing):
+
+```bash
+terraform state rm 'module.log_export.google_pubsub_topic.abstract' 'module.log_export.google_pubsub_subscription.abstract' 'module.log_export.google_logging_organization_sink.abstract[0]'
+```
+
+Destroy the rest of what this template built (Terraform lists it and asks first):
+
+```bash
+terraform destroy
+```
+
+Delete the sink abstract-network-threats-sink, so nothing more is written to the topic:
+
+```bash
+gcloud logging sinks delete abstract-network-threats-sink --organization="$ORG_ID" --quiet
+```
+
+Delete the subscription abstract-network-threats-sub, and every event in it not yet read:
+
+```bash
+gcloud pubsub subscriptions delete abstract-network-threats-sub --project="$LOG_PROJECT" --quiet
+```
+
+Delete the topic abstract-network-threats:
+
+```bash
+gcloud pubsub topics delete abstract-network-threats --project="$LOG_PROJECT" --quiet
+```
+
+These commands are for the default `sink_scope`, `organization`. With another scope, use that scope's sink in both places: `'module.log_export.google_logging_folder_sink.abstract[0]'` and `--folder="$SCOPE_ID"`; `'module.log_export.google_logging_project_sink.abstract[0]'` and `--project="$SCOPE_ID"`.
+<!-- /abstract:tfremove -->
 
 <!-- abstract:references -->
 ## Google documentation

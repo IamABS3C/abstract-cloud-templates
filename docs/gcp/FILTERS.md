@@ -20,8 +20,9 @@ log_categories = ["admin_activity", "system_event", "policy_denied", "identity_a
 ```
 
 The audit-log roots route Cloud Audit Logs: Abstract's managed GCP parser keeps only those, and
-discards anything else the sink sends. Firewall, DNS and other platform logs go through
-`gcp-source-network-threat-logs`, with a parser attached to their own Abstract configuration.
+discards anything else the sink sends. Firewall, DNS and other platform logs can be routed by
+`gcp-source-network-threat-logs`, but Abstract does not keep them today, so deploying it costs money in
+Google Cloud and adds nothing in Abstract ([Where each source is turned on](#where-each-source-is-turned-on)).
 
 A name not in the catalog **fails at plan** with the valid list printed. That is
 deliberate: a hand-written Cloud Logging filter fails *silently* — a typo matches nothing,
@@ -77,6 +78,29 @@ raises nothing, and is indistinguishable from a broken sink.
 | `data_access_all` | **extreme** | Prefer `data_access_services` to scope it. Requires enabling in the IAM audit config first — see below |
 
 ---
+
+## Where each source is turned on
+
+A sink only routes what Google already writes, so "can this be set at the organization?" has two answers: where
+the logs are routed, and where each source is switched on. Checked on 2026-10-12 against Google's pages and gcloud
+help.
+
+**Routing to Abstract:** the organization sink, with includeChildren, routes every project in the organization.
+The logging project only holds the topic, the subscription and the reader account.
+
+| Source | Where it is turned on | Google's page |
+|---|---|---|
+| Admin Activity, System Event and Policy Denied audit logs | Always on. Nothing to do | [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types) |
+| Data Access audit logs | At the organization, a folder or a project (the data-access template, or script step 6) | [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) |
+| VPC Flow Logs | At the organization or a project: "You can enable VPC Flow Logs at the organization and project levels". An organization configuration covers all subnets; `gcloud network-management vpc-flow-logs-configs create --organization=ORG_ID --location=global` (global is always required). "If VPC Flow Logs is enabled at the organization level, each project is billed separately" | [VPC Flow Logs](https://docs.cloud.google.com/vpc/docs/flow-logs) |
+| Firewall logs | Per rule. Rules in hierarchical firewall policies (organization or folder) take `--enable-logging` and log hits on those rules (not possible on goto_next rules); ordinary VPC firewall rules are per project, per rule | [Firewall policy rule components](https://docs.cloud.google.com/firewall/docs/firewall-policies-rule-details) |
+| Cloud DNS query logs | Per VPC network, through a DNS server policy (private zones), or per managed public zone (`gcloud dns managed-zones update ZONE --log-dns-queries`). Google's documentation describes no organization-level switch. With Shared VPC the records belong to the host project, so one policy on the host network covers the service projects that use it | [Use logging and monitoring](https://docs.cloud.google.com/dns/docs/monitoring#using_logging) |
+| Load balancer and Cloud Armor logs | Per backend service: "You enable or disable logging for each backend service". The default sample rate is 1.0. Google's documentation describes no organization-level switch | [Global external Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/https/https-logging-monitoring) |
+| Cloud IDS threat logs | An IDS endpoint in each region you monitor (a zonal resource that inspects traffic from any zone in its region), plus packet mirroring. Google's documentation describes no organization-level deployment | [Cloud IDS overview](https://docs.cloud.google.com/intrusion-detection-system/docs/overview) |
+
+> **Abstract's Google Cloud Pub/Sub integration keeps only Cloud Audit Logs today**, so flow, firewall, DNS, load
+> balancer and IDS logs sent to it are billed by Google and discarded. The commands in this table change the source
+> itself; they are the decision of the team that owns that network or service, never part of onboarding.
 
 ## Data Access — the cost decision for the whole engagement
 
@@ -195,7 +219,7 @@ gcloud logging read 'PASTE_THE_FILTER' --limit=10 --freshness=1h --project=YOUR_
 And to estimate volume before routing anything:
 
 ```bash
-gcloud logging read 'PASTE_THE_FILTER' --freshness=24h --format='value(logName)' \
+gcloud logging read 'PASTE_THE_FILTER' --freshness=24h --format='value(logName)' --project=YOUR_PROJECT \
   | sort | uniq -c | sort -rn | head -20
 ```
 

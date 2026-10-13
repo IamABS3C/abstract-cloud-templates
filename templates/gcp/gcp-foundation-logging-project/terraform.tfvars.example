@@ -1,10 +1,10 @@
 # FALSE (default) only enables APIs on an existing project. TRUE also creates it, which needs
-# billing_account_id and project-creator rights.
+# project-creator rights; billing_account_id is optional (see its description).
 # create_project = false
 
 # Project ID to use, or to create when create_project = true (globally unique, 6-30 characters,
 # lowercase).
-project_id = "<project_id>"
+project_id = "PROJECT_ID"
 
 # Display name when creating the project.
 # project_name = "Abstract Security Logging"

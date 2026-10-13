@@ -54,6 +54,7 @@ The data application group (Gmail and Drive) dwarfs everything else; add it only
 ## Permissions
 
 - **roles/iam.serviceAccountAdmin** on The logging project: Deployer: Create the delegated service account.
+- **roles/serviceusage.serviceUsageAdmin** on The logging project: Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.
 - **Grant domain-wide delegation** on admin.google.com: Workspace super admin: No API or Terraform provider exists for it; a Google Cloud Owner cannot grant it.
 - **The admin.reports.audit.readonly scope, through delegation only** on Google Workspace: Workspace service account: It holds nothing in GCP IAM.
 

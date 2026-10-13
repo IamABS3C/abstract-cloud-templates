@@ -14,7 +14,7 @@
 
 # DEDICATED logging or security project holding the topic and subscription. Find it with: gcloud
 # projects list.
-log_project = "acme-security-logging"
+log_project = "LOGGING_PROJECT_ID"
 
 # Required when sink_scope = project to acknowledge single-project scope.
 # acknowledge_pilot_scope = false

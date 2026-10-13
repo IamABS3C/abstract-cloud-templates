@@ -42,11 +42,11 @@ Enabling APIs is free; a created project costs nothing until resources in it are
 
 | Name | Type | Required | Description | Find it |
 |---|---|---|---|---|
-| `create_project` | bool | no | FALSE (default) only enables APIs on an existing project. TRUE also creates it, which needs billing_account_id and project-creator rights. |  |
+| `create_project` | bool | no | FALSE (default) only enables APIs on an existing project. TRUE also creates it, which needs project-creator rights; billing_account_id is optional (see its description). |  |
 | `project_id` | string | yes | Project ID to use, or to create when create_project = true (globally unique, 6-30 characters, lowercase). |  |
 | `project_name` | string | no | Display name when creating the project. |  |
 | `org_id` | string | no | Organization to create the project under (create_project = true). Find it with: gcloud organizations list | `gcloud organizations list --format='value(ID)'` |
-| `folder_id` | string | no | Create the project under this folder instead of directly under the organization. | `gcloud resource-manager folders list --organization=<org-id>` |
+| `folder_id` | string | no | Create the project under this folder instead of directly under the organization. | `gcloud resource-manager folders list --organization=ORG_ID` |
 | `billing_account_id` | string | no | Billing account to link when create_project = true. The log pipeline itself was measured delivering on a project with billing disabled (docs/public/gcp/VERIFIED.md), but an API that requires billing cannot be enabled without one. Find it with: gcloud billing accounts list | `gcloud billing accounts list --filter=open=true` |
 | `enable_workspace_api` | bool | no | Also enable the Admin SDK API, for gcp-source-google-workspace-logs. |  |
 | `enable_scc_api` | bool | no | Also enable the Security Command Center API, for gcp-source-security-command-center-findings. |  |
@@ -55,7 +55,8 @@ Enabling APIs is free; a created project costs nothing until resources in it are
 ## Permissions
 
 - **roles/resourcemanager.projectCreator** on The organization or folder: Deployer: Only with create_project=true.
-- **roles/billing.user** on The billing account: Deployer: Only with create_project=true.
+- **roles/billing.user** on The billing account: Deployer: Only with create_project=true and a billing_account_id.
+- **roles/serviceusage.serviceUsageAdmin** on The logging project: Deployer: Turn on the APIs the pipeline uses in the logging project. Terraform reads which are on and turns on only those still off.
 
 ## Creates
 

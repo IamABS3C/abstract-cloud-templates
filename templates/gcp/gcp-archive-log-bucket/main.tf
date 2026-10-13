@@ -1,10 +1,10 @@
-# Cold archive and replay.
+# Cold archive.
 #
 # A SECOND sink writing to Cloud Storage. A sink has exactly one destination, so
 # this cannot be an extra destination on the streaming sink — it is its own.
 #
 # NOT the detection path. GCS batches, so latency becomes minutes to hours.
-# Reserve it for archive, evidence and backfill; keep the Pub/Sub sink for
+# Reserve it for evidence you keep in Cloud Storage; keep the Pub/Sub sink for
 # anything you alert on.
 
 terraform {

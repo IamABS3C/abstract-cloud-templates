@@ -63,27 +63,17 @@ or broken by that workload's owner.
 
 ### Create one if there is not
 
-`project_id` must be unique across all of Google Cloud.
+Script step 3 of the guided setup creates it, or picks one that exists, asks whether to link billing, and turns
+on the APIs the pipeline needs. Each change is printed and asked about first. From the top folder of the
+repository:
 
 ```bash
-cd templates/gcp/gcp-foundation-logging-project
-cat > terraform.tfvars <<EOF
-create_project     = true
-project_id         = "acme-security-logging"
-org_id             = "123456789012"
-billing_account_id = "XXXXXX-XXXXXX-XXXXXX"
-EOF
-terraform init && terraform apply
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 3
 ```
 
-Or by hand:
-
-```bash
-gcloud projects create acme-security-logging --organization=$ORG_ID
-gcloud billing projects link acme-security-logging --billing-account=$BILLING_ACCOUNT
-gcloud services enable pubsub.googleapis.com logging.googleapis.com \
-  --project=acme-security-logging
-```
+With Terraform instead, use `templates/gcp/gcp-foundation-logging-project` with `create_project = true`: its
+tutorial's **Terraform instead** section keeps the state in a bucket, fills in the values and applies a saved plan.
+Either way, the project ID must be unique across all of Google Cloud.
 
 **You need:**
 
@@ -113,8 +103,8 @@ control-plane feed.
 **Infra Manager does not work without billing.** It runs Terraform on Cloud Build, and
 Cloud Build cannot be enabled on an unfunded project:
 
-```
-gcloud services enable config.googleapis.com cloudbuild.googleapis.com
+```text
+gcloud services enable config.googleapis.com cloudbuild.googleapis.com --project=LOG_PROJECT
 → reason: UREQ_PROJECT_BILLING_NOT_OPEN
 ```
 

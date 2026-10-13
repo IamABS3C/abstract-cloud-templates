@@ -20,6 +20,9 @@ permissions:
 - role: roles/iam.serviceAccountAdmin
   where: The logging project
   why: 'Deployer: Create Abstract''s service account.'
+- role: roles/serviceusage.serviceUsageAdmin
+  where: The logging project
+  why: 'Deployer: Turn on the APIs this template uses. Terraform reads which are on and turns on only those still off.'
 - role: roles/pubsub.publisher
   where: The topic
   why: 'Sink writer identity: granted by this template.'
@@ -56,7 +59,7 @@ parameters:
     exists yet, create one first with templates/gcp/gcp-foundation-logging-project (set create_project
     = true) — do not point this at a workload project.'
   find_it: gcloud projects list --format='value(projectId)'
-  example: acme-security-logging
+  example: LOGGING_PROJECT_ID
 - name: topic_name
   type: string
   required: false
@@ -132,11 +135,10 @@ abstract:
   integration: google_cloud_pub_sub
 verify:
 - check: The sink exists and points at the topic
-  command: gcloud logging sinks describe abstract-billing-audit-sink --billing-account=<billing-account-id>
-    --format="value(name,destination,writerIdentity)"
+  command: gcloud logging sinks describe abstract-billing-audit-sink --billing-account=BILLING_ACCOUNT_ID --format="value(name,destination,writerIdentity)"
   healthy: The destination is the abstract-billing-audit-logs topic.
 - check: No sink errors
-  command: gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project=<log-project-id>
+  command: gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --limit=20 --project="$LOG_PROJECT"
   healthy: No sink_error entries.
 cost: Billing-account audit logs are low volume; Pub/Sub throughput is negligible.
 when_to_use: Detecting billing-account takeover, project link changes and billing IAM changes.
@@ -147,3 +149,5 @@ references:
 - billing-audit-logs
 - sink-writer-identity
 - pubsub-subscription-properties
+- billing-access-control
+- billing-account-rename

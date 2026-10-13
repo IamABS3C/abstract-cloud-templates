@@ -33,35 +33,46 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 1. **Check first.** Cloud admin, in Cloud Shell, or any terminal with gcloud.
 
-   Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Every command from here on runs from the top folder of the templates repository.
+   Open the guided setup in Cloud Shell and sign in. The sign-in is the last line on purpose: it waits for you to open a link and paste back a code, so nothing may follow it in the same paste. Every command from here on runs from the top folder of the templates repository.
 
-   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Google opens a repository that is not its own in a temporary Cloud Shell that starts signed out, so start with the sign-in line; the guided script also offers to sign in, or switch account, on its first screen. When a temporary session ends, your answers, the key and the backup of your audit settings go with it. If your run may pause before script step 10, open Cloud Shell from the Google Cloud console instead, where your home folder is kept, and run every line, git clone included. Anywhere else, the clone line fetches the repository; without it the scripts are not found ("no such file or directory").
+   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Google opens a repository that is not its own in a temporary Cloud Shell that starts signed out, so sign in before anything else runs; the guided script also offers to sign in, or switch account, on its first screen. When a temporary session ends, your answers, the key and the backup of your audit settings go with it. If your run may pause before script step 10, open Cloud Shell from the Google Cloud console instead, where your home folder is kept, and run every line, git clone included. Anywhere else, the clone line fetches the repository; without it the scripts are not found ("no such file or directory").
 
    ```bash
-   gcloud auth login --update-adc
    git clone https://github.com/IamABS3C/abstract-cloud-templates && cd abstract-cloud-templates
    cd "$(git rev-parse --show-toplevel)"
-   ./tools/gcp-guided-setup/audit-gcp-estate.sh
+   gcloud auth login --update-adc
    ```
 
-   **Check:** The audit prints your organization and lists the log sinks set on it. If one already sends audit logs to a topic, tell whoever owns it before you add a second. Sinks on a folder or a project are listed by script step 4, at your scope, before it adds one.
+   **Check:** gcloud prints "You are now logged in as" and your account. If it shows another account, run the sign-in line again and choose the right one in the browser.
 
-   Google documentation: [Open in Cloud Shell](https://docs.cloud.google.com/shell/docs/open-in-cloud-shell#required_url_parameter) · [Use Cloud Shell](https://docs.cloud.google.com/shell/docs/using-cloud-shell#choose_ephemeral_mode) · [gcloud auth login](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login) · [Route log entries](https://docs.cloud.google.com/logging/docs/routing/overview#destinations)
+   Google documentation: [Open in Cloud Shell](https://docs.cloud.google.com/shell/docs/open-in-cloud-shell#required_url_parameter) · [Use Cloud Shell](https://docs.cloud.google.com/shell/docs/using-cloud-shell#choose_ephemeral_mode) · [gcloud auth login](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login)
 
 2. **Check first.** Cloud admin, in Cloud Shell.
 
-   Script steps 1 and 2: confirm who you are signed in as, choose your scope, and check you hold the rights the sink needs before anything is created. The one people lack is Logs Configuration Writer (roles/logging.configWriter) at your scope: the organization, folder or project you choose. At the organization, Organization Admin does not include it. Your rights in the logging project, and the organization policy that can block the service-account key (iam.disableServiceAccountKeyCreation, or its managed successor iam.managed.disableServiceAccountKeyCreation), are checked in script step 3, once that project is chosen.
+   Take stock of what you already have, then script step 1: confirm who you are signed in as and choose your scope (the organization, a folder or a project). The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Script step 1 asks its questions, so it is the last line of this block.
 
    ```bash
+   ./tools/gcp-guided-setup/audit-gcp-estate.sh
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+   ```
+
+   **Check:** The audit prints your organization and lists the log sinks set on it. If one already sends audit logs to a topic, tell whoever owns it before you add a second. Sinks on a folder or a project are listed by script step 4, at your scope, before it adds one. Script step 1 shows a ✓ for your account, your organization and the scope you chose.
+
+   Google documentation: [Route log entries](https://docs.cloud.google.com/logging/docs/routing/overview#destinations) · [Aggregated sinks overview](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks_overview)
+
+3. **Check first.** Cloud admin, in Cloud Shell.
+
+   Script step 2: check you hold the rights the sink needs before anything is created. The one people lack is Logs Configuration Writer (roles/logging.configWriter) at your scope: the organization, folder or project you chose. At the organization, Organization Admin does not include it. Your rights in the logging project, and the organization policy that can block the service-account key (iam.disableServiceAccountKeyCreation, or its managed successor iam.managed.disableServiceAccountKeyCreation), are checked in script step 3, once that project is chosen. Missing a role? The guided script lists every role it needs, what each is for and whether it is required, with --grant and the email of the person who runs the setup (add --check to see which they hold, changing nothing); run without --check by someone who can set IAM policy at your scope, it grants them one binding at a time and records each, so the clean-up can list the command that takes it back.
+
+   ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
    ```
 
    **Check:** Script step 2 shows a ✓ for creating the log sink at your scope. A ✗ names the role you lack and the command an admin runs to grant it. A ! saying the logging project is not checked yet is expected the first time.
 
-   Google documentation: [Cloud Logging roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/logging#logging.configWriter) · [Access control with IAM](https://docs.cloud.google.com/logging/docs/access-control) · [Method: organizations.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/organizations/testIamPermissions) · [Method: folders.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/folders/testIamPermissions) · [Method: projects.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/testIamPermissions) · [Aggregated sinks overview](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks_overview)
+   Google documentation: [Cloud Logging roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/logging#logging.configWriter) · [Access control with IAM](https://docs.cloud.google.com/logging/docs/access-control) · [Method: organizations.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/organizations/testIamPermissions) · [Method: folders.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/folders/testIamPermissions) · [Method: projects.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/testIamPermissions) · [Manage access to projects, folders, and organizations](https://docs.cloud.google.com/iam/docs/granting-changing-revoking-access#grant-single-role)
 
-3. **Foundation.** Cloud admin, in Cloud Shell.
+4. **Foundation.** Cloud admin, in Cloud Shell.
 
    Script step 3: create a dedicated logging project, or choose one you already use for security tooling, and turn on its APIs. Keep it separate from workload projects. Everything Abstract reads lives here. The script then checks your rights in the project and whether an organization policy blocks the service-account key, before script step 4 builds anything.
 
@@ -75,7 +86,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Create projects](https://docs.cloud.google.com/resource-manager/docs/creating-managing-projects) · [Enable and disable services](https://docs.cloud.google.com/service-usage/docs/enable-disable#enabling) · [Enable, disable, or change billing for a project](https://docs.cloud.google.com/billing/docs/how-to/modify-project#enable_billing_for_an_existing_project) · [Restrict IAM service account usage](https://docs.cloud.google.com/organization-policy/restrict-service-accounts#boolean_constraints) · [Organization policy constraints](https://docs.cloud.google.com/organization-policy/reference/org-policy-constraints)
 
-4. **Set up.** Cloud admin, in Cloud Shell.
+5. **Set up.** Cloud admin, in Cloud Shell.
 
    Script step 4: create the topic and subscription in the logging project, then the organization sink, and let the sink's writer identity (the Google-managed account the sink publishes as) publish to the topic. That last grant is the step most often missed; without it the sink looks healthy and sends nothing.
 
@@ -87,11 +98,11 @@ The sink's scope decides what is covered. Projects created later inside the scop
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4
    ```
 
-   **Check:** Script step 4 shows a ✓ for the sink sending to the topic, covering child projects (not shown for a project sink), and "the sink's own identity can publish". To see the grant yourself, gcloud pubsub topics get-iam-policy abstract-audit-logs --project=&lt;logging-project-id> lists the sink's writer identity under roles/pubsub.publisher.
+   **Check:** Script step 4 shows a ✓ for the sink sending to the topic, covering child projects (not shown for a project sink), and "the sink's own identity can publish". To see the grant yourself, gcloud pubsub topics get-iam-policy abstract-audit-logs --project=LOGGING_PROJECT_ID (your logging project's ID) lists the sink's writer identity under roles/pubsub.publisher.
 
    Google documentation: [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks) · [Route logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/configure_export_v2#dest-auth) · [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription) · [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)
 
-5. **Set up.** Cloud admin, in Cloud Shell.
+6. **Set up.** Cloud admin, in Cloud Shell.
 
    Script step 5: create the service account Abstract signs in as. It can read only the one subscription. Its key is written to ~/abstract-keys, outside any repository. In a temporary Cloud Shell session, download the key as soon as script step 5 makes it, with cloudshell download ~/abstract-keys/abstract-pubsub-key.json, so a session that ends early does not take it with it. Script step 10 prints the same line again.
 
@@ -103,7 +114,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create#creating) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles) · [Create and delete service account keys](https://docs.cloud.google.com/iam/docs/keys-create-delete#creating) · [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files)
 
-6. **Set up (optional).** Cloud admin, in Cloud Shell.
+7. **Set up (optional).** Cloud admin, in Cloud Shell.
 
    Script step 6: turn on Data Access audit logs and route them. Both switches are needed: the audit settings make Google write the logs, and the sink filter sends them. For most services either alone does nothing; BigQuery writes its Data Access logs by default, so it needs only the routing switch. Keep the suggested services: iam.googleapis.com and sts.googleapis.com record identity, and the script routes their events (as iamcredentials.googleapis.com and sts.googleapis.com) for you.
 
@@ -121,7 +132,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types) · [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) · [Service Account Credentials audit logging](https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-iamcreds) · [Security Token Service audit logging](https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-sts)
 
-7. **Set up (optional).** Cloud admin and a Workspace super admin, in Cloud Shell, then admin.google.com.
+8. **Set up (optional).** Cloud admin and a Workspace super admin, in Cloud Shell, then admin.google.com.
 
    Script step 7: create the Workspace reader account. A Workspace super admin then allows it in admin.google.com, under Security, Access and data control, API controls, Domain-wide delegation, with the Client ID and the one read-only scope the script prints (admin.reports.audit.readonly).
 
@@ -135,41 +146,13 @@ The sink's scope decides what is covered. Projects created later inside the scop
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 7
    ```
 
-   **Check:** Script step 7 shows a ✓ "delegation works: the Reports API answered as" your admin. The delegation can take a few minutes after the super admin saves it; run script step 7 again until it does.
+   **Check:** Script step 7 shows a ✓ "delegation works: the Reports API answered as" your admin. The delegation can take a few minutes after the super admin saves it; run script step 7 again with --check at the end until it does. Check before you upload or delete the key: the check signs in with the key file.
 
    Google documentation: [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create#creating) · [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation) · [Choose Reports API scopes](https://developers.google.com/workspace/admin/reports/auth#scopes)
 
-8. **Set up (optional).** Cloud admin, in Cloud Shell.
-
-   Send Security Command Center findings to their own topic and subscription. Open the template's Cloud Shell tutorial and follow it. Abstract collects these findings but does not store them yet: the GCP Pub/Sub Source parser keeps only Cloud Audit Log records, and a findings parser is pending. Ask Abstract before you count on findings in search or detections.
-
-   > **This changes:** Adds a Security Command Center notification config, abstract-findings, to your organization.
-
-   *Optional:* Skip unless you have Security Command Center (Premium or Enterprise).
-
-   Template: [Security Command Center findings to Abstract: notification feed](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-security-command-center-findings)
-
-   **Check:** gcloud scc notifications list --organization=&lt;org-id> shows abstract-findings, and gcloud pubsub subscriptions describe abstract-audit-logs-sub-scc --project=&lt;logging-project-id> finds the subscription.
-
-   Google documentation: [Enable finding notifications for Pub/Sub](https://docs.cloud.google.com/security-command-center/docs/how-to-notifications) · [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription)
-
 9. **Set up (optional).** Cloud admin, in Cloud Shell.
 
-   Send asset and IAM policy changes from an organization asset feed to their own topic. Open the template's Cloud Shell tutorial and follow it. Abstract stores them only through their own GCP Pub/Sub Source integration, on abstract-asset-changes-sub, with the template's parsers/cloud-asset-inventory.yml attached; the managed parser keeps only Cloud Audit Log records. Never attach that parser to the audit-log integration: it would replace the managed one there.
-
-   > **This changes:** Adds a Cloud Asset Inventory feed, abstract-asset-feed, to your organization.
-
-   *Optional:* Skip unless you want a record of every IAM policy and resource change across the organization.
-
-   Template: [Asset and IAM changes to Abstract: asset feed](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-asset-and-iam-changes)
-
-   **Check:** gcloud asset feeds list --organization=&lt;org-id> shows abstract-asset-feed, and gcloud pubsub subscriptions describe abstract-asset-changes-sub --project=&lt;logging-project-id> finds the subscription.
-
-   Google documentation: [Monitor asset changes with Pub/Sub](https://docs.cloud.google.com/asset-inventory/docs/monitor-asset-changes#create_feeds) · [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription)
-
-10. **Set up (optional).** Cloud admin, in Cloud Shell.
-
-   Notify a topic for each new object in that bucket, so Abstract fetches it. Open the template's Cloud Shell tutorial and follow it. Abstract stores the objects' content only once a parser for their format is attached to this subscription's own integration; the managed GCP Pub/Sub Source parser keeps only Cloud Audit Log records. Ask Abstract for that parser first, with a real file from the product.
+   This step uses Terraform, because the guided script builds only the audit-log pipeline, and watching a bucket needs a notification on each bucket and a grant in each project that owns one, which the template sets from your list. The commands below open the template's tutorial in Cloud Shell's tutorial pane, one command per block: it keeps the Terraform state in a bucket so it outlives the session, has you fill in terraform.tfvars, and applies only the plan you previewed. It notifies a topic for each new object, so Abstract fetches it. Abstract stores the objects' content only once a parser for their format is attached to this subscription's own integration; the managed GCP Pub/Sub Source parser keeps only Cloud Audit Log records. Ask Abstract for that parser first, with a real file from the product.
 
    > **This changes:** Adds a Pub/Sub notification to each bucket you name, and lets Abstract's reader account read their objects.
 
@@ -177,27 +160,18 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Template: [Cloud Storage bucket logs to Abstract: object notifications](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-cloud-storage-bucket-logs)
 
-   **Check:** gcloud storage buckets notifications list gs://&lt;your-bucket> shows a notification on the topic abstract-gcs-notifications.
+   ```bash
+   cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-cloud-storage-bucket-logs"
+   cloudshell launch-tutorial TUTORIAL.md
+   ```
 
-   Google documentation: [Pub/Sub notifications for Cloud Storage](https://docs.cloud.google.com/storage/docs/pubsub-notifications) · [Create a topic](https://docs.cloud.google.com/pubsub/docs/create-topic) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles)
+   **Check:** gcloud storage buckets notifications list gs://YOUR_BUCKET, with your bucket's name, shows a notification on the topic abstract-gcs-notifications.
 
-11. **Set up (optional).** Cloud admin, in Cloud Shell.
+   Google documentation: [Pub/Sub notifications for Cloud Storage](https://docs.cloud.google.com/storage/docs/pubsub-notifications) · [Create a topic](https://docs.cloud.google.com/pubsub/docs/create-topic) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles) · [Write tutorials in Cloud Shell](https://docs.cloud.google.com/shell/docs/cloud-shell-tutorials/tutorials)
 
-   Add a filtered sink for network threat logs. Open the template's Cloud Shell tutorial and follow it. Abstract does not store these logs yet: the managed parser keeps only Cloud Audit Log records, and a parser for them is being built. Ask Abstract before you count on them in search or detections.
+10. **Set up (optional).** Cloud admin, in Cloud Shell.
 
-   > **This changes:** Adds a second log sink, abstract-network-threats-sink, to your organization.
-
-   *Optional:* Skip unless you want firewall, Cloud DNS, load balancer and Cloud IDS logs. Each one must also be switched on at its source.
-
-   Template: [Firewall, DNS and IDS logs to Abstract: filtered sink](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-network-threat-logs)
-
-   **Check:** gcloud logging sinks describe abstract-network-threats-sink --organization=&lt;org-id> shows the sink and its Pub/Sub destination.
-
-   Google documentation: [Manage VPC firewall rules logging](https://docs.cloud.google.com/firewall/docs/manage-vpc-firewall-rules-logging#enable-vpc-firewall-rule-logging) · [Firewall policy rules logging overview](https://docs.cloud.google.com/firewall/docs/firewall-policy-rules-logging-overview) · [Use logging and monitoring](https://docs.cloud.google.com/dns/docs/monitoring#using_logging) · [Global external Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/https/https-logging-monitoring) · [Cloud IDS logging information](https://docs.cloud.google.com/intrusion-detection-system/docs/logging) · [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks)
-
-12. **Set up (optional).** Cloud admin, in Cloud Shell.
-
-   Add a sink on the billing account. Open the template's Cloud Shell tutorial and follow it.
+   This step uses Terraform, because a billing account is not inside your organization, so the guided script's sink cannot reach it: the template puts a sink on the billing account itself. The commands below open the template's tutorial in Cloud Shell's tutorial pane, one command per block: it keeps the Terraform state in a bucket so it outlives the session, has you fill in terraform.tfvars, and applies only the plan you previewed.
 
    > **This changes:** Adds a log sink, abstract-billing-audit-sink, to the billing account.
 
@@ -205,25 +179,35 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Template: [Billing account audit logs to Abstract: billing sink](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-billing-account-logs)
 
-   **Check:** gcloud logging sinks describe abstract-billing-audit-sink --billing-account=&lt;billing-account-id> shows the sink and its Pub/Sub destination.
+   ```bash
+   cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-billing-account-logs"
+   cloudshell launch-tutorial TUTORIAL.md
+   ```
 
-   Google documentation: [gcloud logging sinks create](https://docs.cloud.google.com/sdk/gcloud/reference/logging/sinks/create#--billing-account) · [Cloud Billing audit logging](https://docs.cloud.google.com/billing/docs/audit-logging)
+   **Check:** gcloud logging sinks describe abstract-billing-audit-sink --billing-account=BILLING_ACCOUNT_ID, with your billing account's ID, shows the sink and its Pub/Sub destination.
 
-13. **Set up (optional).** Cloud admin, in Cloud Shell.
+   Google documentation: [gcloud logging sinks create](https://docs.cloud.google.com/sdk/gcloud/reference/logging/sinks/create#--billing-account) · [Cloud Billing audit logging](https://docs.cloud.google.com/billing/docs/audit-logging) · [Write tutorials in Cloud Shell](https://docs.cloud.google.com/shell/docs/cloud-shell-tutorials/tutorials)
 
-   Add a second sink that writes the same logs to a Cloud Storage bucket. Open the template's Cloud Shell tutorial and follow it.
+11. **Set up (optional).** Cloud admin, in Cloud Shell.
+
+   This step uses Terraform, because the guided script builds only the streaming pipeline, and the archive is a second sink with a bucket (and an optional retention lock) of its own, which the template creates. The commands below open the template's tutorial in Cloud Shell's tutorial pane, one command per block: it copies the streaming sink's filter, keeps the Terraform state in a bucket so it outlives the session, has you fill in terraform.tfvars, and applies only the plan you previewed. Abstract does not read the archive today.
 
    > **This changes:** Adds a second log sink, abstract-org-audit-sink-archive, to your organization, and a bucket for it.
 
-   *Optional:* Skip unless you need to keep logs for evidence or backfill. It is not the detection path; files land minutes to hours later.
+   *Optional:* Skip unless you need to keep logs as evidence in Cloud Storage; Abstract does not read the archive today. It is not the detection path; files land minutes to hours later.
 
    Template: [Archive Google Cloud logs to Cloud Storage: second sink](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-archive-log-bucket)
 
-   **Check:** gcloud logging sinks describe abstract-org-audit-sink-archive --organization=&lt;org-id> points at your bucket, and gcloud storage ls gs://&lt;your-bucket> lists log files within a few hours.
+   ```bash
+   cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-archive-log-bucket"
+   cloudshell launch-tutorial TUTORIAL.md
+   ```
 
-   Google documentation: [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks) · [Route log entries](https://docs.cloud.google.com/logging/docs/routing/overview#destinations) · [Bucket Lock](https://docs.cloud.google.com/storage/docs/bucket-lock)
+   **Check:** gcloud logging sinks describe abstract-org-audit-sink-archive --organization=ORG_ID, with your organization's ID, points at your bucket, and gcloud storage ls gs://YOUR_BUCKET lists log files within a few hours.
 
-14. **Verify (optional).** Cloud admin, in Cloud Shell.
+   Google documentation: [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks) · [Route log entries](https://docs.cloud.google.com/logging/docs/routing/overview#destinations) · [Bucket Lock](https://docs.cloud.google.com/storage/docs/bucket-lock) · [Write tutorials in Cloud Shell](https://docs.cloud.google.com/shell/docs/cloud-shell-tutorials/tutorials)
+
+12. **Verify (optional).** Cloud admin, in Cloud Shell.
 
    Script step 8 creates three alerts and an email channel in the logging project, so you hear when the pipeline stops sending. Google's backlog page recommends the regional metrics. We alert on the global oldest_unacked_message_age anyway: measured on a live subscription it reported every minute, while the regional metric wrote 8 points in 24 hours (docs/public/gcp/TROUBLESHOOTING.md, the backlog check).
 
@@ -239,7 +223,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Alerting overview](https://docs.cloud.google.com/monitoring/alerts) · [Create metric-threshold alerting policies](https://docs.cloud.google.com/monitoring/alerts/using-alerting-ui) · [Monitor Pub/Sub in Cloud Monitoring](https://docs.cloud.google.com/pubsub/docs/monitoring#monitoring_the_backlog). We alert on the global oldest_unacked_message_age anyway: measured on a live subscription it reported every minute, while the regional metric wrote 8 points in 24 hours (docs/public/gcp/TROUBLESHOOTING.md, the backlog check).
 
-15. **Verify.** Cloud admin, in Cloud Shell.
+13. **Verify.** Cloud admin, in Cloud Shell.
 
    Script step 9 writes a harmless admin event inside your scope and waits for it on a probe subscription of its own. It never reads Abstract's subscription. A new sink needs about three minutes before it routes anything, so wait five before deciding it failed.
 
@@ -251,12 +235,23 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [View logs routed to Pub/Sub](https://docs.cloud.google.com/logging/docs/export/pubsub) · [Pull subscriptions](https://docs.cloud.google.com/pubsub/docs/pull) · [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types)
 
-16. **Verify.** Cloud admin, in Cloud Shell.
+14. **Verify.** Cloud admin, in Cloud Shell.
 
    Script step 10 prints the values for the Abstract form, and a cloudshell download line for each file to take with you: the key, your answers file, and the backup of your earlier audit settings if script step 6 changed them. If you ran the setup in Cloud Shell, run those lines, or the ones below, to download the files to the computer you use for Abstract: a session opened from the button is temporary, and the clean-up needs the answers file to know what the setup made. On your own computer the files are already there. If someone else fills in the Abstract form, hand the key over through your password manager or secret-sharing tool, never by email or chat.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 10
+   ```
+
+   **Check:** Script step 10 prints the Project ID, the Subscription ID and the key file for the Abstract form, a cloudshell download line for each file, and, if --grant added roles for this setup, the command that takes each one back once Abstract shows events.
+
+   Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
+
+15. **Verify.** Cloud admin, in Cloud Shell.
+
+   Download the files script step 10 listed to the computer you use for Abstract, if you ran the setup in Cloud Shell. Each line asks your browser to save one file and changes nothing in Google Cloud; a line whose file does not exist does nothing.
+
+   ```bash
    cloudshell download ~/abstract-keys/abstract-pubsub-key.json
    ls ~/abstract-keys/abstract-workspace-key.json 2>/dev/null && cloudshell download ~/abstract-keys/abstract-workspace-key.json
    cloudshell download ~/.abstract-gcp-setup.env
@@ -267,7 +262,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
-17. **Verify.** Abstract admin, in Abstract console.
+16. **Verify.** Abstract admin, in Abstract console.
 
    Add the integration with the values script step 10 printed. Once it saves, delete every copy of the key: the Cloud admin runs rm -f ~/abstract-keys/abstract-pubsub-key.json in Cloud Shell, and you delete the downloaded file.
 
@@ -281,7 +276,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [View logs routed to Pub/Sub](https://docs.cloud.google.com/logging/docs/export/pubsub) · [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
-18. **Verify (optional).** Abstract admin, in Abstract console.
+17. **Verify (optional).** Abstract admin, in Abstract console.
 
    Add the Workspace integration with the values script step 10 printed. Once it saves, delete every copy of the Workspace key: rm -f ~/abstract-keys/abstract-workspace-key.json in Cloud Shell, and the downloaded file.
 
@@ -297,9 +292,9 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Choose Reports API scopes](https://developers.google.com/workspace/admin/reports/auth#scopes) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
-19. **Clean up.** Cloud admin, in Cloud Shell.
+18. **Clean up.** Cloud admin, in Cloud Shell.
 
-   Delete the integrations in Abstract first, so they stop reading. Then list what the clean-up would remove; this deletes nothing. It reads your answers file, ~/.abstract-gcp-setup.env. In the session where you ran the setup it is already there. In a new Cloud Shell session, upload the copy you downloaded (More, then Upload); if it is saved under another name, put that path after --state. The clean-up removes only what the guided setup recorded creating, and never the logging project. Lost the file? --remove --project &lt;logging-project-id> lists what carries the setup's names and deletes nothing.
+   Delete the integrations in Abstract first, so they stop reading. Then list what the clean-up would remove; this deletes nothing. It reads your answers file, ~/.abstract-gcp-setup.env. In the session where you ran the setup it is already there. In a new Cloud Shell session, upload the copy you downloaded (More, then Upload); if it is saved under another name, put that path after --state. The clean-up removes only what the guided setup recorded creating, and never the logging project. Lost the file? --remove --project LOGGING_PROJECT_ID lists what carries the setup's names and deletes nothing.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove
@@ -309,15 +304,15 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files)
 
-20. **Clean up.** Cloud admin, in Cloud Shell.
+19. **Clean up.** Cloud admin, in Cloud Shell.
 
-   When the list is right, remove it. Anything that existed before you started, such as Data Access audit settings, is listed by hand with the command to change it, never removed. If you set up Workspace, a Workspace super admin also removes its domain-wide delegation entry.
+   When the list is right, remove it. Anything that existed before you started, such as Data Access audit settings, is listed by hand with the command to change it, never removed. If you set up Workspace, a Workspace super admin also removes its domain-wide delegation entry. To start again from scratch instead, --teardown lists everything the setup and the templates make across your organization, whatever the answers file recorded, and deletes it only with --teardown --confirm, after you type the organization ID; projects and Terraform state are listed with their commands, never deleted.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm
    ```
 
-   **Check:** Every item shows as removed, kept or by hand; act on each by-hand line. Then --remove --project &lt;logging-project-id> finds nothing that carries the setup's names, except what you chose to keep.
+   **Check:** Every item shows as removed, kept or by hand; act on each by-hand line. Then --remove --project LOGGING_PROJECT_ID (your logging project's ID) finds nothing that carries the setup's names, except what you chose to keep.
 
    Google documentation: [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) · [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation) · [Create and delete service account keys](https://docs.cloud.google.com/iam/docs/keys-create-delete#creating)
 
@@ -333,35 +328,46 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 1. **Check first.** Cloud admin, in Cloud Shell, or any terminal with gcloud.
 
-   Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Every command from here on runs from the top folder of the templates repository.
+   Open the guided setup in Cloud Shell and sign in. The sign-in is the last line on purpose: it waits for you to open a link and paste back a code, so nothing may follow it in the same paste. Every command from here on runs from the top folder of the templates repository.
 
-   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Google opens a repository that is not its own in a temporary Cloud Shell that starts signed out, so start with the sign-in line; the guided script also offers to sign in, or switch account, on its first screen. When a temporary session ends, your answers, the key and the backup of your audit settings go with it. If your run may pause before script step 10, open Cloud Shell from the Google Cloud console instead, where your home folder is kept, and run every line, git clone included. Anywhere else, the clone line fetches the repository; without it the scripts are not found ("no such file or directory").
+   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Google opens a repository that is not its own in a temporary Cloud Shell that starts signed out, so sign in before anything else runs; the guided script also offers to sign in, or switch account, on its first screen. When a temporary session ends, your answers, the key and the backup of your audit settings go with it. If your run may pause before script step 10, open Cloud Shell from the Google Cloud console instead, where your home folder is kept, and run every line, git clone included. Anywhere else, the clone line fetches the repository; without it the scripts are not found ("no such file or directory").
 
    ```bash
-   gcloud auth login --update-adc
    git clone https://github.com/IamABS3C/abstract-cloud-templates && cd abstract-cloud-templates
    cd "$(git rev-parse --show-toplevel)"
-   ./tools/gcp-guided-setup/audit-gcp-estate.sh
+   gcloud auth login --update-adc
    ```
 
-   **Check:** The audit prints your organization and lists the log sinks set on it. If one already sends audit logs to a topic, tell whoever owns it before you add a second. Sinks on a folder or a project are listed by script step 4, at your scope, before it adds one.
+   **Check:** gcloud prints "You are now logged in as" and your account. If it shows another account, run the sign-in line again and choose the right one in the browser.
 
-   Google documentation: [Open in Cloud Shell](https://docs.cloud.google.com/shell/docs/open-in-cloud-shell#required_url_parameter) · [Use Cloud Shell](https://docs.cloud.google.com/shell/docs/using-cloud-shell#choose_ephemeral_mode) · [gcloud auth login](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login) · [Route log entries](https://docs.cloud.google.com/logging/docs/routing/overview#destinations)
+   Google documentation: [Open in Cloud Shell](https://docs.cloud.google.com/shell/docs/open-in-cloud-shell#required_url_parameter) · [Use Cloud Shell](https://docs.cloud.google.com/shell/docs/using-cloud-shell#choose_ephemeral_mode) · [gcloud auth login](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login)
 
 2. **Check first.** Cloud admin, in Cloud Shell.
 
-   Script steps 1 and 2: confirm who you are signed in as, choose your scope, and check you hold the rights the sink needs before anything is created. The one people lack is Logs Configuration Writer (roles/logging.configWriter) at your scope: the organization, folder or project you choose. At the organization, Organization Admin does not include it. Your rights in the logging project, and the organization policy that can block the service-account key (iam.disableServiceAccountKeyCreation, or its managed successor iam.managed.disableServiceAccountKeyCreation), are checked in script step 3, once that project is chosen.
+   Take stock of what you already have, then script step 1: confirm who you are signed in as and choose your scope (the organization, a folder or a project). The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Script step 1 asks its questions, so it is the last line of this block.
 
    ```bash
+   ./tools/gcp-guided-setup/audit-gcp-estate.sh
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+   ```
+
+   **Check:** The audit prints your organization and lists the log sinks set on it. If one already sends audit logs to a topic, tell whoever owns it before you add a second. Sinks on a folder or a project are listed by script step 4, at your scope, before it adds one. Script step 1 shows a ✓ for your account, your organization and the scope you chose.
+
+   Google documentation: [Route log entries](https://docs.cloud.google.com/logging/docs/routing/overview#destinations) · [Aggregated sinks overview](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks_overview)
+
+3. **Check first.** Cloud admin, in Cloud Shell.
+
+   Script step 2: check you hold the rights the sink needs before anything is created. The one people lack is Logs Configuration Writer (roles/logging.configWriter) at your scope: the organization, folder or project you chose. At the organization, Organization Admin does not include it. Your rights in the logging project, and the organization policy that can block the service-account key (iam.disableServiceAccountKeyCreation, or its managed successor iam.managed.disableServiceAccountKeyCreation), are checked in script step 3, once that project is chosen. Missing a role? The guided script lists every role it needs, what each is for and whether it is required, with --grant and the email of the person who runs the setup (add --check to see which they hold, changing nothing); run without --check by someone who can set IAM policy at your scope, it grants them one binding at a time and records each, so the clean-up can list the command that takes it back.
+
+   ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
    ```
 
    **Check:** Script step 2 shows a ✓ for creating the log sink at your scope. A ✗ names the role you lack and the command an admin runs to grant it. A ! saying the logging project is not checked yet is expected the first time.
 
-   Google documentation: [Cloud Logging roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/logging#logging.configWriter) · [Access control with IAM](https://docs.cloud.google.com/logging/docs/access-control) · [Method: organizations.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/organizations/testIamPermissions) · [Method: folders.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/folders/testIamPermissions) · [Method: projects.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/testIamPermissions) · [Aggregated sinks overview](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks_overview)
+   Google documentation: [Cloud Logging roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/logging#logging.configWriter) · [Access control with IAM](https://docs.cloud.google.com/logging/docs/access-control) · [Method: organizations.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/organizations/testIamPermissions) · [Method: folders.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/folders/testIamPermissions) · [Method: projects.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/testIamPermissions) · [Manage access to projects, folders, and organizations](https://docs.cloud.google.com/iam/docs/granting-changing-revoking-access#grant-single-role)
 
-3. **Foundation.** Cloud admin, in Cloud Shell.
+4. **Foundation.** Cloud admin, in Cloud Shell.
 
    Script step 3: create a dedicated logging project, or choose one you already use for security tooling, and turn on its APIs. Keep it separate from workload projects. Everything Abstract reads lives here. The script then checks your rights in the project and whether an organization policy blocks the service-account key, before script step 4 builds anything.
 
@@ -375,7 +381,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Create projects](https://docs.cloud.google.com/resource-manager/docs/creating-managing-projects) · [Enable and disable services](https://docs.cloud.google.com/service-usage/docs/enable-disable#enabling) · [Enable, disable, or change billing for a project](https://docs.cloud.google.com/billing/docs/how-to/modify-project#enable_billing_for_an_existing_project) · [Restrict IAM service account usage](https://docs.cloud.google.com/organization-policy/restrict-service-accounts#boolean_constraints) · [Organization policy constraints](https://docs.cloud.google.com/organization-policy/reference/org-policy-constraints)
 
-4. **Set up.** Cloud admin, in Cloud Shell.
+5. **Set up.** Cloud admin, in Cloud Shell.
 
    Script step 4, with the folder you chose in script step 1: create the topic and subscription, then the folder sink, and let the sink's writer identity (the Google-managed account the sink publishes as) publish to the topic.
 
@@ -387,11 +393,11 @@ The sink's scope decides what is covered. Projects created later inside the scop
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4
    ```
 
-   **Check:** Script step 4 shows a ✓ for the sink sending to the topic, covering child projects (not shown for a project sink), and "the sink's own identity can publish". To see the grant yourself, gcloud pubsub topics get-iam-policy abstract-audit-logs --project=&lt;logging-project-id> lists the sink's writer identity under roles/pubsub.publisher.
+   **Check:** Script step 4 shows a ✓ for the sink sending to the topic, covering child projects (not shown for a project sink), and "the sink's own identity can publish". To see the grant yourself, gcloud pubsub topics get-iam-policy abstract-audit-logs --project=LOGGING_PROJECT_ID (your logging project's ID) lists the sink's writer identity under roles/pubsub.publisher.
 
    Google documentation: [Collate and route organization- and folder-level logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks#aggregated-sinks) · [Route logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/configure_export_v2#dest-auth) · [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription) · [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)
 
-5. **Set up.** Cloud admin, in Cloud Shell.
+6. **Set up.** Cloud admin, in Cloud Shell.
 
    Script step 5: create the service account Abstract signs in as. It can read only the one subscription. Its key is written to ~/abstract-keys, outside any repository. In a temporary Cloud Shell session, download the key as soon as script step 5 makes it, with cloudshell download ~/abstract-keys/abstract-pubsub-key.json, so a session that ends early does not take it with it. Script step 10 prints the same line again.
 
@@ -403,7 +409,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create#creating) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles) · [Create and delete service account keys](https://docs.cloud.google.com/iam/docs/keys-create-delete#creating) · [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files)
 
-6. **Set up (optional).** Cloud admin, in Cloud Shell.
+7. **Set up (optional).** Cloud admin, in Cloud Shell.
 
    Script step 6: turn on Data Access audit logs and route them. Both switches are needed: the audit settings make Google write the logs, and the sink filter sends them. For most services either alone does nothing; BigQuery writes its Data Access logs by default, so it needs only the routing switch. Keep the suggested services: iam.googleapis.com and sts.googleapis.com record identity, and the script routes their events (as iamcredentials.googleapis.com and sts.googleapis.com) for you.
 
@@ -421,7 +427,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types) · [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) · [Service Account Credentials audit logging](https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-iamcreds) · [Security Token Service audit logging](https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-sts)
 
-7. **Set up (optional).** Cloud admin and a Workspace super admin, in Cloud Shell, then admin.google.com.
+8. **Set up (optional).** Cloud admin and a Workspace super admin, in Cloud Shell, then admin.google.com.
 
    Script step 7: create the Workspace reader account. A Workspace super admin then allows it in admin.google.com, under Security, Access and data control, API controls, Domain-wide delegation, with the Client ID and the one read-only scope the script prints (admin.reports.audit.readonly).
 
@@ -435,13 +441,13 @@ The sink's scope decides what is covered. Projects created later inside the scop
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 7
    ```
 
-   **Check:** Script step 7 shows a ✓ "delegation works: the Reports API answered as" your admin. The delegation can take a few minutes after the super admin saves it; run script step 7 again until it does.
+   **Check:** Script step 7 shows a ✓ "delegation works: the Reports API answered as" your admin. The delegation can take a few minutes after the super admin saves it; run script step 7 again with --check at the end until it does. Check before you upload or delete the key: the check signs in with the key file.
 
    Google documentation: [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create#creating) · [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation) · [Choose Reports API scopes](https://developers.google.com/workspace/admin/reports/auth#scopes)
 
-8. **Set up (optional).** Cloud admin, in Cloud Shell.
+9. **Set up (optional).** Cloud admin, in Cloud Shell.
 
-   Notify a topic for each new object in that bucket, so Abstract fetches it. Open the template's Cloud Shell tutorial and follow it. Abstract stores the objects' content only once a parser for their format is attached to this subscription's own integration; the managed GCP Pub/Sub Source parser keeps only Cloud Audit Log records. Ask Abstract for that parser first, with a real file from the product.
+   This step uses Terraform, because the guided script builds only the audit-log pipeline, and watching a bucket needs a notification on each bucket and a grant in each project that owns one, which the template sets from your list. The commands below open the template's tutorial in Cloud Shell's tutorial pane, one command per block: it keeps the Terraform state in a bucket so it outlives the session, has you fill in terraform.tfvars, and applies only the plan you previewed. It notifies a topic for each new object, so Abstract fetches it. Abstract stores the objects' content only once a parser for their format is attached to this subscription's own integration; the managed GCP Pub/Sub Source parser keeps only Cloud Audit Log records. Ask Abstract for that parser first, with a real file from the product.
 
    > **This changes:** Adds a Pub/Sub notification to each bucket you name, and lets Abstract's reader account read their objects.
 
@@ -449,11 +455,16 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Template: [Cloud Storage bucket logs to Abstract: object notifications](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-cloud-storage-bucket-logs)
 
-   **Check:** gcloud storage buckets notifications list gs://&lt;your-bucket> shows a notification on the topic abstract-gcs-notifications.
+   ```bash
+   cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-cloud-storage-bucket-logs"
+   cloudshell launch-tutorial TUTORIAL.md
+   ```
 
-   Google documentation: [Pub/Sub notifications for Cloud Storage](https://docs.cloud.google.com/storage/docs/pubsub-notifications) · [Create a topic](https://docs.cloud.google.com/pubsub/docs/create-topic) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles)
+   **Check:** gcloud storage buckets notifications list gs://YOUR_BUCKET, with your bucket's name, shows a notification on the topic abstract-gcs-notifications.
 
-9. **Verify (optional).** Cloud admin, in Cloud Shell.
+   Google documentation: [Pub/Sub notifications for Cloud Storage](https://docs.cloud.google.com/storage/docs/pubsub-notifications) · [Create a topic](https://docs.cloud.google.com/pubsub/docs/create-topic) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles) · [Write tutorials in Cloud Shell](https://docs.cloud.google.com/shell/docs/cloud-shell-tutorials/tutorials)
+
+10. **Verify (optional).** Cloud admin, in Cloud Shell.
 
    Script step 8 creates three alerts and an email channel in the logging project, so you hear when the pipeline stops sending. Google's backlog page recommends the regional metrics. We alert on the global oldest_unacked_message_age anyway: measured on a live subscription it reported every minute, while the regional metric wrote 8 points in 24 hours (docs/public/gcp/TROUBLESHOOTING.md, the backlog check).
 
@@ -469,7 +480,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Alerting overview](https://docs.cloud.google.com/monitoring/alerts) · [Create metric-threshold alerting policies](https://docs.cloud.google.com/monitoring/alerts/using-alerting-ui) · [Monitor Pub/Sub in Cloud Monitoring](https://docs.cloud.google.com/pubsub/docs/monitoring#monitoring_the_backlog). We alert on the global oldest_unacked_message_age anyway: measured on a live subscription it reported every minute, while the regional metric wrote 8 points in 24 hours (docs/public/gcp/TROUBLESHOOTING.md, the backlog check).
 
-10. **Verify.** Cloud admin, in Cloud Shell.
+11. **Verify.** Cloud admin, in Cloud Shell.
 
    Script step 9 writes a harmless admin event inside your scope and waits for it on a probe subscription of its own. It never reads Abstract's subscription. A new sink needs about three minutes before it routes anything, so wait five before deciding it failed.
 
@@ -481,12 +492,23 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [View logs routed to Pub/Sub](https://docs.cloud.google.com/logging/docs/export/pubsub) · [Pull subscriptions](https://docs.cloud.google.com/pubsub/docs/pull) · [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types)
 
-11. **Verify.** Cloud admin, in Cloud Shell.
+12. **Verify.** Cloud admin, in Cloud Shell.
 
    Script step 10 prints the values for the Abstract form, and a cloudshell download line for each file to take with you: the key, your answers file, and the backup of your earlier audit settings if script step 6 changed them. If you ran the setup in Cloud Shell, run those lines, or the ones below, to download the files to the computer you use for Abstract: a session opened from the button is temporary, and the clean-up needs the answers file to know what the setup made. On your own computer the files are already there. If someone else fills in the Abstract form, hand the key over through your password manager or secret-sharing tool, never by email or chat.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 10
+   ```
+
+   **Check:** Script step 10 prints the Project ID, the Subscription ID and the key file for the Abstract form, a cloudshell download line for each file, and, if --grant added roles for this setup, the command that takes each one back once Abstract shows events.
+
+   Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
+
+13. **Verify.** Cloud admin, in Cloud Shell.
+
+   Download the files script step 10 listed to the computer you use for Abstract, if you ran the setup in Cloud Shell. Each line asks your browser to save one file and changes nothing in Google Cloud; a line whose file does not exist does nothing.
+
+   ```bash
    cloudshell download ~/abstract-keys/abstract-pubsub-key.json
    ls ~/abstract-keys/abstract-workspace-key.json 2>/dev/null && cloudshell download ~/abstract-keys/abstract-workspace-key.json
    cloudshell download ~/.abstract-gcp-setup.env
@@ -497,7 +519,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
-12. **Verify.** Abstract admin, in Abstract console.
+14. **Verify.** Abstract admin, in Abstract console.
 
    Add the integration with the values script step 10 printed. Once it saves, delete every copy of the key: the Cloud admin runs rm -f ~/abstract-keys/abstract-pubsub-key.json in Cloud Shell, and you delete the downloaded file.
 
@@ -511,7 +533,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [View logs routed to Pub/Sub](https://docs.cloud.google.com/logging/docs/export/pubsub) · [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
-13. **Verify (optional).** Abstract admin, in Abstract console.
+15. **Verify (optional).** Abstract admin, in Abstract console.
 
    Add the Workspace integration with the values script step 10 printed. Once it saves, delete every copy of the Workspace key: rm -f ~/abstract-keys/abstract-workspace-key.json in Cloud Shell, and the downloaded file.
 
@@ -527,9 +549,9 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Choose Reports API scopes](https://developers.google.com/workspace/admin/reports/auth#scopes) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
-14. **Clean up.** Cloud admin, in Cloud Shell.
+16. **Clean up.** Cloud admin, in Cloud Shell.
 
-   Delete the integrations in Abstract first, so they stop reading. Then list what the clean-up would remove; this deletes nothing. It reads your answers file, ~/.abstract-gcp-setup.env. In the session where you ran the setup it is already there. In a new Cloud Shell session, upload the copy you downloaded (More, then Upload); if it is saved under another name, put that path after --state. The clean-up removes only what the guided setup recorded creating, and never the logging project. Lost the file? --remove --project &lt;logging-project-id> lists what carries the setup's names and deletes nothing.
+   Delete the integrations in Abstract first, so they stop reading. Then list what the clean-up would remove; this deletes nothing. It reads your answers file, ~/.abstract-gcp-setup.env. In the session where you ran the setup it is already there. In a new Cloud Shell session, upload the copy you downloaded (More, then Upload); if it is saved under another name, put that path after --state. The clean-up removes only what the guided setup recorded creating, and never the logging project. Lost the file? --remove --project LOGGING_PROJECT_ID lists what carries the setup's names and deletes nothing.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove
@@ -539,15 +561,15 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files)
 
-15. **Clean up.** Cloud admin, in Cloud Shell.
+17. **Clean up.** Cloud admin, in Cloud Shell.
 
-   When the list is right, remove it. Anything that existed before you started, such as Data Access audit settings, is listed by hand with the command to change it, never removed. If you set up Workspace, a Workspace super admin also removes its domain-wide delegation entry.
+   When the list is right, remove it. Anything that existed before you started, such as Data Access audit settings, is listed by hand with the command to change it, never removed. If you set up Workspace, a Workspace super admin also removes its domain-wide delegation entry. To start again from scratch instead, --teardown lists everything the setup and the templates make across your organization, whatever the answers file recorded, and deletes it only with --teardown --confirm, after you type the organization ID; projects and Terraform state are listed with their commands, never deleted.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm
    ```
 
-   **Check:** Every item shows as removed, kept or by hand; act on each by-hand line. Then --remove --project &lt;logging-project-id> finds nothing that carries the setup's names, except what you chose to keep.
+   **Check:** Every item shows as removed, kept or by hand; act on each by-hand line. Then --remove --project LOGGING_PROJECT_ID (your logging project's ID) finds nothing that carries the setup's names, except what you chose to keep.
 
    Google documentation: [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) · [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation) · [Create and delete service account keys](https://docs.cloud.google.com/iam/docs/keys-create-delete#creating)
 
@@ -563,35 +585,46 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
 1. **Check first.** Cloud admin, in Cloud Shell, or any terminal with gcloud.
 
-   Open the guided setup in Cloud Shell, sign in, and take stock of what you already have. The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Every command from here on runs from the top folder of the templates repository.
+   Open the guided setup in Cloud Shell and sign in. The sign-in is the last line on purpose: it waits for you to open a link and paste back a code, so nothing may follow it in the same paste. Every command from here on runs from the top folder of the templates repository.
 
-   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Google opens a repository that is not its own in a temporary Cloud Shell that starts signed out, so start with the sign-in line; the guided script also offers to sign in, or switch account, on its first screen. When a temporary session ends, your answers, the key and the backup of your audit settings go with it. If your run may pause before script step 10, open Cloud Shell from the Google Cloud console instead, where your home folder is kept, and run every line, git clone included. Anywhere else, the clone line fetches the repository; without it the scripts are not found ("no such file or directory").
+   *Note:* Opened Cloud Shell from the button? You are already in the repository: skip the git clone line, and the next line moves you to its top folder (the button opens in tools/gcp-guided-setup). Google opens a repository that is not its own in a temporary Cloud Shell that starts signed out, so sign in before anything else runs; the guided script also offers to sign in, or switch account, on its first screen. When a temporary session ends, your answers, the key and the backup of your audit settings go with it. If your run may pause before script step 10, open Cloud Shell from the Google Cloud console instead, where your home folder is kept, and run every line, git clone included. Anywhere else, the clone line fetches the repository; without it the scripts are not found ("no such file or directory").
 
    ```bash
-   gcloud auth login --update-adc
    git clone https://github.com/IamABS3C/abstract-cloud-templates && cd abstract-cloud-templates
    cd "$(git rev-parse --show-toplevel)"
-   ./tools/gcp-guided-setup/audit-gcp-estate.sh
+   gcloud auth login --update-adc
    ```
 
-   **Check:** The audit prints your organization and lists the log sinks set on it. If one already sends audit logs to a topic, tell whoever owns it before you add a second. Sinks on a folder or a project are listed by script step 4, at your scope, before it adds one.
+   **Check:** gcloud prints "You are now logged in as" and your account. If it shows another account, run the sign-in line again and choose the right one in the browser.
 
-   Google documentation: [Open in Cloud Shell](https://docs.cloud.google.com/shell/docs/open-in-cloud-shell#required_url_parameter) · [Use Cloud Shell](https://docs.cloud.google.com/shell/docs/using-cloud-shell#choose_ephemeral_mode) · [gcloud auth login](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login) · [Route log entries](https://docs.cloud.google.com/logging/docs/routing/overview#destinations)
+   Google documentation: [Open in Cloud Shell](https://docs.cloud.google.com/shell/docs/open-in-cloud-shell#required_url_parameter) · [Use Cloud Shell](https://docs.cloud.google.com/shell/docs/using-cloud-shell#choose_ephemeral_mode) · [gcloud auth login](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login)
 
 2. **Check first.** Cloud admin, in Cloud Shell.
 
-   Script steps 1 and 2: confirm who you are signed in as, choose your scope, and check you hold the rights the sink needs before anything is created. The one people lack is Logs Configuration Writer (roles/logging.configWriter) at your scope: the organization, folder or project you choose. At the organization, Organization Admin does not include it. Your rights in the logging project, and the organization policy that can block the service-account key (iam.disableServiceAccountKeyCreation, or its managed successor iam.managed.disableServiceAccountKeyCreation), are checked in script step 3, once that project is chosen.
+   Take stock of what you already have, then script step 1: confirm who you are signed in as and choose your scope (the organization, a folder or a project). The estate audit is read-only: it lists your organization, folders, projects, existing log sinks, Pub/Sub topics and audit settings. Nothing changes. Script step 1 asks its questions, so it is the last line of this block.
 
    ```bash
+   ./tools/gcp-guided-setup/audit-gcp-estate.sh
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
+   ```
+
+   **Check:** The audit prints your organization and lists the log sinks set on it. If one already sends audit logs to a topic, tell whoever owns it before you add a second. Sinks on a folder or a project are listed by script step 4, at your scope, before it adds one. Script step 1 shows a ✓ for your account, your organization and the scope you chose.
+
+   Google documentation: [Route log entries](https://docs.cloud.google.com/logging/docs/routing/overview#destinations) · [Aggregated sinks overview](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks_overview)
+
+3. **Check first.** Cloud admin, in Cloud Shell.
+
+   Script step 2: check you hold the rights the sink needs before anything is created. The one people lack is Logs Configuration Writer (roles/logging.configWriter) at your scope: the organization, folder or project you chose. At the organization, Organization Admin does not include it. Your rights in the logging project, and the organization policy that can block the service-account key (iam.disableServiceAccountKeyCreation, or its managed successor iam.managed.disableServiceAccountKeyCreation), are checked in script step 3, once that project is chosen. Missing a role? The guided script lists every role it needs, what each is for and whether it is required, with --grant and the email of the person who runs the setup (add --check to see which they hold, changing nothing); run without --check by someone who can set IAM policy at your scope, it grants them one binding at a time and records each, so the clean-up can list the command that takes it back.
+
+   ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 2
    ```
 
    **Check:** Script step 2 shows a ✓ for creating the log sink at your scope. A ✗ names the role you lack and the command an admin runs to grant it. A ! saying the logging project is not checked yet is expected the first time.
 
-   Google documentation: [Cloud Logging roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/logging#logging.configWriter) · [Access control with IAM](https://docs.cloud.google.com/logging/docs/access-control) · [Method: organizations.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/organizations/testIamPermissions) · [Method: folders.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/folders/testIamPermissions) · [Method: projects.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/testIamPermissions) · [Aggregated sinks overview](https://docs.cloud.google.com/logging/docs/export/aggregated_sinks_overview)
+   Google documentation: [Cloud Logging roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/logging#logging.configWriter) · [Access control with IAM](https://docs.cloud.google.com/logging/docs/access-control) · [Method: organizations.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/organizations/testIamPermissions) · [Method: folders.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/folders/testIamPermissions) · [Method: projects.testIamPermissions](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/testIamPermissions) · [Manage access to projects, folders, and organizations](https://docs.cloud.google.com/iam/docs/granting-changing-revoking-access#grant-single-role)
 
-3. **Foundation.** Cloud admin, in Cloud Shell.
+4. **Foundation.** Cloud admin, in Cloud Shell.
 
    Script step 3: create a dedicated logging project, or choose one you already use for security tooling, and turn on its APIs. Keep it separate from workload projects. Everything Abstract reads lives here. The script then checks your rights in the project and whether an organization policy blocks the service-account key, before script step 4 builds anything.
 
@@ -605,7 +638,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Create projects](https://docs.cloud.google.com/resource-manager/docs/creating-managing-projects) · [Enable and disable services](https://docs.cloud.google.com/service-usage/docs/enable-disable#enabling) · [Enable, disable, or change billing for a project](https://docs.cloud.google.com/billing/docs/how-to/modify-project#enable_billing_for_an_existing_project) · [Restrict IAM service account usage](https://docs.cloud.google.com/organization-policy/restrict-service-accounts#boolean_constraints) · [Organization policy constraints](https://docs.cloud.google.com/organization-policy/reference/org-policy-constraints)
 
-4. **Set up.** Cloud admin, in Cloud Shell.
+5. **Set up.** Cloud admin, in Cloud Shell.
 
    Script step 4, with the project you chose in script step 1: create the topic and subscription, then the project sink, and let the sink's writer identity (the Google-managed account the sink publishes as) publish to the topic.
 
@@ -617,11 +650,11 @@ The sink's scope decides what is covered. Projects created later inside the scop
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4
    ```
 
-   **Check:** Script step 4 shows a ✓ for the sink sending to the topic, covering child projects (not shown for a project sink), and "the sink's own identity can publish". To see the grant yourself, gcloud pubsub topics get-iam-policy abstract-audit-logs --project=&lt;logging-project-id> lists the sink's writer identity under roles/pubsub.publisher.
+   **Check:** Script step 4 shows a ✓ for the sink sending to the topic, covering child projects (not shown for a project sink), and "the sink's own identity can publish". To see the grant yourself, gcloud pubsub topics get-iam-policy abstract-audit-logs --project=LOGGING_PROJECT_ID (your logging project's ID) lists the sink's writer identity under roles/pubsub.publisher.
 
    Google documentation: [Route logs to supported destinations](https://docs.cloud.google.com/logging/docs/export/configure_export_v2#creating_sink) · [Create a topic](https://docs.cloud.google.com/pubsub/docs/create-topic) · [Create pull subscriptions](https://docs.cloud.google.com/pubsub/docs/create-subscription#create_a_pull_subscription) · [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)
 
-5. **Set up.** Cloud admin, in Cloud Shell.
+6. **Set up.** Cloud admin, in Cloud Shell.
 
    Script step 5: create the service account Abstract signs in as. It can read only the one subscription. Its key is written to ~/abstract-keys, outside any repository. In a temporary Cloud Shell session, download the key as soon as script step 5 makes it, with cloudshell download ~/abstract-keys/abstract-pubsub-key.json, so a session that ends early does not take it with it. Script step 10 prints the same line again.
 
@@ -633,7 +666,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create#creating) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles) · [Create and delete service account keys](https://docs.cloud.google.com/iam/docs/keys-create-delete#creating) · [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files)
 
-6. **Set up (optional).** Cloud admin, in Cloud Shell.
+7. **Set up (optional).** Cloud admin, in Cloud Shell.
 
    Script step 6: turn on Data Access audit logs and route them. Both switches are needed: the audit settings make Google write the logs, and the sink filter sends them. For most services either alone does nothing; BigQuery writes its Data Access logs by default, so it needs only the routing switch. Keep the suggested services: iam.googleapis.com and sts.googleapis.com record identity, and the script routes their events (as iamcredentials.googleapis.com and sts.googleapis.com) for you.
 
@@ -651,7 +684,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types) · [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) · [Service Account Credentials audit logging](https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-iamcreds) · [Security Token Service audit logging](https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-sts)
 
-7. **Set up (optional).** Cloud admin and a Workspace super admin, in Cloud Shell, then admin.google.com.
+8. **Set up (optional).** Cloud admin and a Workspace super admin, in Cloud Shell, then admin.google.com.
 
    Script step 7: create the Workspace reader account. A Workspace super admin then allows it in admin.google.com, under Security, Access and data control, API controls, Domain-wide delegation, with the Client ID and the one read-only scope the script prints (admin.reports.audit.readonly).
 
@@ -665,13 +698,13 @@ The sink's scope decides what is covered. Projects created later inside the scop
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 7
    ```
 
-   **Check:** Script step 7 shows a ✓ "delegation works: the Reports API answered as" your admin. The delegation can take a few minutes after the super admin saves it; run script step 7 again until it does.
+   **Check:** Script step 7 shows a ✓ "delegation works: the Reports API answered as" your admin. The delegation can take a few minutes after the super admin saves it; run script step 7 again with --check at the end until it does. Check before you upload or delete the key: the check signs in with the key file.
 
    Google documentation: [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create#creating) · [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation) · [Choose Reports API scopes](https://developers.google.com/workspace/admin/reports/auth#scopes)
 
-8. **Set up (optional).** Cloud admin, in Cloud Shell.
+9. **Set up (optional).** Cloud admin, in Cloud Shell.
 
-   Notify a topic for each new object in that bucket, so Abstract fetches it. Open the template's Cloud Shell tutorial and follow it. Abstract stores the objects' content only once a parser for their format is attached to this subscription's own integration; the managed GCP Pub/Sub Source parser keeps only Cloud Audit Log records. Ask Abstract for that parser first, with a real file from the product.
+   This step uses Terraform, because the guided script builds only the audit-log pipeline, and watching a bucket needs a notification on each bucket and a grant in each project that owns one, which the template sets from your list. The commands below open the template's tutorial in Cloud Shell's tutorial pane, one command per block: it keeps the Terraform state in a bucket so it outlives the session, has you fill in terraform.tfvars, and applies only the plan you previewed. It notifies a topic for each new object, so Abstract fetches it. Abstract stores the objects' content only once a parser for their format is attached to this subscription's own integration; the managed GCP Pub/Sub Source parser keeps only Cloud Audit Log records. Ask Abstract for that parser first, with a real file from the product.
 
    > **This changes:** Adds a Pub/Sub notification to each bucket you name, and lets Abstract's reader account read their objects.
 
@@ -679,11 +712,16 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Template: [Cloud Storage bucket logs to Abstract: object notifications](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-cloud-storage-bucket-logs)
 
-   **Check:** gcloud storage buckets notifications list gs://&lt;your-bucket> shows a notification on the topic abstract-gcs-notifications.
+   ```bash
+   cd "$(git rev-parse --show-toplevel)/templates/gcp/gcp-source-cloud-storage-bucket-logs"
+   cloudshell launch-tutorial TUTORIAL.md
+   ```
 
-   Google documentation: [Pub/Sub notifications for Cloud Storage](https://docs.cloud.google.com/storage/docs/pubsub-notifications) · [Create a topic](https://docs.cloud.google.com/pubsub/docs/create-topic) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles)
+   **Check:** gcloud storage buckets notifications list gs://YOUR_BUCKET, with your bucket's name, shows a notification on the topic abstract-gcs-notifications.
 
-9. **Verify (optional).** Cloud admin, in Cloud Shell.
+   Google documentation: [Pub/Sub notifications for Cloud Storage](https://docs.cloud.google.com/storage/docs/pubsub-notifications) · [Create a topic](https://docs.cloud.google.com/pubsub/docs/create-topic) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles) · [Write tutorials in Cloud Shell](https://docs.cloud.google.com/shell/docs/cloud-shell-tutorials/tutorials)
+
+10. **Verify (optional).** Cloud admin, in Cloud Shell.
 
    Script step 8 creates three alerts and an email channel in the logging project, so you hear when the pipeline stops sending. Google's backlog page recommends the regional metrics. We alert on the global oldest_unacked_message_age anyway: measured on a live subscription it reported every minute, while the regional metric wrote 8 points in 24 hours (docs/public/gcp/TROUBLESHOOTING.md, the backlog check).
 
@@ -699,7 +737,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Alerting overview](https://docs.cloud.google.com/monitoring/alerts) · [Create metric-threshold alerting policies](https://docs.cloud.google.com/monitoring/alerts/using-alerting-ui) · [Monitor Pub/Sub in Cloud Monitoring](https://docs.cloud.google.com/pubsub/docs/monitoring#monitoring_the_backlog). We alert on the global oldest_unacked_message_age anyway: measured on a live subscription it reported every minute, while the regional metric wrote 8 points in 24 hours (docs/public/gcp/TROUBLESHOOTING.md, the backlog check).
 
-10. **Verify.** Cloud admin, in Cloud Shell.
+11. **Verify.** Cloud admin, in Cloud Shell.
 
    Script step 9 writes a harmless admin event inside your scope and waits for it on a probe subscription of its own. It never reads Abstract's subscription. A new sink needs about three minutes before it routes anything, so wait five before deciding it failed.
 
@@ -711,12 +749,23 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [View logs routed to Pub/Sub](https://docs.cloud.google.com/logging/docs/export/pubsub) · [Pull subscriptions](https://docs.cloud.google.com/pubsub/docs/pull) · [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types)
 
-11. **Verify.** Cloud admin, in Cloud Shell.
+12. **Verify.** Cloud admin, in Cloud Shell.
 
    Script step 10 prints the values for the Abstract form, and a cloudshell download line for each file to take with you: the key, your answers file, and the backup of your earlier audit settings if script step 6 changed them. If you ran the setup in Cloud Shell, run those lines, or the ones below, to download the files to the computer you use for Abstract: a session opened from the button is temporary, and the clean-up needs the answers file to know what the setup made. On your own computer the files are already there. If someone else fills in the Abstract form, hand the key over through your password manager or secret-sharing tool, never by email or chat.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 10
+   ```
+
+   **Check:** Script step 10 prints the Project ID, the Subscription ID and the key file for the Abstract form, a cloudshell download line for each file, and, if --grant added roles for this setup, the command that takes each one back once Abstract shows events.
+
+   Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
+
+13. **Verify.** Cloud admin, in Cloud Shell.
+
+   Download the files script step 10 listed to the computer you use for Abstract, if you ran the setup in Cloud Shell. Each line asks your browser to save one file and changes nothing in Google Cloud; a line whose file does not exist does nothing.
+
+   ```bash
    cloudshell download ~/abstract-keys/abstract-pubsub-key.json
    ls ~/abstract-keys/abstract-workspace-key.json 2>/dev/null && cloudshell download ~/abstract-keys/abstract-workspace-key.json
    cloudshell download ~/.abstract-gcp-setup.env
@@ -727,7 +776,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
-12. **Verify.** Abstract admin, in Abstract console.
+14. **Verify.** Abstract admin, in Abstract console.
 
    Add the integration with the values script step 10 printed. Once it saves, delete every copy of the key: the Cloud admin runs rm -f ~/abstract-keys/abstract-pubsub-key.json in Cloud Shell, and you delete the downloaded file.
 
@@ -741,7 +790,7 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [View logs routed to Pub/Sub](https://docs.cloud.google.com/logging/docs/export/pubsub) · [Subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
-13. **Verify (optional).** Abstract admin, in Abstract console.
+15. **Verify (optional).** Abstract admin, in Abstract console.
 
    Add the Workspace integration with the values script step 10 printed. Once it saves, delete every copy of the Workspace key: rm -f ~/abstract-keys/abstract-workspace-key.json in Cloud Shell, and the downloaded file.
 
@@ -757,9 +806,9 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Choose Reports API scopes](https://developers.google.com/workspace/admin/reports/auth#scopes) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
-14. **Clean up.** Cloud admin, in Cloud Shell.
+16. **Clean up.** Cloud admin, in Cloud Shell.
 
-   Delete the integrations in Abstract first, so they stop reading. Then list what the clean-up would remove; this deletes nothing. It reads your answers file, ~/.abstract-gcp-setup.env. In the session where you ran the setup it is already there. In a new Cloud Shell session, upload the copy you downloaded (More, then Upload); if it is saved under another name, put that path after --state. The clean-up removes only what the guided setup recorded creating, and never the logging project. Lost the file? --remove --project &lt;logging-project-id> lists what carries the setup's names and deletes nothing.
+   Delete the integrations in Abstract first, so they stop reading. Then list what the clean-up would remove; this deletes nothing. It reads your answers file, ~/.abstract-gcp-setup.env. In the session where you ran the setup it is already there. In a new Cloud Shell session, upload the copy you downloaded (More, then Upload); if it is saved under another name, put that path after --state. The clean-up removes only what the guided setup recorded creating, and never the logging project. Lost the file? --remove --project LOGGING_PROJECT_ID lists what carries the setup's names and deletes nothing.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove
@@ -769,19 +818,26 @@ The sink's scope decides what is covered. Projects created later inside the scop
 
    Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files)
 
-15. **Clean up.** Cloud admin, in Cloud Shell.
+17. **Clean up.** Cloud admin, in Cloud Shell.
 
-   When the list is right, remove it. Anything that existed before you started, such as Data Access audit settings, is listed by hand with the command to change it, never removed. If you set up Workspace, a Workspace super admin also removes its domain-wide delegation entry.
+   When the list is right, remove it. Anything that existed before you started, such as Data Access audit settings, is listed by hand with the command to change it, never removed. If you set up Workspace, a Workspace super admin also removes its domain-wide delegation entry. To start again from scratch instead, --teardown lists everything the setup and the templates make across your organization, whatever the answers file recorded, and deletes it only with --teardown --confirm, after you type the organization ID; projects and Terraform state are listed with their commands, never deleted.
 
    ```bash
    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm
    ```
 
-   **Check:** Every item shows as removed, kept or by hand; act on each by-hand line. Then --remove --project &lt;logging-project-id> finds nothing that carries the setup's names, except what you chose to keep.
+   **Check:** Every item shows as removed, kept or by hand; act on each by-hand line. Then --remove --project LOGGING_PROJECT_ID (your logging project's ID) finds nothing that carries the setup's names, except what you chose to keep.
 
    Google documentation: [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) · [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation) · [Create and delete service account keys](https://docs.cloud.google.com/iam/docs/keys-create-delete#creating)
 
+## Not collected by Abstract yet
+
+Abstract does not keep these records today, so deploying one of these templates costs money in the cloud and adds nothing in Abstract.
+
+- [Firewall, DNS and IDS logs to Abstract: filtered sink](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-network-threat-logs): A second sink for firewall, Cloud DNS, load balancer (Cloud Armor) and Cloud IDS logs. Abstract's Google Cloud integration keeps only Cloud Audit Logs, and these are not, so it discards them. Each of these sources is also switched on at its own source, by the team that owns it; whether that is per project, per network or for the whole organization is in docs/gcp/FILTERS.md, Where each source is turned on.
+- [Security Command Center findings to Abstract: notification feed](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-security-command-center-findings): Security Command Center findings, through a notification config to their own topic. Abstract's Google Cloud integration keeps only Cloud Audit Logs, which SCC findings are not.
+- [Asset and IAM changes to Abstract: asset feed](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/gcp/gcp-source-asset-and-iam-changes): Resource and IAM-policy changes, from an organization asset feed to their own topic. Abstract's Google Cloud integration keeps only Cloud Audit Logs, which these change records are not.
+
 ## Not covered yet
 
-- The guided setup script covers the core pipeline. The optional sources run from their own Cloud Shell tutorials (Terraform).
-- Security Command Center findings and network threat logs are collected but not stored until Abstract ships parsers for them.
+- The guided setup script covers the core pipeline. The optional sources that use Terraform say so, and why, in their first sentence.

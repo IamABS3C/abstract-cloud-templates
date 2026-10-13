@@ -1,7 +1,7 @@
 {
  "frame": {
   "title": "A second sink keeps an archive in Cloud Storage",
-  "subtitle": "For evidence and backfill, not detection: storage batches, so files land minutes to hours later",
+  "subtitle": "Evidence kept in Cloud Storage, not detection: storage batches, so files land minutes to hours later",
   "cloud_label": "Your Google Cloud organization",
   "height": 560,
   "abstract_y": 250,

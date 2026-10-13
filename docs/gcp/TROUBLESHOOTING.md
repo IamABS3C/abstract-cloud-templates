@@ -3,13 +3,13 @@
 Use this when the feed is quiet, short or stopped. Work the checks in order. Each one rules out a
 hop in [the data flow](DATAFLOW.md), so the first one that fails is where the fault is.
 
-Examples use `acme-security-logging` for the logging project and `123456789012` for the
-organization. Replace them with yours. Run `./tools/gcp-guided-setup/abstract-gcp-setup.sh --check`
+The checks use LOG_PROJECT and ORG_ID. Load them from the guided setup's answers with
+`source ~/.abstract-gcp-setup.env`, or set them below, replacing LOGGING_PROJECT_ID and YOUR_ORG_ID with yours. Run `./tools/gcp-guided-setup/abstract-gcp-setup.sh --check`
 first: it runs most of these checks for you and changes nothing.
 
 ```bash
-export LOG_PROJECT=acme-security-logging
-export ORG_ID=123456789012
+export LOG_PROJECT=LOGGING_PROJECT_ID
+export ORG_ID=YOUR_ORG_ID
 ```
 
 ---
@@ -62,7 +62,7 @@ resource itself. Every folder and project is silent. Turn it on:
 gcloud logging sinks update abstract-org-audit-sink --organization=$ORG_ID --include-children
 ```
 
-Use `--folder=<folder-id>` or `--project=$LOG_PROJECT` for those scopes.
+Use `--folder=FOLDER_ID` or `--project=$LOG_PROJECT` for those scopes.
 
 ## 3. Can the sink write to the topic?
 
@@ -180,11 +180,11 @@ order. [Abstract integration](ABSTRACT-INTEGRATION.md) has the details.
 | Security Command Center findings never arrive | Security Command Center Premium or Enterprise is not on, or the service agent cannot publish to the topic | Check the tier, then the topic's publisher grants |
 | Security Command Center, asset or network threat events collected but not stored | The managed parser keeps only audit logs | Create each as its own source, with its own parser |
 | Asset feed refused with 403, topic and subscription exist | Deployer lacks `roles/cloudasset.owner` at the organization | Grant it. It is not part of Organization Admin |
-| Asset feed created, nothing published | Cloud Asset service agent of the logging project lacks publisher on the topic | Grant `roles/pubsub.publisher` on the topic to `service-<project number>@gcp-sa-cloudasset.iam.gserviceaccount.com` |
+| Asset feed created, nothing published | Cloud Asset service agent of the logging project lacks publisher on the topic | Grant `roles/pubsub.publisher` on the topic to `service-PROJECT_NUMBER@gcp-sa-cloudasset.iam.gserviceaccount.com`, PROJECT_NUMBER being the logging project's number |
 | Bucket notifications arrive, no content | Abstract lacks `roles/storage.objectViewer` on the bucket | Grant it on the bucket, scoped to the prefix if you set one |
 | Only some buckets deliver | Buckets in other projects have their own Cloud Storage service agent | Each agent needs publisher on the topic. Use `bucket_map` |
 | Firewall, DNS or load balancer logs missing | Logging is off on the rule, the network policy or the backend service | Turn it on at the source. The sink only routes it. [Filters](FILTERS.md) lists where |
-| Cloud IDS alerts missing | The IDS endpoint is not `READY`, or traffic is not mirrored | `gcloud ids endpoints list --project=<project>` |
+| Cloud IDS alerts missing | The IDS endpoint is not `READY`, or traffic is not mirrored | `gcloud ids endpoints list --project=WORKLOAD_PROJECT_ID`, for the project the endpoint is in |
 | Workspace returns 401 or 403 | Delegation not yet propagated, wrong admin email, or scopes not an exact match | [Google Workspace](WORKSPACE.md) |
 | Publish quota errors (`RESOURCE_EXHAUSTED`) | Pub/Sub quota is spent in the logging project | Request more quota, or move the heaviest source to its own topic. [Architecture](ARCHITECTURE.md) |
 | Everything stopped inside a VPC Service Controls perimeter | The perimeter blocks Abstract's pull | [VPC Service Controls](VPC-SC.md) |
