@@ -450,13 +450,13 @@ show_remaining() {
   fi
   [[ -n "$ASSIGNEE" ]] || { ok "add --assignee <upn> to list what that person still holds at \"/\" and on -m"; return 0; }
   say "Roles $ASSIGNEE holds directly at \"/\""
-  az role assignment list --assignee "$ASSIGNEE" --scope / --query "[?scope=='/'].{role:roleDefinitionName, id:id}" -o table 2>/dev/null \
+  az role assignment list --assignee "$ASSIGNEE" --scope / --query "[?scope=='/'].{role:roleDefinitionName, assignmentId:id}" -o table 2>/dev/null \
     || warn "cannot list them: reading \"/\" needs a role there or elevation"
   if [[ -n "$MG_ID" ]]; then
     need_mg
     say "Roles $ASSIGNEE holds on $MG_ID"
     az role assignment list --assignee "$ASSIGNEE" --scope "${MG_SCOPE}/${MG_ID}" \
-      --query "[].{role:roleDefinitionName, scope:scope, id:id}" -o table 2>/dev/null || warn "cannot list them"
+      --query "[].{role:roleDefinitionName, scope:scope, assignmentId:id}" -o table 2>/dev/null || warn "cannot list them"
   fi
 }
 

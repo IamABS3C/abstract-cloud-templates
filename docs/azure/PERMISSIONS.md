@@ -113,10 +113,11 @@ Granting at `/` or on a management group needs a right to grant there: User Acce
 Based Access Control Administrator or Owner. A Global Administrator gets User Access Administrator at `/`
 from `access Elevate`. Granting an Entra role needs Privileged Role Administrator or Global Administrator.
 
-> The `access` commands ran end to end on a test tenant on 2026-10-13 (Check, Grant, the tenant deploy,
-> Revoke, MgCreate, MgAddSub, a correctly refused MgDefault, and the group roll-back). `Elevate` from a
-> non-elevated account has not run live yet; if its assignment id is not readable within 30 seconds,
-> `Revoke` falls back to removing User Access Administrator at `/` by role and says so. If `Revoke` finds
+> The `access` commands ran end to end on a test tenant on 2026-10-13: Check, `Elevate` from a non-elevated
+> account (the new assignment's id was readable at once, and `Revoke` removed exactly that assignment),
+> Grant, the tenant deploy, Revoke, MgCreate, MgAddSub, a correctly refused MgDefault, and the group
+> roll-back. Should an elevation's id ever not be readable within 30 seconds, `Revoke` falls back to
+> removing User Access Administrator at `/` by role and says so; that fallback has not been seen live. If `Revoke` finds
 > nothing recorded, it lists what the caller and `--assignee` still hold rather than reporting success,
 > because the record may sit in another Cloud Shell. Every role, scope and command above is from Microsoft Learn: *Tenant deployments with Bicep*
 > (Required access), *Elevate access to manage all Azure subscriptions and management groups*, *Manage your

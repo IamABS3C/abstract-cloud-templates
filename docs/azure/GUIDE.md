@@ -952,7 +952,7 @@ No plan above needs these on their own.
 ## Not covered yet
 
 - Entra ID logs cannot be set by Policy, and a portal deploy at tenant scope is not proven yet, so that step is CLI only.
-- The access commands (deploy.sh access, from _modules/tenant-access.sh) ran end to end on a test tenant on 2026-10-13: Check, Grant, the tenant deploy, Revoke, MgCreate, MgAddSub, a refused MgDefault and the group roll-back. Elevate from a non-elevated account has not run live yet; if its assignment id is not readable within 30 seconds, Revoke falls back to removing User Access Administrator at the root by role.
+- The access commands (deploy.sh access, from _modules/tenant-access.sh) ran end to end on a test tenant on 2026-10-13: Check, Elevate from a non-elevated account (the new assignment's id was readable at once and Revoke removed it by that id), Grant, the tenant deploy, Revoke, MgCreate, MgAddSub, a refused MgDefault and the group roll-back. The one path not seen live is the by-role fallback Revoke uses when an elevation's id was not readable within 30 seconds.
 - Removing the Policy plan's resource-level diagnostic settings is by hand: Azure keeps them after the assignment is deleted.
 - Nothing onboards a new subscription to the Logic App automatically yet. enableEventTrigger only creates the Event Grid system topic; no event subscription is wired, and the workflow's plain HTTP trigger does not answer Event Grid's validation handshake, so onboard each subscription with ./deploy.sh onboard.
 - The Abstract field labels come from the Azure EventHub integration 0.7.2. An older version may still ask for the storage fields on Standard tier.
