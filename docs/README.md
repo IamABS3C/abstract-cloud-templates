@@ -25,6 +25,7 @@ go deeper on what spans templates: architecture, permissions and troubleshooting
 
 | Guide | Read it when |
 |---|---|
+| [Permissions](azure/PERMISSIONS.md) | A deploy says AuthorizationFailed, or you need to know who needs which role, where, and how to pick or create the management group |
 | [Log streams](azure/azure-log-streams.md) | You plan how Azure logs reach the Event Hub |
 | [App registrations](azure/azure-app-registrations.md) | You choose how Abstract signs in to your tenant |
 | [Sentinel destination assurance](azure/sentinel-destination-assurance.md) | You send Abstract data on to Microsoft Sentinel, and want to know what each option asks of your tenant |

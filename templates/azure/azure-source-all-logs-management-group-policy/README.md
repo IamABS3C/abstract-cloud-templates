@@ -30,6 +30,7 @@ Or from a shell, in this folder:
 
 ## Prerequisites
 
+- A management group that holds the subscriptions to cover: pick one (./deploy.sh access Check lists them), or create one (./deploy.sh access MgCreate -m &lt;mg-id&gt;) and move subscriptions in (./deploy.sh access MgAddSub -m &lt;mg-id&gt; -s &lt;subscription-id&gt;). A deployer without Owner on it gets the two roles from ./deploy.sh access Grant --for log-policy --assignee &lt;user&gt; -m &lt;mg-id&gt;; ./deploy.sh access Revoke undoes what access recorded
 - Deploy the Event Hub source stack first; one namespace per region that holds regional resources, each with a Send-capable rule
 - Hub names passed here must match hubs the source stack actually created; add resource to its hubSources for a resource-log hub
 - Decide report-only versus enforce before assigning. Copy examples/default.parameters.json (effect AuditIfNotExists, enforcementMode DoNotEnforce: it changes nothing), put in your Send rule IDs and one regions row per region, and run scripts/deploy-log-streams.sh -a Deploy -m &lt;mg-id&gt; -p &lt;your copy&gt;. Read the compliance counts, then set effect DeployIfNotExists and enforcementMode Default in the same copy and deploy again, which writes settings everywhere. ./deploy.sh --enforce on its own reads the empty parameters.example.json, so it assigns no Event Hub rule and no regions: always pass your own values
@@ -69,6 +70,7 @@ Azure Policy and diagnostic settings are free; the volume they switch on is not.
 - **Resource Policy Contributor** on The target management group: Deployer: Create the policy definition and assignments.
 - **User Access Administrator or Role Based Access Control Administrator** on The target management group: Deployer: The assignment creates role assignments for the DeployIfNotExists identities.
 - **Global Administrator with Access management for Azure resources elevation** on Tenant root management group only: Deployer: Required only when assigning at the tenant root.
+- **Management Group Contributor** on The root management group: Deployer: Only to create a new management group when the tenant requires write permission for it (hierarchy protection). Otherwise any Entra user can create one and becomes its Owner, which covers every deployer role above. ./deploy.sh access Check shows which applies.
 - **Monitoring Contributor** on The management group: Policy remediation identity: Writes diagnostic settings across in-scope subscriptions.
 - **listKeys on the Event Hub authorization rule** on The Event Hubs namespace, usually in a different subscription: Policy remediation identity: Needed to create settings that stream to the hub; the Grant action gives Azure Event Hubs Data Owner, which works but is broader than a custom listKeys role.
 

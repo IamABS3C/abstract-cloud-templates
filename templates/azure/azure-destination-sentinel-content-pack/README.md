@@ -50,6 +50,7 @@ Or from a shell, in this folder:
 
 ## Permissions
 
+- **Contributor** on The Sentinel workspace's resource group: Deployer: Install the solution content, workbooks, playbooks and their API connections; Contributor includes Microsoft.Resources/deployments/*. The template creates no role assignments, so the playbook identities' roles below are granted separately by someone with Owner or User Access Administrator.
 - **Key Vault Secrets User** on The Key Vault secret holding the Abstract API key: Each playbook's managed identity: Playbooks fetch the key at runtime; the template never stores it.
 - **Microsoft Sentinel Responder** on The workspace: Each playbook's managed identity: Playbooks comment on and update incidents.
 

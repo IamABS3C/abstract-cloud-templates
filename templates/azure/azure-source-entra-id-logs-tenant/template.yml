@@ -20,11 +20,14 @@ permissions:
 - role: Attribute Log Administrator (Entra directory role)
   where: The Entra tenant
   why: 'Deployer: Only for CustomSecurityAttributeAuditLogs.'
-- role: Microsoft.Resources/deployments/* at tenant scope (for example Owner or Contributor on "/")
+- role: Microsoft.Resources/deployments/* at tenant scope (Contributor on "/" is enough; Owner also works)
   where: The tenant root scope "/"
-  why: 'Deployer: Any tenant-scope deployment needs it, besides the Entra role. A Global Administrator elevates
-    access, then assigns it (az role assignment create --assignee <user> --scope "/" --role Owner). Source:
-    Microsoft Learn, Tenant deployments with Bicep, Required access.'
+  why: 'Deployer: Any tenant-scope deployment needs it, besides the Entra role; without it even validation
+    fails with AuthorizationFailed on Microsoft.Resources/deployments/validate/action. No Entra role grants
+    it, Global Administrator included. A Global Administrator runs ./deploy.sh access Elevate, then ./deploy.sh
+    access Grant --for entra --assignee <user>, and ./deploy.sh access Revoke removes both once the deploy
+    is done. Contributor suffices because this template creates no role assignments. Source: Microsoft
+    Learn, Tenant deployments with Bicep, Required access. Not needed for the Entra admin center path.'
 - role: listKeys on the Event Hub authorization rule
   where: The Event Hubs namespace
   why: 'Deployer: Creating a setting that streams to an Event Hub requires ListKey on the target rule.'
@@ -44,6 +47,9 @@ prerequisites:
 - Entra ID P1 or P2 for ProvisioningLogs and MicrosoftGraphActivityLogs, P2 for the ID Protection risk
   categories; AuditLogs and SignInLogs are available on Free
 - At most 5 diagnostic settings on the tenant, including existing exports
+- 'Rights to deploy at the tenant root "/": ./deploy.sh access Check shows what the deployer holds. Where
+  root-scope rights are not acceptable, create the same setting in the Entra admin center (Entra ID, Monitoring
+  & health, Diagnostic settings, Stream to an event hub), which needs only Security Administrator'
 - Expect 24 hours to 3 days before first data; there is no backfill
 - 'A redeploy replaces the named diagnostic setting''s category list rather than merging it; read it back
   first: az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01"'

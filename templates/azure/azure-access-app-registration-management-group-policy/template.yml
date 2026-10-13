@@ -13,6 +13,15 @@ formats:
 - script
 depends_on: []
 permissions:
+- role: Owner, or Resource Policy Contributor plus Role Based Access Control Administrator
+  where: The target management group
+  why: 'Deployer: Create the policy definition and assignment, and the assignment identity''s role assignments.
+    Creating the management group yourself makes you its Owner; otherwise ./deploy.sh access Grant --for
+    appreg-policy --assignee <user> -m <mg-id> gives the two roles, and ./deploy.sh access Revoke removes them.'
+- role: Management Group Contributor
+  where: The root management group
+  why: 'Deployer: Only to create a new management group when the tenant requires write permission for it
+    (hierarchy protection); otherwise any Entra user can create one.'
 - role: Global Administrator or Privileged Role Administrator
   where: The Entra tenant
   why: 'Deployer: Once per tenant, to consent Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All
@@ -53,6 +62,9 @@ prerequisites:
 - A central Key Vault for every generated secret
 - Microsoft.ContainerInstance and Microsoft.Storage registered in each target subscription
 - A tag gate (default abstract-onboard=true) so only chosen subscriptions are onboarded
+- 'A management group that holds the target subscriptions: pick one (./deploy.sh access Check lists them), or
+  create one (./deploy.sh access MgCreate -m <mg-id>) and move subscriptions in (./deploy.sh access MgAddSub -m
+  <mg-id> -s <subscription-id>)'
 parameters:
 - name: assignmentLocation
   type: string

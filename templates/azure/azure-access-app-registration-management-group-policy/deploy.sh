@@ -8,6 +8,9 @@
 #   ./deploy.sh remediate   backfill existing subscriptions through a remediation task
 #   ./deploy.sh onboard     onboard one subscription now
 #   ./deploy.sh verify      re-check admin consent for a created app (--app-id <app-id>)
+#   ./deploy.sh access <Action>  pick or create the management group and grant the deployer its
+#                           roles there (../_modules/tenant-access.sh: Check, MgCreate, MgAddSub,
+#                           Grant --for appreg-policy --assignee <upn> -m <mg-id>, Revoke)
 set -euo pipefail
 cd "$(dirname "$0")"
 case "${1:-}" in
@@ -16,6 +19,7 @@ case "${1:-}" in
   remediate) shift; exec ../_modules/deploy-appreg.sh -a Remediate "$@" ;;
   onboard)   shift; exec ../_modules/deploy-appreg.sh -a Onboard "$@" ;;
   verify)    shift; exec ../_modules/deploy-appreg.sh -a Verify "$@" ;;
+  access)    shift; exec ../_modules/tenant-access.sh --setup azure-access-app-registration-management-group-policy -a "${1:?action}" "${@:2}" ;;
 esac
 MODE=what-if; ARGS=()
 for a in "$@"; do [ "$a" = "--yes" ] && MODE=create || ARGS+=("$a"); done

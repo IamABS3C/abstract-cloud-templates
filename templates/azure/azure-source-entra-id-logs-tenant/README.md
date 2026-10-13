@@ -31,6 +31,7 @@ From a shell, in this folder:
 - The Event Hub namespace exists in the same Entra tenant as the logs
 - Entra ID P1 or P2 for ProvisioningLogs and MicrosoftGraphActivityLogs, P2 for the ID Protection risk categories; AuditLogs and SignInLogs are available on Free
 - At most 5 diagnostic settings on the tenant, including existing exports
+- Rights to deploy at the tenant root "/": ./deploy.sh access Check shows what the deployer holds. Where root-scope rights are not acceptable, create the same setting in the Entra admin center (Entra ID, Monitoring &amp; health, Diagnostic settings, Stream to an event hub), which needs only Security Administrator
 - Expect 24 hours to 3 days before first data; there is no backfill
 - A redeploy replaces the named diagnostic setting's category list rather than merging it; read it back first: az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01"
 
@@ -51,7 +52,7 @@ The setting is free; volume into the hub is the charge. MicrosoftGraphActivityLo
 
 - **Security Administrator (Entra directory role, not Azure RBAC)** on The Entra tenant: Deployer: Create or edit the tenant diagnostic setting; subscription or management-group ownership does not grant it.
 - **Attribute Log Administrator (Entra directory role)** on The Entra tenant: Deployer: Only for CustomSecurityAttributeAuditLogs.
-- **Microsoft.Resources/deployments/* at tenant scope (for example Owner or Contributor on "/")** on The tenant root scope "/": Deployer: Any tenant-scope deployment needs it, besides the Entra role. A Global Administrator elevates access, then assigns it (az role assignment create --assignee &lt;user&gt; --scope "/" --role Owner). Source: Microsoft Learn, Tenant deployments with Bicep, Required access.
+- **Microsoft.Resources/deployments/* at tenant scope (Contributor on "/" is enough; Owner also works)** on The tenant root scope "/": Deployer: Any tenant-scope deployment needs it, besides the Entra role; without it even validation fails with AuthorizationFailed on Microsoft.Resources/deployments/validate/action. No Entra role grants it, Global Administrator included. A Global Administrator runs ./deploy.sh access Elevate, then ./deploy.sh access Grant --for entra --assignee &lt;user&gt;, and ./deploy.sh access Revoke removes both once the deploy is done. Contributor suffices because this template creates no role assignments. Source: Microsoft Learn, Tenant deployments with Bicep, Required access. Not needed for the Entra admin center path.
 - **listKeys on the Event Hub authorization rule** on The Event Hubs namespace: Deployer: Creating a setting that streams to an Event Hub requires ListKey on the target rule.
 - **Send on the Event Hub authorization rule** on The namespace or the hub: Azure Monitor: The streaming mechanism writes with the key of the referenced rule.
 

@@ -62,6 +62,8 @@ Or from a shell, in this folder:
 
 ## Permissions
 
+- **Contributor** on The target resource group: Deployer: Create the namespace, hub, SAS rule, network rules and the optional private endpoint and diagnostic settings; Contributor includes Microsoft.Resources/deployments/*.
+- **User Access Administrator or Owner** on The target resource group: Deployer: Only when enableRbac=true, which creates a role assignment; Contributor cannot. User Access Administrator and Role Based Access Control Administrator alone do not include Microsoft.Resources/deployments/*, so on their own the deploy fails validation with AuthorizationFailed.
 - **Send on the abstract-send SAS rule** on The namespace: Abstract: Least privilege for a producer; use its connection string in the destination modal.
 - **Azure Event Hubs Data Sender** on The namespace, only when enableRbac=true: Abstract: Deliver with a service principal instead of a connection string.
 

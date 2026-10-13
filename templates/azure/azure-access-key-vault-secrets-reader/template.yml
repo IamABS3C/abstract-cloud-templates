@@ -13,6 +13,10 @@ formats:
 - script
 depends_on: []
 permissions:
+- role: Owner, or Contributor plus User Access Administrator (or Role Based Access Control Administrator)
+  where: The resource group the template is deployed to
+  why: 'Deployer: Running the deployment needs Microsoft.Resources/deployments/*, which Contributor and Owner
+    include; the role assignment needs a role-assignment role. User Access Administrator and Role Based Access Control Administrator alone do not include Microsoft.Resources/deployments/*, so on their own the deploy fails validation with AuthorizationFailed.'
 - role: Rights to create role assignments on the vault
   where: The Key Vault's resource group
   why: 'Deployer: For a vault in another resource group, the deployer needs role-assignment rights there

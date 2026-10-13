@@ -34,6 +34,7 @@ Or from a shell, in this folder:
 - A central Key Vault for every generated secret
 - Microsoft.ContainerInstance and Microsoft.Storage registered in each target subscription
 - A tag gate (default abstract-onboard=true) so only chosen subscriptions are onboarded
+- A management group that holds the target subscriptions: pick one (./deploy.sh access Check lists them), or create one (./deploy.sh access MgCreate -m &lt;mg-id&gt;) and move subscriptions in (./deploy.sh access MgAddSub -m &lt;mg-id&gt; -s &lt;subscription-id&gt;)
 
 ## Cost
 
@@ -63,6 +64,8 @@ Each remediation run creates a storage account and container instance in the tar
 
 ## Permissions
 
+- **Owner, or Resource Policy Contributor plus Role Based Access Control Administrator** on The target management group: Deployer: Create the policy definition and assignment, and the assignment identity's role assignments. Creating the management group yourself makes you its Owner; otherwise ./deploy.sh access Grant --for appreg-policy --assignee &lt;user&gt; -m &lt;mg-id&gt; gives the two roles, and ./deploy.sh access Revoke removes them.
+- **Management Group Contributor** on The root management group: Deployer: Only to create a new management group when the tenant requires write permission for it (hierarchy protection); otherwise any Entra user can create one.
 - **Global Administrator or Privileged Role Administrator** on The Entra tenant: Deployer: Once per tenant, to consent Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All to the managed identity.
 - **Microsoft Graph Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All** on The Entra tenant: Pre-consented managed identity: Creates the apps and grants their permissions; it can grant itself anything, so treat it as tier-0.
 - **Owner, or Contributor plus User Access Administrator** on Each target subscription: Policy assignment identity: The deployment script assigns RBAC there.

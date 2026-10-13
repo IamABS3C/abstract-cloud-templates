@@ -13,6 +13,11 @@ formats:
 - script
 depends_on: []
 permissions:
+- role: Contributor
+  where: The Sentinel workspace's resource group
+  why: 'Deployer: Install the solution content, workbooks, playbooks and their API connections; Contributor
+    includes Microsoft.Resources/deployments/*. The template creates no role assignments, so the playbook
+    identities'' roles below are granted separately by someone with Owner or User Access Administrator.'
 - role: Key Vault Secrets User
   where: The Key Vault secret holding the Abstract API key
   why: 'Each playbook''s managed identity: Playbooks fetch the key at runtime; the template never stores

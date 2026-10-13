@@ -38,6 +38,7 @@ Or from a shell, in this folder:
 
 ## Permissions
 
+- **Owner, or Contributor plus User Access Administrator (or Role Based Access Control Administrator)** on The resource group the template is deployed to: Deployer: Running the deployment needs Microsoft.Resources/deployments/*, which Contributor and Owner include; the role assignment needs a role-assignment role. User Access Administrator and Role Based Access Control Administrator alone do not include Microsoft.Resources/deployments/*, so on their own the deploy fails validation with AuthorizationFailed.
 - **Rights to create role assignments on the vault** on The Key Vault's resource group: Deployer: For a vault in another resource group, the deployer needs role-assignment rights there too.
 
 ## Creates

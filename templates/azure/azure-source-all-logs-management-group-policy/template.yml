@@ -24,6 +24,11 @@ permissions:
 - role: Global Administrator with Access management for Azure resources elevation
   where: Tenant root management group only
   why: 'Deployer: Required only when assigning at the tenant root.'
+- role: Management Group Contributor
+  where: The root management group
+  why: 'Deployer: Only to create a new management group when the tenant requires write permission for
+    it (hierarchy protection). Otherwise any Entra user can create one and becomes its Owner, which covers
+    every deployer role above. ./deploy.sh access Check shows which applies.'
 - role: Monitoring Contributor
   where: The management group
   why: 'Policy remediation identity: Writes diagnostic settings across in-scope subscriptions.'
@@ -42,6 +47,10 @@ creates:
 never_touches:
 - 'Event Hubs: Azure Policy never creates hubs, so every hub name passed in must already exist'
 prerequisites:
+- 'A management group that holds the subscriptions to cover: pick one (./deploy.sh access Check lists them), or
+  create one (./deploy.sh access MgCreate -m <mg-id>) and move subscriptions in (./deploy.sh access MgAddSub -m
+  <mg-id> -s <subscription-id>). A deployer without Owner on it gets the two roles from ./deploy.sh access Grant
+  --for log-policy --assignee <user> -m <mg-id>; ./deploy.sh access Revoke undoes what access recorded'
 - Deploy the Event Hub source stack first; one namespace per region that holds regional resources, each
   with a Send-capable rule
 - Hub names passed here must match hubs the source stack actually created; add resource to its hubSources

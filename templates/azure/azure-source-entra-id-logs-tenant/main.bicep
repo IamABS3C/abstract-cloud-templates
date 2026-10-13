@@ -22,6 +22,14 @@
 //  --------
 //    * Security Administrator on the Entra tenant (Attribute Log Administrator
 //      as well if you enable CustomSecurityAttributeAuditLogs).
+//    * Microsoft.Resources/deployments/* at the tenant root "/" - Contributor
+//      there is enough. No Entra role grants it, Global Administrator included;
+//      without it even validation fails with AuthorizationFailed on
+//      'Microsoft.Resources/deployments/validate/action'. A Global Administrator
+//      grants it, and removes it afterwards, with ../_modules/tenant-access.sh
+//      (./deploy.sh access Elevate | Grant --for entra --assignee <user> | Revoke).
+//      The Entra admin center creates the same setting with Security
+//      Administrator alone, for tenants that will not grant rights at "/".
 //    * The Event Hub must already exist. Azure never creates it for you here.
 //    * Entra ID P1/P2 for several categories - see entraLogCategories below.
 //

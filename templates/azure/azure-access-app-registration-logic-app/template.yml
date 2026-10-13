@@ -14,6 +14,10 @@ formats:
 - script
 depends_on: []
 permissions:
+- role: Contributor
+  where: The target resource group
+  why: 'Deployer: Create the workflows, the action group and the optional Event Grid system topic; Contributor
+    includes Microsoft.Resources/deployments/*. The template creates no role assignments.'
 - role: Global Administrator
   where: The Entra tenant
   why: 'Deployer: Once per tenant, to consent Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All

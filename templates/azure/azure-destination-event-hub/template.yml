@@ -13,6 +13,13 @@ formats:
 - script
 depends_on: []
 permissions:
+- role: Contributor
+  where: The target resource group
+  why: 'Deployer: Create the namespace, hub, SAS rule, network rules and the optional private endpoint and
+    diagnostic settings; Contributor includes Microsoft.Resources/deployments/*.'
+- role: User Access Administrator or Owner
+  where: The target resource group
+  why: 'Deployer: Only when enableRbac=true, which creates a role assignment; Contributor cannot. User Access Administrator and Role Based Access Control Administrator alone do not include Microsoft.Resources/deployments/*, so on their own the deploy fails validation with AuthorizationFailed.'
 - role: Send on the abstract-send SAS rule
   where: The namespace
   why: 'Abstract: Least privilege for a producer; use its connection string in the destination modal.'

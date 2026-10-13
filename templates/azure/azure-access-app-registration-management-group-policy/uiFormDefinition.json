@@ -43,6 +43,16 @@
               }
             },
             {
+              "name": "managementGroupHelp",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "No management group to pick, or none holding the right subscriptions? This picker selects a group; it cannot create one. Create it in the portal (Management groups, then Create), or from this template's folder in Cloud Shell: ./deploy.sh access MgCreate -m <mg-id>, then ./deploy.sh access MgAddSub -m <mg-id> -s <subscription-id> for each subscription. Whoever creates a group is its Owner, which is all this deployment needs. If your tenant requires permission to create groups, that is Management Group Contributor on the root group; ./deploy.sh access Check shows which applies.",
+                "uri": "https://learn.microsoft.com/azure/governance/management-groups/create-management-group-portal"
+              }
+            },
+            {
               "name": "namePrefix",
               "type": "Microsoft.Common.TextBox",
               "label": "Assignment name prefix",

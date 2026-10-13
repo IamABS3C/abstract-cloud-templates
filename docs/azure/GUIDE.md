@@ -70,7 +70,40 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** The output names the management group and subscriptions you will cover, and the diagnostic-settings and aadiam lists show any setting that already sends to an Event Hub (a non-empty hub or eventHubName). Note those: Azure allows at most 5 diagnostic settings per subscription, per resource and on the tenant.
 
-2. **Foundation.** Cloud admin, in Azure Cloud Shell (Bash).
+2. **Foundation.** Cloud admin, in Azure Cloud Shell (Bash), or the Azure portal (Management groups).
+
+   Pick the management group the Policy will be assigned at. It covers every subscription in it, and every one added later. Check lists the groups you can see, whether this tenant lets anyone create one, and the roles you hold on &lt;mg-id>. To use a new group, create it, then move in each subscription to cover. Whoever creates a group becomes its Owner, which is every right the Policy steps need. If the tenant requires permission to create groups, that is Management Group Contributor on the root group. Every change here is recorded, so the clean-up can undo it.
+
+   > **This changes:** A subscription moved into &lt;mg-id> gains the Policies and roles of &lt;mg-id> and loses those of the group it leaves.
+
+   ```bash
+   [ -d ~/abstract-cloud-templates ] || git clone --depth 1 https://github.com/IamABS3C/abstract-cloud-templates ~/abstract-cloud-templates
+   cd ~/abstract-cloud-templates/templates/azure/azure-source-all-logs-management-group-policy
+   ./deploy.sh access Check -m <mg-id>
+   ./deploy.sh access MgCreate -m <mg-id> --display-name "<display-name>"
+   ./deploy.sh access MgAddSub -m <mg-id> -s <subscription-id>
+   ```
+
+   **Check:** az account management-group show --name &lt;mg-id> --expand --query "children[].{name:displayName, type:type}" -o table lists every subscription to cover.
+
+3. **Foundation (optional).** A Global Administrator, or anyone with Owner on <mg-id>, for a deployer who holds neither, in Azure Cloud Shell (Bash).
+
+   Give the person who deploys the Policy the two roles it needs on the management group, and nothing wider: Resource Policy Contributor, for the policy definition and assignments, and Role Based Access Control Administrator, for the role assignments of the Policy identities. A Global Administrator without rights on &lt;mg-id> elevates first. Each grant is asked first and recorded in this template's record file, ~/.abstract-azure-access.azure-source-all-logs-management-group-policy.record, so the step after remediation removes exactly these and nothing another template granted. Remediation can take hours: Cloud Shell keeps that file between sessions only when it has storage attached, so in an ephemeral session download it (Manage files, Download) before you close it.
+
+   > **This changes:** Until they are removed, &lt;user> can change Policy and grant roles on everything under &lt;mg-id>, and an elevated Global Administrator can grant roles anywhere in the tenant.
+
+   *Optional:* Skip if the person who deploys the Policy created &lt;mg-id>, or already holds Owner on it.
+
+   ```bash
+   cd ~/abstract-cloud-templates/templates/azure/azure-source-all-logs-management-group-policy
+   ./deploy.sh access Elevate
+   ./deploy.sh access Grant --for log-policy --assignee <user> -m <mg-id>
+   ./deploy.sh access Check --assignee <user> -m <mg-id>
+   ```
+
+   **Check:** Check lists Resource Policy Contributor and Role Based Access Control Administrator for &lt;user> on &lt;mg-id>.
+
+4. **Foundation.** Cloud admin, in Azure Cloud Shell (Bash).
 
    Azure only accepts a resource's logs into an Event Hub in the same region as the resource, so deploy one Event Hub namespace per region that holds resources, each in a resource group of its own. The first query lists those regions. In your main region, create the hubs activity, entra and resource (the Activity Log and Entra ID are not regional, so they need one hub each, in one place). In every other region, create only the resource hub; it is still named abs-prod-resource. In the portal form the field is "Log sources (comma-separated)": enter activity,entra,resource in the main region and resource elsewhere. The default, activity,entra,defender, creates no resource hub, and the Policy would then have nowhere to send resource logs. Last, read the two IDs the next steps need from each namespace.
 
@@ -95,7 +128,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** az eventhubs eventhub list -g &lt;resource-group> --namespace-name &lt;namespace> --query "[].name" -o tsv lists abs-prod-resource in every namespace, and also abs-prod-activity and abs-prod-entra in the main region's namespace.
 
-3. **Set up.** Cloud admin with Owner on the management group, in Azure Cloud Shell (Bash), or the Azure portal (Deploy to Azure).
+5. **Set up.** Cloud admin with Owner on the management group, in Azure Cloud Shell (Bash), or the Azure portal (Deploy to Azure).
 
    Assign the Policy in report-only mode first. It writes no diagnostic setting yet: it only counts what it would change. Copy the report-only parameter file and edit it: activityLogAuthorizationRuleId is the main region's Send rule ID, and regions has one row per region, each with that region's Send rule ID and eventHubName abs-prod-resource. Leave effect AuditIfNotExists and enforcementMode DoNotEnforce. The script validates and previews, then asks before it deploys. In the portal, choose Rollout mode "Report first (recommended)" and add one row per region under "Regions — one row per region that holds resources".
 
@@ -113,7 +146,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** Status lists abs-activitylog and one abs-r-… assignment per region, each with enforcement DoNotEnforce and an identity. After about 30 minutes its compliance summary shows nonCompliantResources: that count is how many resources Enforce and the remediation will change.
 
-4. **Set up.** Cloud admin with Owner on the Event Hub resource groups, in Azure Cloud Shell (Bash).
+6. **Set up.** Cloud admin with Owner on the Event Hub resource groups, in Azure Cloud Shell (Bash).
 
    Before enforcing, give each Policy assignment's managed identity access to the Event Hubs. The template cannot do this, because the namespaces sit outside the management group's scope, and without it every setting the Policy writes fails. The identities already exist from the report-only step. Run the grant once per namespace, with the namespace resource ID from the first step. If you changed namePrefix from abs, add -x &lt;prefix>.
 
@@ -127,7 +160,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** The script prints "granted" or "already present" for every assignment and no FAILED line, and the role assignment list shows one principal ID for each identity Status listed, on every namespace.
 
-5. **Set up.** Cloud admin with Owner on the management group, in Azure Cloud Shell (Bash), or the Azure portal (Deploy to Azure).
+7. **Set up.** Cloud admin with Owner on the management group, in Azure Cloud Shell (Bash), or the Azure portal (Deploy to Azure).
 
    Switch the same assignments to Enforce by deploying again with effect DeployIfNotExists and enforcementMode Default. In the portal, deploy again with the same values and choose Rollout mode "Enforce — deploy the settings".
 
@@ -142,7 +175,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** Status shows enforcement Default on every abs- assignment.
 
-6. **Set up.** Cloud admin with Owner on the management group, in Azure Cloud Shell (Bash).
+8. **Set up.** Cloud admin with Owner on the management group, in Azure Cloud Shell (Bash).
 
    Bring in the subscriptions and resources that already exist. Policy only acts on resources that are created or changed, so without a remediation task your current estate never sends anything. The script creates one task per policy. It hides the errors of the tasks it creates, so read the task list to see that they ran.
 
@@ -157,9 +190,9 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** Every remediation task reaches Succeeded with failed 0 (they run for minutes to hours), and Status shows nonCompliantResources falling. Spot-check one resource: az monitor diagnostic-settings list --resource &lt;resource-id> shows abstract-logstream pointing at abs-prod-resource.
 
-7. **Set up (optional).** Cloud admin with rights on the root management group, in Azure Cloud Shell (Bash).
+9. **Set up (optional).** Cloud admin with Hierarchy Settings Administrator or Owner on the root management group, in Azure Cloud Shell (Bash).
 
-   Make &lt;mg-id> the default management group for new subscriptions, so each one is covered as soon as it is created. The first command shows the current setting.
+   Make &lt;mg-id> the default management group for new subscriptions, so each one is covered as soon as it is created. The first command shows the current setting. MgDefault changes only the default, keeping the tenant's other management-group setting, and records the old default so the clean-up can restore it.
 
    > **This changes:** Changes where every new subscription in the tenant is placed, which also changes the Policies and roles they inherit.
 
@@ -167,14 +200,31 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    ```bash
    az account management-group hierarchy-settings list --name <tenant-id>
-   az account management-group hierarchy-settings create --name <tenant-id> --default-management-group /providers/Microsoft.Management/managementGroups/<mg-id>
+   cd ~/abstract-cloud-templates/templates/azure/azure-source-all-logs-management-group-policy
+   ./deploy.sh access MgDefault -m <mg-id>
    ```
 
    **Check:** hierarchy-settings list shows defaultManagementGroup ending in /&lt;mg-id>.
 
-8. **Set up (optional).** Cloud admin who is an Entra Security Administrator and can deploy at tenant scope, in Azure Cloud Shell (Bash).
+10. **Set up (optional).** The person who ran access Elevate or access Grant, in the same Cloud Shell, in Azure Cloud Shell (Bash).
 
-   Entra ID logs belong to the tenant, not a subscription, so no Policy reaches them. One CLI deploy creates the tenant's diagnostic setting, pointing at the abs-prod-entra hub. Run it without --yes first to preview, then with --yes. A tenant-scope deploy needs, besides the Entra role, the right to run deployments at the root scope "/" (for example Owner there, which a Global Administrator grants after elevating access). Expect 24 hours to 3 days before the first records arrive.
+   The Policy is deployed and remediated, so remove the temporary rights: the roles access Grant gave, then elevation. --keep-groups leaves the management group, the moves and the default in place, because the Policy depends on them. Revoke reads this template's record file in your home directory, so run it as the same person, in the same Cloud Shell, and it asks before each change.
+
+   *Optional:* Skip if no one ran access Elevate or access Grant in this setup.
+
+   ```bash
+   cd ~/abstract-cloud-templates/templates/azure/azure-source-all-logs-management-group-policy
+   ./deploy.sh access Revoke --keep-groups
+   ./deploy.sh access Check --assignee <user> -m <mg-id>
+   ```
+
+   **Check:** Revoke prints a removal for every grant and none FAILED, and Check shows no Resource Policy Contributor or Role Based Access Control Administrator for &lt;user> on &lt;mg-id>, and elevation "no".
+
+11. **Set up (optional).** Cloud admin who is an Entra Security Administrator, with a Global Administrator if root rights are missing, in Azure Cloud Shell (Bash).
+
+   Entra ID logs belong to the tenant, not a subscription, so no Policy reaches them. One CLI deploy creates the tenant's diagnostic setting, pointing at the abs-prod-entra hub. Run it without --yes first to preview, then with --yes. A tenant-scope deploy needs, besides the Entra role, Microsoft.Resources/deployments/* at the root scope "/", and no Entra role gives that, Global Administrator included: without it the preview stops with AuthorizationFailed on Microsoft.Resources/deployments/validate/action. Check shows what &lt;user> holds. If Contributor or Owner at "/" is missing, a Global Administrator elevates their own access and grants it, with Security Administrator if that is missing too; after the deploy the same Global Administrator runs Revoke in the same Cloud Shell, which removes both. A tenant that will not grant rights at "/" can create the same setting in the Entra admin center (Entra ID, Monitoring & health, Diagnostic settings) with Security Administrator alone. Expect 24 hours to 3 days before the first records arrive.
+
+   > **This changes:** Until Revoke removes them, the elevated Global Administrator can grant roles anywhere in the tenant, and &lt;user> holds Contributor over every subscription in it.
 
    *Optional:* Recommended. Sign-in and audit logs carry most identity detections. Skip only if they already stream to another Event Hub you will use.
 
@@ -183,14 +233,19 @@ Abstract writes processed events to a system of yours. This does not bring any A
    ```bash
    [ -d ~/abstract-cloud-templates ] || git clone --depth 1 https://github.com/IamABS3C/abstract-cloud-templates ~/abstract-cloud-templates
    cd ~/abstract-cloud-templates/templates/azure
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Check --assignee <user>
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Elevate
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Grant --for entra --assignee <user>
    az eventhubs namespace authorization-rule show -g <resource-group> --namespace-name <namespace> -n abstract-diagnostics-send --query id -o tsv
    ./azure-source-entra-id-logs-tenant/deploy.sh <region> --parameters eventHubAuthorizationRuleId=<rule-id>
    ./azure-source-entra-id-logs-tenant/deploy.sh <region> --parameters eventHubAuthorizationRuleId=<rule-id> --yes
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Revoke --keep-groups
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Check --assignee <user>
    ```
 
-   **Check:** az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01" lists abstract-entra-logstream with eventHubName abs-prod-entra.
+   **Check:** az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01" lists abstract-entra-logstream with eventHubName abs-prod-entra, and the last Check shows no Contributor or Owner for &lt;user> at "/" and elevation "no".
 
-9. **Verify.** Abstract admin, with a Cloud admin to copy the key, in Abstract console, then the Azure portal.
+12. **Verify.** Abstract admin, with a Cloud admin to copy the key, in Abstract console, then the Azure portal.
 
    Add one Azure EventHub integration in Abstract for each hub, in every namespace. The connection string is the namespace's listen-only key abstract-access, and it is a secret: copy it in the Azure portal (Event Hubs namespace > Settings > Shared access policies > abstract-access > Connection string–primary key) and paste it straight into Abstract, never into a terminal, chat or ticket. The Event Hub deploys Standard tier, which needs no storage account in Abstract.
 
@@ -210,7 +265,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** Within minutes of saving, the namespace's Metrics show Outgoing Messages above zero for each hub that has Incoming Messages: that is Abstract reading.
 
-10. **Verify (optional).** Cloud admin, in Azure portal (Deploy to Azure) or Cloud Shell.
+13. **Verify (optional).** Cloud admin, in Azure portal (Deploy to Azure) or Cloud Shell.
 
    Add the health alerts, so you hear when Abstract stops reading while logs keep arriving.
 
@@ -220,13 +275,13 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** az monitor metrics alert list -g &lt;resource-group> --query "[?contains(name,'abstract-eh')].{name:name,enabled:enabled}" -o table shows four enabled metric alerts, and the Action Group's test notification arrives.
 
-11. **Verify.** Cloud admin and Abstract admin, in Azure portal, then Abstract.
+14. **Verify.** Cloud admin and Abstract admin, in Azure portal, then Abstract.
 
    In each namespace's Metrics, Incoming Messages should be non-zero once a source points at the hub, and Outgoing Messages should follow it. In Abstract, search the last 15 minutes for events from each Azure EventHub integration. Entra ID can take longer when there are few sign-ins.
 
    **Check:** Outgoing tracks Incoming on every hub with no lasting gap, and the Abstract search returns events for each integration, with cloud.project_id holding the subscription ID.
 
-12. **Clean up.** Cloud admin, in Abstract console, then Cloud Shell.
+15. **Clean up.** Cloud admin, in Abstract console, then Cloud Shell.
 
    Remove in this order, so nothing keeps sending to a hub that is gone. First delete the integrations in Abstract. Then delete the Policy assignments. Deleting an assignment does NOT remove the diagnostic settings it already deployed, so delete those next: the subscription setting abstract-activity-logs in each subscription, and the resource-level settings named abstract-logstream that the remediation created. If you turned on SQL auditing or Defender for Cloud export, delete those assignments too, and the rg-abstract-defender-export resource group. Then the Entra setting, if you added it. Last, every Event Hub resource group, one per region.
 
@@ -239,6 +294,22 @@ Abstract writes processed events to a system of yours. This does not bring any A
    ```
 
    **Check:** Every namespace is gone and no diagnostic setting points at one.
+
+16. **Clean up (optional).** The person who ran the access commands, in the same Cloud Shell, in Azure Cloud Shell (Bash).
+
+   Last, undo the management-group changes this setup recorded, newest first: the default management group goes back to what it was, each subscription moves back to the group it came from, and a group access MgCreate made is deleted only once it is empty. Anything still granted or elevated is removed too. It asks before each change. If moving a subscription back or restoring the default needed elevation the first time, that elevation is already gone: a Global Administrator runs access Elevate again first, and this Revoke removes it again at the end.
+
+   > **This changes:** Moving a subscription back changes the Policies and roles it inherits again.
+
+   *Optional:* Skip if you used an existing management group and access recorded nothing; Revoke then says so.
+
+   ```bash
+   cd ~/abstract-cloud-templates/templates/azure/azure-source-all-logs-management-group-policy
+   ./deploy.sh access Elevate
+   ./deploy.sh access Revoke
+   ```
+
+   **Check:** Revoke ends with "everything recorded is undone".
 
 ## Send the Activity Log from one Azure subscription, as a pilot
 
@@ -283,9 +354,11 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** az monitor diagnostic-settings subscription list --query "value[?name=='abstract-activity-logs'].eventHubName" -o tsv prints abs-prod-activity.
 
-4. **Set up (optional).** Cloud admin who is an Entra Security Administrator and can deploy at tenant scope, in Azure Cloud Shell (Bash).
+4. **Set up (optional).** Cloud admin who is an Entra Security Administrator, with a Global Administrator if root rights are missing, in Azure Cloud Shell (Bash).
 
-   Entra ID logs belong to the tenant, not a subscription, so no Policy reaches them. One CLI deploy creates the tenant's diagnostic setting, pointing at the abs-prod-entra hub. Run it without --yes first to preview, then with --yes. A tenant-scope deploy needs, besides the Entra role, the right to run deployments at the root scope "/" (for example Owner there, which a Global Administrator grants after elevating access). Expect 24 hours to 3 days before the first records arrive.
+   Entra ID logs belong to the tenant, not a subscription, so no Policy reaches them. One CLI deploy creates the tenant's diagnostic setting, pointing at the abs-prod-entra hub. Run it without --yes first to preview, then with --yes. A tenant-scope deploy needs, besides the Entra role, Microsoft.Resources/deployments/* at the root scope "/", and no Entra role gives that, Global Administrator included: without it the preview stops with AuthorizationFailed on Microsoft.Resources/deployments/validate/action. Check shows what &lt;user> holds. If Contributor or Owner at "/" is missing, a Global Administrator elevates their own access and grants it, with Security Administrator if that is missing too; after the deploy the same Global Administrator runs Revoke in the same Cloud Shell, which removes both. A tenant that will not grant rights at "/" can create the same setting in the Entra admin center (Entra ID, Monitoring & health, Diagnostic settings) with Security Administrator alone. Expect 24 hours to 3 days before the first records arrive.
+
+   > **This changes:** Until Revoke removes them, the elevated Global Administrator can grant roles anywhere in the tenant, and &lt;user> holds Contributor over every subscription in it.
 
    *Optional:* Recommended. Sign-in and audit logs carry most identity detections. Skip only if they already stream to another Event Hub you will use.
 
@@ -294,12 +367,17 @@ Abstract writes processed events to a system of yours. This does not bring any A
    ```bash
    [ -d ~/abstract-cloud-templates ] || git clone --depth 1 https://github.com/IamABS3C/abstract-cloud-templates ~/abstract-cloud-templates
    cd ~/abstract-cloud-templates/templates/azure
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Check --assignee <user>
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Elevate
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Grant --for entra --assignee <user>
    az eventhubs namespace authorization-rule show -g <resource-group> --namespace-name <namespace> -n abstract-diagnostics-send --query id -o tsv
    ./azure-source-entra-id-logs-tenant/deploy.sh <region> --parameters eventHubAuthorizationRuleId=<rule-id>
    ./azure-source-entra-id-logs-tenant/deploy.sh <region> --parameters eventHubAuthorizationRuleId=<rule-id> --yes
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Revoke --keep-groups
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Check --assignee <user>
    ```
 
-   **Check:** az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01" lists abstract-entra-logstream with eventHubName abs-prod-entra.
+   **Check:** az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01" lists abstract-entra-logstream with eventHubName abs-prod-entra, and the last Check shows no Contributor or Owner for &lt;user> at "/" and elevation "no".
 
 5. **Verify.** Abstract admin, with a Cloud admin to copy the key, in Abstract console, then the Azure portal.
 
@@ -382,21 +460,28 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** az eventhubs eventhub list -g &lt;resource-group> --namespace-name &lt;namespace> --query "[].name" -o tsv lists the hubs, and the namespace's Overview shows Status Active.
 
-3. **Set up.** Cloud admin who is an Entra Security Administrator and can deploy at tenant scope, in Azure Cloud Shell (Bash).
+3. **Set up.** Cloud admin who is an Entra Security Administrator, with a Global Administrator if root rights are missing, in Azure Cloud Shell (Bash).
 
-   Entra ID logs belong to the tenant, so this is one CLI deploy at tenant scope, pointing at the abs-prod-entra hub. It cannot be done by Policy. Run it without --yes first to preview, then with --yes. A tenant-scope deploy needs, besides the Entra role, the right to run deployments at the root scope "/" (for example Owner there, which a Global Administrator grants after elevating access). Expect 24 hours to 3 days before the first records arrive.
+   Entra ID logs belong to the tenant, not a subscription, so no Policy reaches them. One CLI deploy creates the tenant's diagnostic setting, pointing at the abs-prod-entra hub. Run it without --yes first to preview, then with --yes. A tenant-scope deploy needs, besides the Entra role, Microsoft.Resources/deployments/* at the root scope "/", and no Entra role gives that, Global Administrator included: without it the preview stops with AuthorizationFailed on Microsoft.Resources/deployments/validate/action. Check shows what &lt;user> holds. If Contributor or Owner at "/" is missing, a Global Administrator elevates their own access and grants it, with Security Administrator if that is missing too; after the deploy the same Global Administrator runs Revoke in the same Cloud Shell, which removes both. A tenant that will not grant rights at "/" can create the same setting in the Entra admin center (Entra ID, Monitoring & health, Diagnostic settings) with Security Administrator alone. Expect 24 hours to 3 days before the first records arrive.
+
+   > **This changes:** Until Revoke removes them, the elevated Global Administrator can grant roles anywhere in the tenant, and &lt;user> holds Contributor over every subscription in it.
 
    Template: [Entra ID sign-in and audit logs to Abstract](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-source-entra-id-logs-tenant)
 
    ```bash
    [ -d ~/abstract-cloud-templates ] || git clone --depth 1 https://github.com/IamABS3C/abstract-cloud-templates ~/abstract-cloud-templates
    cd ~/abstract-cloud-templates/templates/azure
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Check --assignee <user>
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Elevate
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Grant --for entra --assignee <user>
    az eventhubs namespace authorization-rule show -g <resource-group> --namespace-name <namespace> -n abstract-diagnostics-send --query id -o tsv
    ./azure-source-entra-id-logs-tenant/deploy.sh <region> --parameters eventHubAuthorizationRuleId=<rule-id>
    ./azure-source-entra-id-logs-tenant/deploy.sh <region> --parameters eventHubAuthorizationRuleId=<rule-id> --yes
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Revoke --keep-groups
+   ./azure-source-entra-id-logs-tenant/deploy.sh access Check --assignee <user>
    ```
 
-   **Check:** az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01" lists abstract-entra-logstream with eventHubName abs-prod-entra.
+   **Check:** az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01" lists abstract-entra-logstream with eventHubName abs-prod-entra, and the last Check shows no Contributor or Owner for &lt;user> at "/" and elevation "no".
 
 4. **Verify.** Abstract admin, with a Cloud admin to copy the key, in Abstract console, then the Azure portal.
 
@@ -791,7 +876,24 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** The output names the management group and subscriptions you will cover, and the diagnostic-settings and aadiam lists show any setting that already sends to an Event Hub (a non-empty hub or eventHubName). Note those: Azure allows at most 5 diagnostic settings per subscription, per resource and on the tenant.
 
-2. **Set up.** Cloud admin with rights on the management group, and a Global Administrator for the one-time consent, in Azure Cloud Shell (Bash), then the Azure portal (Deploy to Azure).
+2. **Foundation.** Cloud admin, in Azure Cloud Shell (Bash), or the Azure portal (Management groups).
+
+   Pick the management group the Policy will be assigned at, or create one and move in each target subscription. Whoever creates a group becomes its Owner, which covers the Policy deploy. A deployer without Owner on &lt;mg-id> gets Resource Policy Contributor and Role Based Access Control Administrator there from access Grant, run by someone with Owner on it. Every change is recorded, and access Revoke undoes it.
+
+   > **This changes:** A subscription moved into &lt;mg-id> gains the Policies and roles of &lt;mg-id> and loses those of the group it leaves.
+
+   ```bash
+   [ -d ~/abstract-cloud-templates ] || git clone --depth 1 https://github.com/IamABS3C/abstract-cloud-templates ~/abstract-cloud-templates
+   cd ~/abstract-cloud-templates/templates/azure/azure-access-app-registration-management-group-policy
+   ./deploy.sh access Check -m <mg-id>
+   ./deploy.sh access MgCreate -m <mg-id> --display-name "<display-name>"
+   ./deploy.sh access MgAddSub -m <mg-id> -s <subscription-id>
+   ./deploy.sh access Grant --for appreg-policy --assignee <user> -m <mg-id>
+   ```
+
+   **Check:** az account management-group show --name &lt;mg-id> --expand --query "children[].{name:displayName, type:type}" -o table lists every target subscription.
+
+3. **Set up.** Cloud admin with rights on the management group, and a Global Administrator for the one-time consent, in Azure Cloud Shell (Bash), then the Azure portal (Deploy to Azure).
 
    First create the managed identity and consent its Graph permissions (bootstrap, once per tenant). Then assign the Policy report-only (the DeployA command, or Rollout mode "Report only (recommended)" in the portal), check what it reports, and deploy again in the portal with "Enforce — create app registrations". Before remediating, tag each target subscription abstract-onboard=true (untagged ones are skipped), and give both identities their roles: the bootstrap identity runs the script, and the Policy assignment's own identity deploys it, so each needs Owner on every target subscription and Key Vault Secrets Officer on the central vault. Existing subscriptions are onboarded only by the remediate command.
 
@@ -812,11 +914,12 @@ Abstract writes processed events to a system of yours. This does not bring any A
    az role assignment create --assignee-object-id "$pid" --assignee-principal-type ServicePrincipal --role "Key Vault Secrets Officer" --scope "$(az keyvault show -n <key-vault-name> --query id -o tsv)"
    ./deploy.sh remediate -m <mg-id>
    az policy remediation list --management-group <mg-id> --query "[].{name:name, state:provisioningState, ok:deploymentStatus.successfulDeployments, failed:deploymentStatus.failedDeployments}" -o table
+   ./deploy.sh access Revoke --keep-groups
    ```
 
    **Check:** az role assignment list --assignee "$pid" --all --query "[].{role:roleDefinitionName, scope:scope}" -o table shows Owner on every target subscription and Key Vault Secrets Officer on the vault, the remediation task reaches Succeeded with failed 0, and az ad app list --display-name Abstract-&lt;subscription-id> returns an app for each tagged subscription.
 
-3. **Verify.** Cloud admin, then Abstract admin, in Azure Cloud Shell, then Abstract console.
+4. **Verify.** Cloud admin, then Abstract admin, in Azure Cloud Shell, then Abstract console.
 
    Confirm the test subscription's app registration appears in Entra with its consent complete and its roles only on that subscription. Then add the matching Abstract integration with that app's tenant ID, client ID and secret. Copy the secret in the Azure portal: Key Vault > Secrets > the secret named for the subscription > current version > Show Secret Value, then copy it into Abstract. Never read it with a command that prints it.
 
@@ -827,15 +930,18 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    **Check:** verify reports no missing permissions, and the role list shows Reader and Azure Event Hubs Data Receiver on /subscriptions/&lt;test-subscription-id> only. The Graph permissions are tenant-wide by design.
 
-4. **Clean up.** Cloud admin and Entra admin, in Cloud Shell, then Entra admin center.
+5. **Clean up.** Cloud admin and Entra admin, in Cloud Shell, then Entra admin center.
 
-   Delete the Policy assignment first, then the app registrations it created, if Abstract no longer uses them, then the managed identity or its Graph permissions.
+   Delete the Policy assignment first, then the app registrations it created, if Abstract no longer uses them, then the managed identity or its Graph permissions. Last, undo the management-group changes this setup recorded; if a move needed elevation the first time, a Global Administrator runs access Elevate again first, and Revoke removes it again at the end.
 
    ```bash
    az policy assignment delete --name <assignment-name> --scope /providers/Microsoft.Management/managementGroups/<mg-id>
+   cd ~/abstract-cloud-templates/templates/azure/azure-access-app-registration-management-group-policy
+   ./deploy.sh access Elevate
+   ./deploy.sh access Revoke
    ```
 
-   **Check:** The assignment is gone and no Abstract app registration remains.
+   **Check:** The assignment is gone, no Abstract app registration remains, and Revoke ends with "everything recorded is undone".
 
 ## Other templates
 
@@ -846,6 +952,7 @@ No plan above needs these on their own.
 ## Not covered yet
 
 - Entra ID logs cannot be set by Policy, and a portal deploy at tenant scope is not proven yet, so that step is CLI only.
+- The access commands (deploy.sh access, from _modules/tenant-access.sh) are tested against a stub Azure CLI only; they have not yet run against a live tenant.
 - Removing the Policy plan's resource-level diagnostic settings is by hand: Azure keeps them after the assignment is deleted.
 - Nothing onboards a new subscription to the Logic App automatically yet. enableEventTrigger only creates the Event Grid system topic; no event subscription is wired, and the workflow's plain HTTP trigger does not answer Event Grid's validation handshake, so onboard each subscription with ./deploy.sh onboard.
 - The Abstract field labels come from the Azure EventHub integration 0.7.2. An older version may still ask for the storage fields on Standard tier.

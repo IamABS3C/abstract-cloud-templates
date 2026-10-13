@@ -64,6 +64,7 @@ No per-subscription compute and no per-run cost.
 
 ## Permissions
 
+- **Contributor** on The target resource group: Deployer: Create the workflows, the action group and the optional Event Grid system topic; Contributor includes Microsoft.Resources/deployments/*. The template creates no role assignments.
 - **Global Administrator** on The Entra tenant: Deployer: Once per tenant, to consent Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All to the identity.
 - **Microsoft Graph Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All** on The Entra tenant: Pre-consented managed identity: Creates apps and grants consent; tier-0 whichever path is used.
 - **Key Vault Secrets Officer** on The central Key Vault: Pre-consented managed identity: Stores each client secret.
