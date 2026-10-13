@@ -26,7 +26,9 @@ permissions:
     fails with AuthorizationFailed on Microsoft.Resources/deployments/validate/action. No Entra role grants
     it, Global Administrator included. A Global Administrator runs ./deploy.sh access Elevate, then ./deploy.sh
     access Grant --for entra --assignee <user>, and ./deploy.sh access Revoke removes both once the deploy
-    is done. Contributor suffices because this template creates no role assignments. Source: Microsoft
+    is done. Contributor suffices because this template creates no role assignments; a grant at "/" takes
+    minutes to apply (measured 6 to 12), so AuthorizationFailed right after it is propagation, not a failed
+    grant. Source: Microsoft
     Learn, Tenant deployments with Bicep, Required access. Not needed for the Entra admin center path.'
 - role: listKeys on the Event Hub authorization rule
   where: The Event Hubs namespace

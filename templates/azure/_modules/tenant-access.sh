@@ -126,7 +126,7 @@ write() {
   fi
   if grep -qiE 'AuthorizationFailed|Authorization_RequestDenied|does not have authorization|Insufficient privileges|Forbidden' <<<"$err"; then
     warn "FAILED, you do not hold the right for this: $err"
-    warn "Hand the command above to someone who does, or have a Global Administrator run -a Elevate first."
+    warn "Hand the command above to someone who does${NEED_HINT:+. It needs $NEED_HINT}."
   else
     warn "FAILED: $err"
   fi
@@ -134,6 +134,10 @@ write() {
 }
 
 record() { ( umask 077; printf '%s\n' "$*" >> "$STATE" ); }
+
+# What a refused write needs, named per action. Elevation (User Access Administrator at "/") lets
+# a Global Administrator grant roles; it does not include hierarchy-settings or deployment rights.
+NEED_HINT="a role that can assign roles at that scope: Owner, User Access Administrator or Role Based Access Control Administrator; a Global Administrator gets User Access Administrator at \"/\" from -a Elevate"
 
 need_mg() {
   [[ -n "$MG_ID" ]] || die "-m <management-group-id> is required for $ACTION."
@@ -239,7 +243,7 @@ do_check() {
   ok "new subscriptions land in: ${def:-the root group $TENANT}"
 
   say "Management groups you can see"
-  az account management-group list --query "[].{id:name, displayName:displayName}" -o table 2>/dev/null \
+  az account management-group list --query "[].{name:name, displayName:displayName}" -o table 2>/dev/null \
     || warn "none visible: you need a role on a management group, or elevation, to see them"
 
   local who="${ASSIGNEE:-$me}"
@@ -303,6 +307,10 @@ do_grant() {
     say "Rights to grant on the Event Hubs namespace"
     grant_rbac "${POLICY_ROLES[1]}" "$NAMESPACE_ID"
   fi
+  # Measured 2026-10-13 on a grant at "/": the session's existing token was refused with "If access
+  # was recently granted, please refresh your credentials" for 12 minutes; a token minted after the
+  # grant passed at 6 minutes. Propagation, not a broken grant.
+  warn "A grant at this scope takes minutes to apply (measured: 12 with the existing sign-in, 6 after az logout && az login). AuthorizationFailed in that window is not a failed grant: wait, or sign in again, then retry."
   warn "Remove these when the setup is done: -a Revoke"
 }
 
@@ -317,6 +325,7 @@ do_mg_create() {
   if [[ "$(hierarchy_raw | json_field requireAuthorizationForGroupCreation)" == "true" ]]; then
     warn "this tenant requires Management Group Contributor (or Owner) on the root group to create one"
   fi
+  NEED_HINT="Management Group Contributor or Owner on the root management group $TENANT"
   if write "Create management group $MG_ID" "${cmd[@]}" --output none; then
     record "mg|${MG_ID}"
     ok "created $MG_ID under ${PARENT:-the default parent}; you are its Owner"
@@ -349,6 +358,7 @@ do_mg_add_sub() {
   # A move whose origin is unknown could never be undone, so it is not made.
   [[ -n "$prev" ]] || die "cannot read which group $SUB_ID is in now. Look it up (Azure portal, Management groups) and pass --from <mg-id>, so Revoke can move it back."
   warn "the subscription will inherit every Policy and role on $MG_ID, and lose those of $prev"
+  NEED_HINT="managementGroups/write on $MG_ID and on $prev (the root group is exempt), and roleAssignments/write on the subscription"
   if write "Move subscription $SUB_ID into $MG_ID (from $prev)" \
       az account management-group subscription add --name "$MG_ID" --subscription "$SUB_ID" --output none; then
     record "mgsub|${MG_ID}|${SUB_ID}|${prev}"
@@ -365,9 +375,14 @@ do_mg_default() {
   # update changes only the default; create replaces the whole settings object, so use it only
   # when there is none to keep.
   grep -qE '"(requireAuthorizationForGroupCreation|defaultManagementGroup)"' <<<"$raw" && verb=update
+  # Measured 2026-10-13: User Access Administrator at "/" is refused settings/write on the root group.
+  NEED_HINT="Hierarchy Settings Administrator or Owner on the root management group $TENANT (elevation alone is not enough)"
   if write "Make $MG_ID the default management group for every new subscription" \
       az account management-group hierarchy-settings "$verb" --name "$TENANT" --default-management-group "$target" --output none; then
-    record "mgdefault|${prev}"
+    # When this run created the settings object, undo deletes it rather than leaving one behind. The
+    # target is recorded too: hierarchy settings are shared by every setup, so undo must first check
+    # that the default is still the one this setup chose.
+    record "mgdefault|${prev}|${verb}|${target}"
     ok "new subscriptions now land in $MG_ID"
   fi
 }
@@ -385,9 +400,21 @@ undo() {
       if [[ -z "$c" ]]; then warn "$b was moved into $a from a group this record does not name: move it back by hand, then delete its line from $STATE"; return 1; fi
       write "Move subscription $b back to $c" az account management-group subscription add --name "$c" --subscription "$b" --output none ;;
     mgdefault)
-      write "Restore the default management group to ${a:-the root group}" \
-        az account management-group hierarchy-settings update --name "$TENANT" \
-          --default-management-group "${a:-${MG_SCOPE}/${TENANT}}" --output none ;;
+      # Another setup may have changed the default since (the settings object is tenant-wide); then
+      # this record is not ours to undo, and it stays until that setup has undone its own change.
+      local now; now=$(hierarchy_raw | json_field defaultManagementGroup)
+      if [[ -n "$now" && -n "$c" && "$now" != "$c" ]]; then
+        warn "the default management group is now $now, not the $c this setup chose: someone changed it since, so it is left alone (line kept)"
+        return 1
+      fi
+      if [[ "$b" == create ]]; then
+        write "Remove the hierarchy settings this setup created (new subscriptions land in the root group again)" \
+          az account management-group hierarchy-settings delete --name "$TENANT" --yes --output none
+      else
+        write "Restore the default management group to ${a:-the root group}" \
+          az account management-group hierarchy-settings update --name "$TENANT" \
+            --default-management-group "${a:-${MG_SCOPE}/${TENANT}}" --output none
+      fi ;;
     mg)
       local children
       children=$(az account management-group show --name "$a" --expand --query "length(children || \`[]\`)" -o tsv 2>/dev/null || echo "?")

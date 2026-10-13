@@ -39,6 +39,11 @@ template granted:
 ./azure-source-entra-id-logs-tenant/deploy.sh access Revoke --keep-groups
 ```
 
+A grant at `/` takes minutes to apply: measured on 2026-10-13, the existing sign-in kept getting
+`AuthorizationFailed … If access was recently granted, please refresh your credentials` for 12 minutes,
+while a token minted after the grant (`az logout && az login`) passed at 6. Wait or sign in again, then
+retry; the grant itself is fine.
+
 `Elevate` is the same switch as Entra ID, Properties, **Access management for Azure resources**: it gives
 the Global Administrator User Access Administrator at `/`, which is what lets them grant anything there.
 **Elevation alone does not fix the error.** User Access Administrator, like Role Based Access Control
@@ -108,9 +113,12 @@ Granting at `/` or on a management group needs a right to grant there: User Acce
 Based Access Control Administrator or Owner. A Global Administrator gets User Access Administrator at `/`
 from `access Elevate`. Granting an Entra role needs Privileged Role Administrator or Global Administrator.
 
-> The `access` commands are tested against a stub Azure CLI only; they have not yet run against a live
-> tenant. If `Revoke` finds nothing recorded, it lists what the caller and `--assignee` still hold rather
-> than reporting success, because the record may sit in another Cloud Shell. Every role, scope and command above is from Microsoft Learn: *Tenant deployments with Bicep*
+> The `access` commands ran end to end on a test tenant on 2026-10-13 (Check, Grant, the tenant deploy,
+> Revoke, MgCreate, MgAddSub, a correctly refused MgDefault, and the group roll-back). `Elevate` from a
+> non-elevated account has not run live yet; if its assignment id is not readable within 30 seconds,
+> `Revoke` falls back to removing User Access Administrator at `/` by role and says so. If `Revoke` finds
+> nothing recorded, it lists what the caller and `--assignee` still hold rather than reporting success,
+> because the record may sit in another Cloud Shell. Every role, scope and command above is from Microsoft Learn: *Tenant deployments with Bicep*
 > (Required access), *Elevate access to manage all Azure subscriptions and management groups*, *Manage your
 > Azure subscriptions at scale with management groups*, *Protect your resource hierarchy*, and *Azure
 > built-in roles*.

@@ -12,5 +12,9 @@ cd "$(dirname "$0")"
 if [ "${1:-}" = access ]; then shift; exec ../_modules/tenant-access.sh --setup azure-source-entra-id-logs-tenant -a "${1:?action}" "${@:2}"; fi
 MODE=what-if; ARGS=()
 for a in "$@"; do [ "$a" = "--yes" ] && MODE=create || ARGS+=("$a"); done
-az deployment tenant "$MODE" --location "${ARGS[0]:?location}" \
+# Validate first: on a missing right at "/", az 2.87 what-if dies in a Python traceback that hides
+# the AuthorizationFailed message, while validate prints it plainly.
+az deployment tenant validate --location "${ARGS[0]:?location}" \
+  --template-file azuredeploy.json --parameters @parameters.example.json "${ARGS[@]:1}" --output none
+az deployment tenant "$MODE" --location "${ARGS[0]}" \
   --template-file azuredeploy.json --parameters @parameters.example.json "${ARGS[@]:1}"
