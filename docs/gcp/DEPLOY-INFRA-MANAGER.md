@@ -7,6 +7,19 @@ Google-managed bucket.
 Use it when you want the deployment auditable and repeatable without standing up your own
 Terraform backend and CI.
 
+**Tested in October 2026**, on one folder of a test organization: `gcp-source-audit-logs-folder` from the
+public templates repository at a release tag. The order below is the one that ran:
+
+1. Grant the roles, yours with `--grant YOUR_EMAIL --for infra-manager` and the service account's with
+   `--grant serviceAccount:EMAIL --for infra-manager-sa` ([Check them, then grant them](#check-them-then-grant-them)).
+2. Preview ([Step 8](#step-8--preview-this-is-terraform-plan)): 11 resources to create, none to destroy.
+3. Export the preview and read it.
+4. Apply ([Step 9](#step-9--apply)). The deployment reached `ACTIVE`, and Abstract stored the audit logs it sent,
+   from the projects under that folder.
+
+Several folders or several projects in one deployment are not offered: a template makes one sink, at one scope.
+The guided script handles those ([GUIDE.md](GUIDE.md)).
+
 > **Do not reach for Deployment Manager.** It reached **end of support on 31 March 2026**.
 > It keeps running until 30 June 2027, but Google will not answer support tickets and
 > states that continued use is at your own risk. Infra Manager is the documented successor,
@@ -213,11 +226,6 @@ Simplest avoidance: put the service account in the logging project, as above.
 
 ## Step 6 — Choose the source: the public repository at a release tag
 
-> **Not yet run end to end.** Every command on this page was checked against gcloud's own help (SDK 588.0.0) and
-> Google's Infrastructure Manager pages, but the test organization has no open billing account, so no preview or
-> deployment has run (see [VERIFIED.md](VERIFIED.md)). Treat your first preview as the test, and read it before you
-> apply.
-
 Deploy from the public repository, not from a folder on your computer. Each template reads the shared modules
 from `../_modules`, and `--local-source` uploads only the folder you name: gcloud's own help says Terraform
 references outside that path are not supported (`gcloud infra-manager deployments apply --help`, SDK 588.0.0). A
@@ -263,10 +271,10 @@ foundation's `services`, or Google writes and bills Data Access logs this sink n
 read only with `data_access_all`, and on its own routes nothing.
 
 Either way, turn the Data Access logs on at the source too, with
-`gcp-foundation-data-access-audit-logs`. Firewall and DNS logs do not belong in this root:
-Abstract's managed GCP parser keeps only Cloud Audit Log records, so they would be pulled and
-discarded. `gcp-source-network-threat-logs` routes them to a topic of their own, but Abstract does not keep
-them there either today: deploying it costs money in Google Cloud and adds nothing in Abstract.
+`gcp-foundation-data-access-audit-logs`. Network logs do not belong in this root: the audit-log
+configuration's managed parser keeps only Cloud Audit Log records, so they would be pulled and
+discarded. `gcp-source-network-threat-logs` routes them to a topic of their own, read by a GCP Pub/Sub Source
+configuration of its own that runs the extended GCP Pub/Sub parser ([ABSTRACT-INTEGRATION.md](ABSTRACT-INTEGRATION.md)).
 
 `abstract.tfvars` stays on your computer: gcloud reads it and sends the values, and the repository's `.gitignore`
 keeps `*.tfvars` out of git so nobody commits a customer's values by accident.

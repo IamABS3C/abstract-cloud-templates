@@ -28,6 +28,11 @@ log_project = "LOGGING_PROJECT_ID"
 # Required when asset_types is empty, which feeds every asset type in the organization.
 # acknowledge_all_asset_types = false
 
+# Name of the organization feed. Feed names are unique per organization, so a second deployment in
+# the same organization (another logging project, a lab) needs its own; an existing name fails with
+# 409 Requested entity already exists.
+# feed_id = "abstract-asset-feed"
+
 # Pub/Sub message retention in days. This is the entire recovery window: unacked messages older than
 # this are deleted.
 # retention_days = 7

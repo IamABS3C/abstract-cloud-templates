@@ -124,9 +124,10 @@ you can stop and resume.
 
 | Command | What it does |
 |---|---|
-| `./tools/gcp-guided-setup/abstract-gcp-setup.sh` | Every step, asking before each change |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh` | The menu (below). Without a terminal it runs every step, as before |
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 4` | One step |
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --check` | Checks everything and changes nothing |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --policies` | The organization policies that can block or change this setup. Changes nothing |
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove` | Lists what the clean-up would delete, and deletes nothing |
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove --confirm` | Deletes that list. Run it only after you have read the list |
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove --project LOGGING_PROJECT_ID` | With no answers file, LOGGING_PROJECT_ID being your logging project's ID: lists by name what carries the setup's names, and deletes nothing |
@@ -134,6 +135,21 @@ you can stop and resume.
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --teardown --confirm` | Deletes that list, after you type the organization ID. Run it only after you have read the list |
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL --check` | The roles the setup needs, what each is for, and which of them EMAIL holds directly. Changes nothing |
 | `./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL` | Run by someone who can set IAM policy: grants those roles to EMAIL, one binding per role, asking first |
+| `./tools/gcp-guided-setup/abstract-gcp-setup.sh --grant EMAIL --for infra-manager` | The roles to start an Infrastructure Manager deployment; `--for infra-manager-sa` with `serviceAccount:EMAIL`, the roles of the account it runs as |
+
+With no options, in a terminal, the script opens a menu:
+
+| Key | What it does |
+|---|---|
+| `a` | The guided setup, step 1 to step 10, asking before each change |
+| `1` to `10` | One step |
+| `p` | The organization policy review, as `--policies` |
+| `s` | What is supported where: organization, folder, project, and what lives in the logging project |
+| `i` | Every saved name, ID and account: scope, ticked projects, sinks, topic, subscription, accounts |
+| `g` | Check or grant the roles for someone |
+| `c` | Check everything, change nothing |
+| `x` | Clean up |
+| `q` | Quit |
 
 `--state` names the answers file. In a new Cloud Shell session, upload the copy you downloaded
 (More, then Upload), and if it is saved under another name, put that path after `--state`.
@@ -144,16 +160,40 @@ needs it to know what the setup made.
 
 | Step | What it does |
 |---|---|
-| 1 | Sign-in, organization and scope (organization, folder or project) |
+| 1 | Sign-in, organization and scope: the organization, one or more folders, or one or more projects (checkbox lists) |
 | 2 | Checks, live, every role the later steps need |
 | 3 | Creates or picks the logging project, links billing, turns on the APIs |
-| 4 | Topic, subscription, sink, and the sink's permission to publish |
+| 4 | Topic, subscription, sink (one per folder, one filtered organization sink or one per project), and each sink's permission to publish |
 | 5 | The service account Abstract reads with, and its key |
-| 6 | Data Access audit logs (optional): both switches |
-| 7 | Google Workspace reader (optional) |
+| 6 | IAM and Data Access logs: IAM and identity logs on by default, BigQuery, Cloud Storage and Cloud KMS optional; both switches |
+| 7 | Google Workspace reader (the answer defaults to yes) |
 | 8 | Health alerts (optional) |
 | 9 | A fresh test event from the sink to the topic, on a probe subscription of its own |
 | 10 | The exact values to enter in Abstract |
+
+**Scope, in step 1.** Folders and projects are chosen from checkbox lists. The folder list shows every folder and
+subfolder with its path; each ticked folder gets one sink, and a folder inside another ticked folder is left out,
+because its parent's sink covers it. In the project list, numbers or ranges tick and untick, `a` ticks every
+project shown, `n` none, `f` every project in a folder, and any other text searches. With several projects, step 1
+asks for option A, one organization sink filtered to them (recommended: one sink and one grant; needs Logs
+Configuration Writer at the organization), or option B, one sink in each project (needs it on each project only).
+Projects created later are not covered until you tick them. Option A sets the audit settings of step 6 in each
+ticked project, and step 9 writes its test event in one of them.
+
+**Existing topics are offered first.** Step 4 lists the topics you already have before creating a new one; Enter
+creates the new one. Abstract always gets a subscription and a service account of its own: an existing subscription
+would take messages from whoever else reads it, and an existing service account would give Abstract's key whatever
+else that account can do.
+
+**The scope can be changed later.** Run step 1 again and answer yes to "Change what sends logs?", for example to tick
+a project created since. Sinks this setup already made stay recorded, so `--remove` still finds them.
+
+**The policy review changes nothing.** `--policies` (menu `p`) reads the effective organization policies at the
+organization, the logging project and every chosen folder or project, and sorts them: BLOCKS (the
+service-account key constraints), CHECK (restricted services, CMEK-only services, resource locations, allowed
+member domains, key expiry, Pub/Sub in-transit regions), info (cross-project service accounts, key exposure
+response, serial-port logging) and RECOMMEND (no audit logging exemptions, no automatic grants to default service
+accounts, Kubernetes cloud logging).
 
 **Clean-up removes only what the setup created.** It records each thing it creates, so
 `--remove` deletes the sink, topic, subscription, service accounts, alerts and key files it
@@ -193,7 +233,12 @@ pipeline works, because the roles are not needed after the setup. The roles are 
 
 If your team keeps infrastructure as code, use the Terraform appendix in each template's
 tutorial. It creates a state bucket first, then runs `init`, `plan`, `apply`, and `destroy` to
-clean up. It creates the same resources. Use one or the other for a given setup, not both.
+clean up. It creates the same resources, with the same names. Use one or the other for a given setup, not
+both. A template makes one sink at one scope, so several folders or several projects in one run need the script.
+Infrastructure Manager runs the same templates for you: [DEPLOY-INFRA-MANAGER.md](DEPLOY-INFRA-MANAGER.md).
+
+The network, asset and Security Command Center sources, and bucket, billing-account and archive logs, are
+Terraform only: the script builds the audit-log pipeline and Workspace.
 
 ---
 
@@ -226,7 +271,8 @@ Never pull from `abstract-audit-logs-sub` yourself: Abstract reads that subscrip
 
 ```
 Always first:        audit-gcp-estate.sh, then abstract-gcp-setup.sh --step 1 and --step 2
-Deploy:              abstract-gcp-setup.sh (or the Terraform appendix, if you keep IaC)
+Before you build:    abstract-gcp-setup.sh --policies
+Deploy:              abstract-gcp-setup.sh (or the Terraform appendix, or Infrastructure Manager, if you keep IaC)
 Detail on a project: preflight.sh
 Later, any time:     abstract-gcp-setup.sh --check
 To remove it:        abstract-gcp-setup.sh --state ~/.abstract-gcp-setup.env --remove, read the list, then add --confirm

@@ -2,7 +2,7 @@
 
 <!-- Generated from tools/guides/steps/gcp.yml by `python -m tools.templates generate`. Edit that file. -->
 
-Every step of sending your Google Cloud audit logs to Abstract, written three ways: clicking through the Google Cloud console, typing gcloud commands, or deploying the same pipeline with Infrastructure Manager. Each step says who needs which role, how to check you hold it, and how to grant it if you do not. You end up with one log sink that copies audit logs to a Pub/Sub topic in a logging project, a subscription Abstract reads, and a service account that can read only that subscription. Nothing here touches your workloads. Prefer to be asked questions? The guided setup script in Cloud Shell does the same steps and checks each one; its step numbers are given on every step below. Deployment Manager is not offered: Google ended its support on 31 March 2026, new users have been unable to start with it since 30 June 2026, and Infrastructure Manager is its successor. The console click paths use the labels the Google Cloud console showed on 13 October 2026; the screenshots come from a test organization, with its names and IDs replaced by example values.
+Every step of sending your Google Cloud audit logs to Abstract, written three ways: clicking through the Google Cloud console, typing gcloud commands, or deploying the same pipeline with Infrastructure Manager. Each step says who needs which role, how to check you hold it, and how to grant it if you do not. You end up with one log sink that copies audit logs to a Pub/Sub topic in a logging project, a subscription Abstract reads, and a service account that can read only that subscription. Google Workspace, network logs, Cloud Asset changes and Security Command Center findings are pipelines of their own: the step after Connect Abstract lists them. Nothing here touches your workloads. Prefer to be asked questions? The guided setup script in Cloud Shell does the same steps and checks each one; its step numbers are given on every step below. Deployment Manager is not offered: Google ended its support on 31 March 2026, new users have been unable to start with it since 30 June 2026, and Infrastructure Manager is its successor. The console click paths use the labels the Google Cloud console showed on 13 October 2026; the screenshots come from a test organization, with its names and IDs replaced by example values.
 
 The same guide, with your own values filled into every command and every click, is in the onboarding app.
 Every placeholder in CAPITALS below is one of these values:
@@ -31,8 +31,8 @@ Every placeholder in CAPITALS below is one of these values:
 **What should send logs?**
 
 - **The whole organization.** Every project, including ones created later. Pick it unless you cannot get organization-level access.
-- **One folder.** Every project in the folder and its sub-folders. Projects outside it, including new ones created at the organization root, are missed.
-- **One project.** A pilot that proves the pipeline before you ask for organization access. Replace it later; do not repeat it per project.
+- **One or more folders.** Every project in each folder and its sub-folders, including ones created later. One sink per folder, all sending to the same topic: repeat the sink and publisher steps for each folder. Projects outside them, including new ones created at the organization root, are missed.
+- **One or more projects.** A sink in each project, repeated per project, all sending to the same topic; or one project as a pilot. Projects created later are not covered until you add a sink for them. For one organization sink filtered to several projects, use the guided script's step 1, which writes that filter for you.
 
 **The logging project**
 
@@ -61,7 +61,8 @@ Every placeholder in CAPITALS below is one of these values:
 12. [Alerts for a stalled pipeline](#alerts-for-a-stalled-pipeline)
 13. [Prove logs arrive](#prove-logs-arrive)
 14. [Connect Abstract](#connect-abstract)
-15. [Keep it healthy](#keep-it-healthy)
+15. [More sources](#more-sources)
+16. [Keep it healthy](#keep-it-healthy)
 
 ## Sign in and find your IDs
 
@@ -75,11 +76,11 @@ Sign in to the Google Cloud console as YOUR_EMAIL. **Manage resources** lists yo
 
 Open [Manage resources](https://console.cloud.google.com/cloud-resource-manager).
 
-*The whole organization or One folder:* Copy the organization's ID (digits) into Your values.
+*The whole organization or One or more folders:* Copy the organization's ID (digits) into Your values.
 
-*One folder:* Copy the folder's ID (digits) and the organization's ID into Your values.
+*One or more folders:* Copy the folder's ID (digits) and the organization's ID into Your values.
 
-*One project:* Copy the ID of the project the logs come from, and the organization's ID, into Your values.
+*One or more projects:* Copy the ID of the project the logs come from, and the organization's ID, into Your values.
 
 ### Command line
 
@@ -101,17 +102,17 @@ Your organization's ID is the number in the ID column.
 gcloud organizations list
 ```
 
-*One folder:* Your folder's ID is the number in the ID column.
+*One or more folders:* Your folder's ID is the number in the ID column.
 
-*One folder:*
+*One or more folders:*
 
 ```bash
 gcloud resource-manager folders list --organization=ORG_ID
 ```
 
-*One project:* Check the project the logs come from, and which organization or folder it sits under.
+*One or more projects:* Check the project the logs come from, and which organization or folder it sits under.
 
-*One project:*
+*One or more projects:*
 
 ```bash
 gcloud projects describe SOURCE_PROJECT_ID --format="value(projectId,lifecycleState,parent.type,parent.id)"
@@ -137,17 +138,17 @@ Your organization's ID is the number in the ID column.
 gcloud organizations list
 ```
 
-*One folder:* Your folder's ID is the number in the ID column.
+*One or more folders:* Your folder's ID is the number in the ID column.
 
-*One folder:*
+*One or more folders:*
 
 ```bash
 gcloud resource-manager folders list --organization=ORG_ID
 ```
 
-*One project:* Check the project the logs come from, and which organization or folder it sits under.
+*One or more projects:* Check the project the logs come from, and which organization or folder it sits under.
 
-*One project:*
+*One or more projects:*
 
 ```bash
 gcloud projects describe SOURCE_PROJECT_ID --format="value(projectId,lifecycleState,parent.type,parent.id)"
@@ -198,13 +199,13 @@ Leave **Manual** selected. In **Principal** enter YOUR_EMAIL. Under **Resource p
 //cloudresourcemanager.googleapis.com/organizations/ORG_ID
 ```
 
-*One folder:*
+*One or more folders:*
 
 ```text
 //cloudresourcemanager.googleapis.com/folders/FOLDER_ID
 ```
 
-*One project:*
+*One or more projects:*
 
 ```text
 //cloudresourcemanager.googleapis.com/projects/SOURCE_PROJECT_ID
@@ -254,13 +255,13 @@ Or grant a single role by hand with the command in the table above. Each adds on
 gcloud policy-intelligence troubleshoot-policy iam //cloudresourcemanager.googleapis.com/organizations/ORG_ID --principal-email=YOUR_EMAIL --permission=logging.sinks.create
 ```
 
-*One folder:*
+*One or more folders:*
 
 ```bash
 gcloud policy-intelligence troubleshoot-policy iam //cloudresourcemanager.googleapis.com/folders/FOLDER_ID --principal-email=YOUR_EMAIL --permission=logging.sinks.create
 ```
 
-*One project:*
+*One or more projects:*
 
 ```bash
 gcloud policy-intelligence troubleshoot-policy iam //cloudresourcemanager.googleapis.com/projects/SOURCE_PROJECT_ID --principal-email=YOUR_EMAIL --permission=logging.sinks.create
@@ -296,13 +297,13 @@ Or grant a single role by hand with the command in the table above. Each adds on
 gcloud policy-intelligence troubleshoot-policy iam //cloudresourcemanager.googleapis.com/organizations/ORG_ID --principal-email=YOUR_EMAIL --permission=logging.sinks.create
 ```
 
-*One folder:*
+*One or more folders:*
 
 ```bash
 gcloud policy-intelligence troubleshoot-policy iam //cloudresourcemanager.googleapis.com/folders/FOLDER_ID --principal-email=YOUR_EMAIL --permission=logging.sinks.create
 ```
 
-*One project:*
+*One or more projects:*
 
 ```bash
 gcloud policy-intelligence troubleshoot-policy iam //cloudresourcemanager.googleapis.com/projects/SOURCE_PROJECT_ID --principal-email=YOUR_EMAIL --permission=logging.sinks.create
@@ -338,9 +339,9 @@ One project holds the topic, the subscription and Abstract's service account. Ke
 
 *Create a new one:* In **Project name** enter LOGGING_PROJECT_ID. Check **Project ID** reads LOGGING_PROJECT_ID too and correct it if not: it can never change afterwards. In **Organization** pick your organization.
 
-*Create a new one, The whole organization or One project:* **Parent resource** is the organization; leave it, and click **Create**.
+*Create a new one, The whole organization or One or more projects:* **Parent resource** is the organization; leave it, and click **Create**.
 
-*Create a new one, One folder:* In **Parent resource** click **Browse** and pick your folder (FOLDER_ID), then click **Create**.
+*Create a new one, One or more folders:* In **Parent resource** click **Browse** and pick your folder (FOLDER_ID), then click **Create**.
 
 *Create a new one:* *Screenshot in the app: The New Project form with the project name and ID filled in and the organization as parent resource.*
 
@@ -362,17 +363,17 @@ Open [Organization policies](https://console.cloud.google.com/iam-admin/orgpolic
 
 ### Command line
 
-*Create a new one, The whole organization or One project:* Create it under your organization. The ID is permanent and unique across Google Cloud.
+*Create a new one, The whole organization or One or more projects:* Create it under your organization. The ID is permanent and unique across Google Cloud.
 
-*Create a new one, The whole organization or One project:*
+*Create a new one, The whole organization or One or more projects:*
 
 ```bash
 gcloud projects create LOGGING_PROJECT_ID --organization=ORG_ID
 ```
 
-*Create a new one, One folder:* Create it under your folder. The ID is permanent and unique across Google Cloud.
+*Create a new one, One or more folders:* Create it under your folder. The ID is permanent and unique across Google Cloud.
 
-*Create a new one, One folder:*
+*Create a new one, One or more folders:*
 
 ```bash
 gcloud projects create LOGGING_PROJECT_ID --folder=FOLDER_ID
@@ -412,13 +413,13 @@ gcloud org-policies describe iam.managed.disableServiceAccountKeyCreation --proj
 
 Infrastructure Manager needs the logging project to exist, with an open billing account. Create it as on the command line path:
 
-*Create a new one, The whole organization or One project:*
+*Create a new one, The whole organization or One or more projects:*
 
 ```bash
 gcloud projects create LOGGING_PROJECT_ID --organization=ORG_ID
 ```
 
-*Create a new one, One folder:*
+*Create a new one, One or more folders:*
 
 ```bash
 gcloud projects create LOGGING_PROJECT_ID --folder=FOLDER_ID
@@ -651,9 +652,9 @@ Open [Log Router](https://console.cloud.google.com/logs/router).
 
 *The whole organization:* In the resource picker at the top, select your organization, then click **Create sink**.
 
-*One folder:* In the resource picker at the top, select your folder (FOLDER_ID), then click **Create sink**.
+*One or more folders:* In the resource picker at the top, select your folder (FOLDER_ID), then click **Create sink**.
 
-*One project:* In the resource picker at the top, select SOURCE_PROJECT_ID, then click **Create sink**.
+*One or more projects:* In the resource picker at the top, select SOURCE_PROJECT_ID, then click **Create sink**.
 
 **Sink details**: in **Sink name** enter abstract-org-audit-sink (it cannot be renamed later), and click **Next**.
 
@@ -667,7 +668,7 @@ pubsub.googleapis.com/projects/LOGGING_PROJECT_ID/topics/abstract-audit-logs
 
 *The whole organization:* **Choose logs to include in sink**: the default, **Include only logs ingested by this organization**, misses every project. Select **Include logs ingested by this organization and all child resources**.
 
-*One folder:* **Choose logs to include in sink**: the default includes only the folder's own logs, which misses every project. Select the option that includes the folder and all child resources.
+*One or more folders:* **Choose logs to include in sink**: the default includes only the folder's own logs, which misses every project. Select the option that includes the folder and all child resources.
 
 In **Build inclusion filter**, paste the filter, then click **Next**:
 
@@ -689,9 +690,11 @@ logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis
 logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy" OR logName:"cloudaudit.googleapis.com%2Fdata_access"
 ```
 
-*The whole organization or One folder:* *Screenshot in the app: Include logs ingested by this organization and all child resources selected, with the recommended filter pasted.*
+*The whole organization or One or more folders:* *Screenshot in the app: Include logs ingested by this organization and all child resources selected, with the recommended filter pasted.*
 
 Leave **Choose logs to filter out of sink (optional)** empty, and click **Create sink**.
+
+*One or more folders or One or more projects:* More than one folder or project? Repeat this step and the next for each, with the same sink name and topic: each sink has a writer identity of its own, and each needs the publisher grant.
 
 Then copy the sink's writer identity: on **Log Router**, with the same resource selected, open the menu at the end of the abstract-org-audit-sink row and select **View sink details**. **Writer identity** has a copy button; paste it into 'The sink's writer identity' on this page.
 
@@ -725,37 +728,37 @@ gcloud logging sinks create abstract-org-audit-sink pubsub.googleapis.com/projec
 gcloud logging sinks create abstract-org-audit-sink pubsub.googleapis.com/projects/LOGGING_PROJECT_ID/topics/abstract-audit-logs --organization=ORG_ID --include-children --log-filter='logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy" OR logName:"cloudaudit.googleapis.com%2Fdata_access"'
 ```
 
-*One folder, Admin activity only:*
+*One or more folders, Admin activity only:*
 
 ```bash
 gcloud logging sinks create abstract-org-audit-sink pubsub.googleapis.com/projects/LOGGING_PROJECT_ID/topics/abstract-audit-logs --folder=FOLDER_ID --include-children --log-filter='logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy"'
 ```
 
-*One folder, Admin activity, identity and data changes (recommended):*
+*One or more folders, Admin activity, identity and data changes (recommended):*
 
 ```bash
 gcloud logging sinks create abstract-org-audit-sink pubsub.googleapis.com/projects/LOGGING_PROJECT_ID/topics/abstract-audit-logs --folder=FOLDER_ID --include-children --log-filter='logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy" OR (logName:"cloudaudit.googleapis.com%2Fdata_access" AND protoPayload.serviceName=("bigquery.googleapis.com" OR "storage.googleapis.com" OR "cloudkms.googleapis.com" OR "iamcredentials.googleapis.com" OR "sts.googleapis.com"))'
 ```
 
-*One folder, Everything:*
+*One or more folders, Everything:*
 
 ```bash
 gcloud logging sinks create abstract-org-audit-sink pubsub.googleapis.com/projects/LOGGING_PROJECT_ID/topics/abstract-audit-logs --folder=FOLDER_ID --include-children --log-filter='logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy" OR logName:"cloudaudit.googleapis.com%2Fdata_access"'
 ```
 
-*One project, Admin activity only:*
+*One or more projects, Admin activity only:*
 
 ```bash
 gcloud logging sinks create abstract-org-audit-sink pubsub.googleapis.com/projects/LOGGING_PROJECT_ID/topics/abstract-audit-logs --project=SOURCE_PROJECT_ID --log-filter='logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy"'
 ```
 
-*One project, Admin activity, identity and data changes (recommended):*
+*One or more projects, Admin activity, identity and data changes (recommended):*
 
 ```bash
 gcloud logging sinks create abstract-org-audit-sink pubsub.googleapis.com/projects/LOGGING_PROJECT_ID/topics/abstract-audit-logs --project=SOURCE_PROJECT_ID --log-filter='logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy" OR (logName:"cloudaudit.googleapis.com%2Fdata_access" AND protoPayload.serviceName=("bigquery.googleapis.com" OR "storage.googleapis.com" OR "cloudkms.googleapis.com" OR "iamcredentials.googleapis.com" OR "sts.googleapis.com"))'
 ```
 
-*One project, Everything:*
+*One or more projects, Everything:*
 
 ```bash
 gcloud logging sinks create abstract-org-audit-sink pubsub.googleapis.com/projects/LOGGING_PROJECT_ID/topics/abstract-audit-logs --project=SOURCE_PROJECT_ID --log-filter='logName:"cloudaudit.googleapis.com%2Factivity" OR logName:"cloudaudit.googleapis.com%2Fsystem_event" OR logName:"cloudaudit.googleapis.com%2Fpolicy" OR logName:"cloudaudit.googleapis.com%2Fdata_access"'
@@ -769,17 +772,19 @@ gcloud prints the sink's writer identity, the account the sink publishes as. Cop
 gcloud logging sinks describe abstract-org-audit-sink --organization=ORG_ID --format="value(writerIdentity)"
 ```
 
-*One folder:*
+*One or more folders:*
 
 ```bash
 gcloud logging sinks describe abstract-org-audit-sink --folder=FOLDER_ID --format="value(writerIdentity)"
 ```
 
-*One project:*
+*One or more projects:*
 
 ```bash
 gcloud logging sinks describe abstract-org-audit-sink --project=SOURCE_PROJECT_ID --format="value(writerIdentity)"
 ```
+
+*One or more folders or One or more projects:* More than one folder or project? Repeat this step and the next for each, with the same sink name and topic: each sink has a writer identity of its own, and each needs the publisher grant.
 
 The Terraform template that does the same: [`gcp-source-audit-logs-organization`](../../templates/gcp/gcp-source-audit-logs-organization/README.md) (organization), [`gcp-source-audit-logs-folder`](../../templates/gcp/gcp-source-audit-logs-folder/README.md) (folder), [`gcp-source-audit-logs-project`](../../templates/gcp/gcp-source-audit-logs-project/README.md) (project).
 
@@ -847,7 +852,7 @@ Google documentation: [Route logs to supported destinations](https://docs.cloud.
 
 *Step 9 · guided script step 4 · only with Infrastructure Manager*
 
-One deployment creates the topic, the subscription, the sink, the sink's publisher grant, and Abstract's service account with Subscriber on the subscription: everything the other paths build by hand except the key, which stays out of Terraform state. It deploys from the public templates repository at a release tag, so a later merge never changes what you deployed. Not yet run end to end against a live organization: treat your first preview as the test, and read it before you apply.
+One deployment creates the topic, the subscription, the sink, the sink's publisher grant, and Abstract's service account with Subscriber on the subscription: everything the other paths build by hand except the key, which stays out of Terraform state. It deploys from the public templates repository at a release tag, so a later merge never changes what you deployed. The order is the one tested on a folder of a test organization in October 2026: grant the roles (the step before), preview (11 resources to create, none to destroy), export and read the plan, then apply. The deployment reached ACTIVE, and Abstract stored the audit logs it sent.
 
 ### Who needs what
 
@@ -866,13 +871,13 @@ Lists such as log_categories cannot go in --input-values, so your values go in a
 cp templates/gcp/gcp-source-audit-logs-organization/terraform.tfvars.example abstract.tfvars
 ```
 
-*One folder:*
+*One or more folders:*
 
 ```bash
 cp templates/gcp/gcp-source-audit-logs-folder/terraform.tfvars.example abstract.tfvars
 ```
 
-*One project:*
+*One or more projects:*
 
 ```bash
 cp templates/gcp/gcp-source-audit-logs-project/terraform.tfvars.example abstract.tfvars
@@ -930,13 +935,13 @@ Preview it. This is terraform plan, run by Infrastructure Manager:
 gcloud infra-manager previews create projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/previews/abstract-preview --service-account=projects/LOGGING_PROJECT_ID/serviceAccounts/infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --git-source-repo=https://github.com/IamABS3C/abstract-cloud-templates --git-source-directory=templates/gcp/gcp-source-audit-logs-organization --git-source-ref=RELEASE_TAG --inputs-file=abstract.tfvars
 ```
 
-*One folder:*
+*One or more folders:*
 
 ```bash
 gcloud infra-manager previews create projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/previews/abstract-preview --service-account=projects/LOGGING_PROJECT_ID/serviceAccounts/infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --git-source-repo=https://github.com/IamABS3C/abstract-cloud-templates --git-source-directory=templates/gcp/gcp-source-audit-logs-folder --git-source-ref=RELEASE_TAG --inputs-file=abstract.tfvars
 ```
 
-*One project:*
+*One or more projects:*
 
 ```bash
 gcloud infra-manager previews create projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/previews/abstract-preview --service-account=projects/LOGGING_PROJECT_ID/serviceAccounts/infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --git-source-repo=https://github.com/IamABS3C/abstract-cloud-templates --git-source-directory=templates/gcp/gcp-source-audit-logs-project --git-source-ref=RELEASE_TAG --inputs-file=abstract.tfvars
@@ -960,13 +965,13 @@ Read it, then apply. The same command updates the deployment later.
 gcloud infra-manager deployments apply projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/deployments/abstract-log-export --service-account=projects/LOGGING_PROJECT_ID/serviceAccounts/infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --git-source-repo=https://github.com/IamABS3C/abstract-cloud-templates --git-source-directory=templates/gcp/gcp-source-audit-logs-organization --git-source-ref=RELEASE_TAG --inputs-file=abstract.tfvars
 ```
 
-*One folder:*
+*One or more folders:*
 
 ```bash
 gcloud infra-manager deployments apply projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/deployments/abstract-log-export --service-account=projects/LOGGING_PROJECT_ID/serviceAccounts/infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --git-source-repo=https://github.com/IamABS3C/abstract-cloud-templates --git-source-directory=templates/gcp/gcp-source-audit-logs-folder --git-source-ref=RELEASE_TAG --inputs-file=abstract.tfvars
 ```
 
-*One project:*
+*One or more projects:*
 
 ```bash
 gcloud infra-manager deployments apply projects/LOGGING_PROJECT_ID/locations/INFRA_MANAGER_REGION/deployments/abstract-log-export --service-account=projects/LOGGING_PROJECT_ID/serviceAccounts/infra-manager-abstract@LOGGING_PROJECT_ID.iam.gserviceaccount.com --git-source-repo=https://github.com/IamABS3C/abstract-cloud-templates --git-source-directory=templates/gcp/gcp-source-audit-logs-project --git-source-ref=RELEASE_TAG --inputs-file=abstract.tfvars
@@ -1102,9 +1107,9 @@ Open [Audit logs](https://console.cloud.google.com/iam-admin/audit).
 
 *The whole organization:* Select your organization in the resource picker.
 
-*One folder:* Select your folder (FOLDER_ID) in the resource picker.
+*One or more folders:* Select your folder (FOLDER_ID) in the resource picker.
 
-*One project:* Select SOURCE_PROJECT_ID in the resource picker.
+*One or more projects:* Select SOURCE_PROJECT_ID in the resource picker.
 
 *Admin activity, identity and data changes (recommended):* In the **Data access audit logs configuration** table, use the **Filter** to find each service: BigQuery, Cloud Storage, Cloud Key Management Service (KMS), Identity and Access Management (IAM) and Security Token Service. Tick its row; in the info panel's **Permission types** tab tick **Admin read** and **Data write**, and click **Save**.
 
@@ -1393,9 +1398,57 @@ Events appear in Abstract within a few minutes. If the integration saves and not
 
 Google documentation: [Pull subscriptions](https://docs.cloud.google.com/pubsub/docs/pull) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys)
 
+## More sources
+
+*Step 15 · optional*
+
+Each of these is a pipeline of its own, beside the audit logs, deployed from its template's tutorial (or, for Google Workspace, by the guided script's step 7). Skip the ones you do not need.
+
+### Google Cloud console
+
+Google Workspace sign-in, admin and token logs: the guided script's step 7 (its answer defaults to yes) creates a reader account in the logging project. A Workspace super admin then adds domain-wide delegation for the Client ID it prints, with the one scope admin.reports.audit.readonly. Abstract reads them with its Google Workspace integration, not through Pub/Sub. docs/gcp/WORKSPACE.md has the details.
+
+Network logs (firewall rules, Cloud DNS queries, VPC Flow, Cloud NAT): templates/gcp/gcp-source-network-threat-logs, a second sink with its own topic, at the organization, a folder or a project. Each log is turned on where the resource lives, by its owner, in the project that owns the network (the host project with Shared VPC); docs/gcp/FILTERS.md, Where each source is turned on, has each one.
+
+IAM policy changes, with the policy before and after: templates/gcp/gcp-source-asset-and-iam-changes, an organization asset feed with its own topic. Organization only. Feed names are unique in an organization, so a second deployment sets its own feed_id.
+
+Security Command Center findings: templates/gcp/gcp-source-security-command-center-findings, a notification config with its own topic. Organization only, and Security Command Center Standard or Premium must be active there (legacy answers 400). Whoever applies needs Security Center Notification Configurations Editor at the organization; right after activation a create can answer 400 "Precondition check failed" and still create the config, so list the configs before you try again.
+
+> Abstract keeps network logs, asset changes and findings only on a GCP Pub/Sub Source configuration of their own, one per subscription, that runs the extended GCP Pub/Sub parser. The managed parser as shipped keeps Cloud Audit Logs only. The extended parser is not in the managed integration yet; until it is, Abstract applies it to the configuration's parsers.
+
+### Command line
+
+Google Workspace sign-in, admin and token logs: the guided script's step 7 (its answer defaults to yes) creates a reader account in the logging project. A Workspace super admin then adds domain-wide delegation for the Client ID it prints, with the one scope admin.reports.audit.readonly. Abstract reads them with its Google Workspace integration, not through Pub/Sub. docs/gcp/WORKSPACE.md has the details.
+
+Network logs (firewall rules, Cloud DNS queries, VPC Flow, Cloud NAT): templates/gcp/gcp-source-network-threat-logs, a second sink with its own topic, at the organization, a folder or a project. Each log is turned on where the resource lives, by its owner, in the project that owns the network (the host project with Shared VPC); docs/gcp/FILTERS.md, Where each source is turned on, has each one.
+
+IAM policy changes, with the policy before and after: templates/gcp/gcp-source-asset-and-iam-changes, an organization asset feed with its own topic. Organization only. Feed names are unique in an organization, so a second deployment sets its own feed_id.
+
+Security Command Center findings: templates/gcp/gcp-source-security-command-center-findings, a notification config with its own topic. Organization only, and Security Command Center Standard or Premium must be active there (legacy answers 400). Whoever applies needs Security Center Notification Configurations Editor at the organization; right after activation a create can answer 400 "Precondition check failed" and still create the config, so list the configs before you try again.
+
+> Abstract keeps network logs, asset changes and findings only on a GCP Pub/Sub Source configuration of their own, one per subscription, that runs the extended GCP Pub/Sub parser. The managed parser as shipped keeps Cloud Audit Logs only. The extended parser is not in the managed integration yet; until it is, Abstract applies it to the configuration's parsers.
+
+### Infrastructure Manager
+
+Google Workspace sign-in, admin and token logs: the guided script's step 7 (its answer defaults to yes) creates a reader account in the logging project. A Workspace super admin then adds domain-wide delegation for the Client ID it prints, with the one scope admin.reports.audit.readonly. Abstract reads them with its Google Workspace integration, not through Pub/Sub. docs/gcp/WORKSPACE.md has the details.
+
+Network logs (firewall rules, Cloud DNS queries, VPC Flow, Cloud NAT): templates/gcp/gcp-source-network-threat-logs, a second sink with its own topic, at the organization, a folder or a project. Each log is turned on where the resource lives, by its owner, in the project that owns the network (the host project with Shared VPC); docs/gcp/FILTERS.md, Where each source is turned on, has each one.
+
+IAM policy changes, with the policy before and after: templates/gcp/gcp-source-asset-and-iam-changes, an organization asset feed with its own topic. Organization only. Feed names are unique in an organization, so a second deployment sets its own feed_id.
+
+Security Command Center findings: templates/gcp/gcp-source-security-command-center-findings, a notification config with its own topic. Organization only, and Security Command Center Standard or Premium must be active there (legacy answers 400). Whoever applies needs Security Center Notification Configurations Editor at the organization; right after activation a create can answer 400 "Precondition check failed" and still create the config, so list the configs before you try again.
+
+> Abstract keeps network logs, asset changes and findings only on a GCP Pub/Sub Source configuration of their own, one per subscription, that runs the extended GCP Pub/Sub parser. The managed parser as shipped keeps Cloud Audit Logs only. The extended parser is not in the managed integration yet; until it is, Abstract applies it to the configuration's parsers.
+
+### How you know it worked
+
+In Abstract, network logs appear as gcp.vpc_flows, gcp.firewall, gcp.nat_flows and gcp.dns_queries, asset changes as gcp.asset_inventory, and findings as gcp.scc_findings, once their configuration runs the extended parser.
+
+Google documentation: [Create access credentials](https://developers.google.com/workspace/guides/create-credentials#set-up-domain-wide-delegation) · [VPC firewall rules logging overview](https://docs.cloud.google.com/firewall/docs/vpc-firewall-rules-logging-overview) · [VPC Flow Logs](https://docs.cloud.google.com/vpc/docs/flow-logs) · [Monitor asset changes with Pub/Sub](https://docs.cloud.google.com/asset-inventory/docs/monitor-asset-changes#create_feeds) · [Enable finding notifications for Pub/Sub](https://docs.cloud.google.com/security-command-center/docs/how-to-notifications)
+
 ## Keep it healthy
 
-*Step 15*
+*Step 16*
 
 Three habits keep the pipeline from decaying: rotate the key, watch the volume in the first week, and know where to look first when something stops.
 

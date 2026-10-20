@@ -12,6 +12,13 @@ usage:
                                         audit roots (log_categories, data_access_services), one per line, and
                                         only ever as additions: the identity services as identity_access,
                                         other services as data_access_services next to data_access_all
+  sink_routes.py --scope-clause ID...   the clause that limits a filter to these projects' logs (option A: one
+                                        organization or folder sink for a chosen set of projects)
+  sink_routes.py --projects FILTER      the projects such a clause names, space-separated; nothing when unscoped
+  sink_routes.py --inner FILTER         FILTER without that clause
+  sink_routes.py --rescope FILTER ADD ID...
+                                        FILTER without its project clause, OR ADD when ADD is not empty, then
+                                        limited to these projects: the filter a scoped sink is updated to
   sink_routes.py --non-audit FILTER     the top-level alternatives that select logs other than Cloud Audit Logs
                                         (firewall, DNS, ..., or a negated audit clause such as
                                         NOT logName:"cloudaudit...", which selects everything else), joined
@@ -91,10 +98,44 @@ def unwrap(p: str) -> str:
     return p
 
 
+# Option A: "(FILTER) AND (logName:"projects/ID/logs/" OR ...)". The clause only says WHICH projects' entries are
+# routed, not which logs, so every question below is answered on FILTER. Any other condition next to it, or in it,
+# is not a project scope and is read as before: as narrowing, so it routes nothing.
+PROJECT_TEST = re.compile(r'logName\s*:\s*"projects/([a-z][a-z0-9-]{4,28}[a-z0-9])/logs/"')
+
+
+def project_clause(projects) -> str:
+    return " OR ".join(f'logName:"projects/{p}/logs/"' for p in projects)
+
+
+def _scope(f: str):
+    """(inner filter, sorted project ids) when F is a filter AND a project clause, else (F, None)."""
+    parts = _split(unwrap(f.strip()), "AND")
+    if len(parts) == 2:
+        for i in (0, 1):
+            alts = split_or(unwrap(parts[i]))
+            ids = [m.group(1) for a in alts if (m := PROJECT_TEST.fullmatch(unwrap(a)))]
+            if alts and len(ids) == len(alts):
+                return unwrap(parts[1 - i]), sorted(set(ids))
+    return f, None
+
+
+def scoped_projects(f: str):
+    return _scope(f)[1]
+
+
+def inner(f: str) -> str:
+    return _scope(f)[0]
+
+
+def with_projects(f: str, projects) -> str:
+    return f"({unwrap(f.strip())}) AND ({project_clause(projects)})"
+
+
 def alternatives(f: str) -> list[str]:
     """Every top-level alternative, with nested "(a OR b)" groups flattened."""
     out = []
-    for p in split_or(unwrap(f.strip())):
+    for p in split_or(unwrap(inner(f).strip())):
         u = unwrap(p)
         out += alternatives(u) if len(split_or(u)) > 1 else [u]
     return out
@@ -251,6 +292,17 @@ def tfvars(have: str, want: str) -> list[str]:
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "--missing":
         print(missing(sys.argv[2], sys.argv[3]))
+    elif len(sys.argv) >= 3 and sys.argv[1] == "--scope-clause":
+        print(project_clause(sys.argv[2:]))
+    elif len(sys.argv) == 3 and sys.argv[1] == "--projects":
+        print(" ".join(scoped_projects(sys.argv[2]) or []))
+    elif len(sys.argv) >= 5 and sys.argv[1] == "--rescope":
+        base = inner(sys.argv[2])
+        if sys.argv[3].strip():
+            base = f"({unwrap(base)}) OR {sys.argv[3].strip()}"
+        print(with_projects(base, sys.argv[4:]))
+    elif len(sys.argv) == 3 and sys.argv[1] == "--inner":
+        print(inner(sys.argv[2]))
     elif len(sys.argv) == 3 and sys.argv[1] == "--non-audit":
         print(" OR ".join(f"({a})" for a in alternatives(sys.argv[2]) if not selects_only_audit(a)))
     elif len(sys.argv) == 4 and sys.argv[1] == "--tfvars":

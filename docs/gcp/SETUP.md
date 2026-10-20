@@ -14,8 +14,9 @@ The guided setup's steps 1 and 2 check most of what follows against your real en
 | | Covers future projects | Needs | Use when |
 |---|---|---|---|
 | **Organization** | ✅ by containment | `roles/logging.configWriter` **at the org** | Almost always |
-| **Folder** | ✅ within the subtree | `roles/logging.configWriter` **at the folder** | Org IAM not granted, or a real trust boundary |
-| **Project** | ❌ | `roles/logging.configWriter` on the project | Pilot only |
+| **One or more folders** | ✅ within each subtree | `roles/logging.configWriter` **at each folder** | Org IAM not granted, or a real trust boundary |
+| **One or more projects, option A**: one organization sink filtered to them | ❌ until you tick them | `roles/logging.configWriter` **at the org** | A known set of projects, with org IAM |
+| **One or more projects, option B**: one sink in each | ❌ until you tick them | `roles/logging.configWriter` on each project | A pilot, or a few projects without org IAM |
 | **Billing account** | n/a | `roles/logging.configWriter` on the billing account | Billing account logs. An organization sink routes the organization and the folders and projects under it; a billing account is a separate resource, so its logs are collected with a sink created on the billing account itself. |
 
 ### What actually differs, in practice
@@ -37,19 +38,25 @@ gcloud organizations add-iam-policy-binding $ORG_ID \
   --member="user:you@example.com" --role="roles/logging.configWriter"
 ```
 
-**Folder.** Identical mechanics, narrower container — and it **silently misses everything
-outside that folder**, including new projects, which land in the org root by default.
+**Folders.** Identical mechanics, narrower container: one sink in each folder you tick, all sending to the same
+topic. A folder inside another ticked folder is left out, because its parent's sink covers it. It **silently
+misses everything outside those folders**, including new projects, which land in the org root by default.
 Choose it because org IAM is genuinely unavailable, not because it feels safer. Write down
-which folder, and schedule the org conversation.
+which folders, and schedule the org conversation.
 
-**Project.** No `include_children` exists below a project, so it cannot cover future
-projects. It shows the pipeline working, from the sink to Abstract, before you ask for org rights — which is
-genuinely useful, because "it works, here is the data" is a better ask than "please grant
-me org IAM." Replace it; never repeat it per project.
+**Projects.** Only the projects you tick; a project created later is not covered until you tick it in script
+step 1 and run step 4 again. Both options were tested with two projects in October 2026 ([VERIFIED.md](VERIFIED.md)):
 
-> **Do not deploy a project sink per project.** Seventy project sinks is the linear toil
-> the aggregated sink exists to eliminate, each one decaying independently as projects
-> change. The 200-sinks-per-container quota also starts to matter.
+- **Option A, one organization sink filtered to them** (recommended): one sink and one publisher grant, whatever
+  the number of projects. The sink sits at the organization with a filter naming the ticked projects, so it needs
+  Logs Configuration Writer at the organization. Script step 6 sets the audit settings in each ticked project,
+  so Data Access is not turned on, and paid for, where the sink does not route.
+- **Option B, one sink in each project**: needs Logs Configuration Writer on each project only, and it is how a
+  single project runs as a pilot. Each sink has its own writer identity and its own grant, so it grows linearly:
+  past a handful of projects, use a folder or option A. The 200-sinks-per-container quota is per project here.
+
+Terraform and Infrastructure Manager make one sink at one scope per template; several folders or projects in one
+run need the guided script.
 
 ---
 
@@ -231,14 +238,16 @@ which the `identity_access` category does for you, together with `sts.googleapis
 ## 7. Order of operations
 
 ```
-1. audit-gcp-estate.sh, then --step 1 and 2   read-only: what exists, and every permission
+1. audit-gcp-estate.sh, then --step 1 and 2   read-only: what exists, the scope, and every permission
 2. --step 3   logging project                 create or pick it, enable APIs
-3. --step 4   the pipeline                    topic, subscription, sink, publisher grant
-4. --step 5   Abstract's access               service account and key
-5. --step 6   Data Access (optional)          both switches
-6. --step 8   health alerts                   do NOT defer this
-7. --step 9   verify with a FRESH event       wait 5 minutes: the sink is not live at once
-8. --step 10  connect Abstract
+3. --policies organization policies           read-only: what blocks or changes the setup
+4. --step 4   the pipeline                    topic, subscription, sinks, publisher grants
+5. --step 5   Abstract's access               service account and key
+6. --step 6   IAM and Data Access logs        IAM and identity on by default; both switches
+7. --step 7   Google Workspace                default yes; a super admin adds the delegation
+8. --step 8   health alerts                   do NOT defer this
+9. --step 9   verify with a FRESH event       wait 5 minutes: the sink is not live at once
+10. --step 10 connect Abstract
 ```
 
 Audit config before the pipeline, so the logs exist by the time the filter looks for them.

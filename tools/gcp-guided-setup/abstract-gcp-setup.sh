@@ -9,18 +9,20 @@
 #    3  Logging project                 create or pick it, billing, APIs
 #    4  Log pipeline                    topic, subscription, sink, publisher grant
 #    5  Abstract's access               service account, subscriber grant, key
-#    6  Data Access logs     (optional) generate them AND route them — both switches
-#    7  Google Workspace     (optional) identity logs: service account + delegation
+#    6  IAM and Data Access logs        IAM and identity on by default; data services optional
+#    7  Google Workspace                identity logs: service account + delegation (default yes)
 #    8  Health alerts        (optional) tell you when the pipeline stops
 #    9  Test and verify                 a fresh event, from the sink to the topic
 #   10  Connect Abstract                the exact values to enter
 #
 #  Usage
-#    ./tools/gcp-guided-setup/abstract-gcp-setup.sh              guided: every step, asks before each change
+#    ./tools/gcp-guided-setup/abstract-gcp-setup.sh              a menu: the guided setup, any one step, the policy review,
+#                                 what is supported where, and every saved name and ID; asks before each change
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6     one step
 #    ... --step 7 --new-key      make another Workspace key even though the one made for Abstract still exists
 #                                 (a lost or rotated key); step 7 never offers one unasked while it does
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --check      verify everything, change nothing
+#    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --policies   the organization policies that can block or change this setup
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --reset      forget the saved answers and start over
 #    ./tools/gcp-guided-setup/abstract-gcp-setup.sh --remove     list what clean-up would delete; --remove --confirm deletes it
 #    ... --remove --project <id>                                 no saved answers: list what carries the setup's names
@@ -61,6 +63,10 @@ ROOT="$(cd "$HERE/../.." && pwd)"   # the repository root: this script lives in 
 # iam and sts record service-account token minting and Workload Identity Federation token exchange.
 DA_DEFAULT_SERVICES="bigquery.googleapis.com,storage.googleapis.com,cloudkms.googleapis.com,iam.googleapis.com,sts.googleapis.com"
 DA_DEFAULT_TYPES="ADMIN_READ,DATA_WRITE"
+# Step 6 turns these on unless someone says no: service-account impersonation and token minting (iam) and
+# Workload Identity Federation (sts). Their Data Access entries are all ADMIN_READ, so the volume is low.
+DA_IDENTITY_SERVICES="iam.googleapis.com,sts.googleapis.com"
+DA_IDENTITY_TYPES="ADMIN_READ"
 # Defaults; anything in the state file wins. A function, so "start over" can put every answer back.
 defaults() {
   TOPIC="abstract-audit-logs"; SUB="abstract-audit-logs-sub"; SINK="abstract-org-audit-sink"  # the Terraform and deploy-script default
@@ -83,6 +89,12 @@ defaults() {
   # The role bindings --grant added, as kind:id:role:member joined by ";", so --teardown --include-grants removes
   # exactly those and never a grant that existed before.
   GRANTS=""
+  # Step 1, for more than one folder or project. SINK_MODE: single (one sink at SCOPE), filtered (one organization
+  # sink whose filter names PROJECT_FILTER's projects) or per-target (one sink at each TARGETS kind:id).
+  SINK_MODE=single; PROJECT_FILTER=""; TARGETS=""
+  # Per-target bookkeeping: SINKS_CREATED holds kind:id=epoch for each sink this setup made; DA_SCOPES holds
+  # kind:id=service:TYPE,... for each place step 6 turned Data Access on, and what it added there.
+  SINKS_CREATED=""; DA_SCOPES=""
 }
 defaults; FIND_PROJECT=""
 # Keys go outside any checkout, in a folder only you can read, so they cannot be committed by accident.
@@ -91,7 +103,8 @@ KEY_FILE="$KEY_DIR/abstract-pubsub-key.json"; WS_KEY_FILE="$KEY_DIR/abstract-wor
 # The answers this script saves, in this order. Nothing else may appear in an answers file.
 ANSWER_KEYS="ORG_ID SCOPE SCOPE_ID LOG_PROJECT BILLING TOPIC SUB SINK SA RETENTION_DAYS DATA_ACCESS DA_SERVICES DA_TYPES
   WORKSPACE WS_SA WS_ADMIN ALERTS ALERT_EMAIL SINK_CREATED_AT TOPIC_CREATED SUB_CREATED SA_CREATED WS_SA_CREATED
-  ALERT_POLICIES ALERT_CHANNELS DA_CHANGED DA_BACKUP DA_ADDED DA_ALL_READ_ACK KEY_ID WS_KEY_ID GRANTS"
+  ALERT_POLICIES ALERT_CHANNELS DA_CHANGED DA_BACKUP DA_ADDED DA_ALL_READ_ACK KEY_ID WS_KEY_ID GRANTS
+  SINK_MODE PROJECT_FILTER TARGETS SINKS_CREATED DA_SCOPES"
 
 # Load an answers file only if every line is one this script could have written: a comment, a blank line, or
 # KEY=value for a key above, with the value as printf %q writes it (plain characters, or one character escaped
@@ -216,7 +229,8 @@ choose() {
     [[ -n "$new" ]] && to_tty '    %s n)%s %s\n' "$P" "$O" "$new"
     if (( ${#ids[@]} <= 9 )) && [[ -z "$filter" ]]; then to_tty '  Choose 1-%d%s' "$n" "${new:+ or n}"
     else to_tty '  Choose a number%s, an ID, or type part of a name to search' "${new:+, n for new}"; fi
-    to_tty '%s: ' "${def:+ [$def]}"
+    # A default of "+new" (the extra option) shows as [n], so Enter picks it.
+    to_tty '%s: ' "${def:+ [$([[ $def == +new ]] && echo n || echo "$def")]}"
     IFS= read -r a </dev/tty || { to_tty '\n'; printf '%s' "$def"; return; }
     a=$(trim "$a")
     if [[ -z "$a" ]]; then
@@ -423,11 +437,26 @@ step1() {
     gcloud organizations describe "$ORG_ID" >/dev/null 2>&1 && pass "organization $ORG_ID ($(gcloud organizations describe "$ORG_ID" --format='value(displayName)'))" || bad "cannot read organization ${ORG_ID:-(none chosen)}"
   fi
 
+  # A saved scope can be changed (to add a project created later, say). Sinks this setup already made stay recorded,
+  # so clean-up still finds them; a sink no longer wanted is removed with --remove, never silently.
+  if [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] && interactive; then
+    say "  Sending logs: $(scope_summary)"
+    if yes_no "Change what sends logs?"; then
+      (( ${SINK_CREATED_AT:-0} > 0 )) && [[ -n "$SCOPE_ID" ]] && record_created "$SCOPE:$SCOPE_ID" "$SINK_CREATED_AT"
+      SCOPE=""; SCOPE_ID=""
+    fi
+  fi
   if [[ -z "$SCOPE" ]] && interactive; then
-    SCOPE=$(choose "Which part of Google Cloud should send logs?" "$(printf '%s\t%s\n' \
+    local kind; kind=$(choose "Which part of Google Cloud should send logs?" "$(printf '%s\t%s\n' \
       organization "the whole organization - every project, including ones created later (recommended)" \
-      folder "one folder - every project in it; anything outside is missed" \
-      project "one project - a pilot; does not cover other or future projects")" "" organization)
+      folder "one or more folders - every project in them, including ones created later in them" \
+      project "one or more projects, ticked from a list - projects created later are not covered")" "" organization)
+    SINK_MODE=single; PROJECT_FILTER=""; TARGETS=""
+    case "$kind" in
+      organization) SCOPE=organization ;;
+      folder) choose_folders ;;
+      project) choose_projects ;;
+    esac
   fi
   case "$SCOPE" in
     organization) SCOPE_ID="$ORG_ID" ;;
@@ -462,6 +491,210 @@ audit_admins() {
     organization) echo "Organization Admin or Security Admin" ;;
     folder) echo "Folder Admin or Security Admin on the folder" ;;
     *) echo "Owner, Project IAM Admin or Security Admin on the project" ;;
+  esac
+}
+
+
+# ── More than one folder or project ─────────────────────────────────────────────
+# pick_many "title" "id<TAB>description lines" [projects]   a checkbox list. Prints the ticked ids in list order,
+# or returns 1 with no terminal. Numbers and ranges toggle, a ticks every line shown, n clears, other text narrows
+# the list (Enter clears the search), and with "projects" f ticks every project in a folder.
+pick_many() {
+  local title="$1" list="$2" extra="${3:-}" filter="" a i k n count tok lo hi id desc p
+  local -a ids=() descs=() sel=() shown=()
+  while IFS=$'\t' read -r id desc; do [[ -n "$id" ]] && { ids+=("$id"); descs+=("$desc"); sel+=(0); }; done <<<"$list"
+  interactive || return 1
+  (( ${#ids[@]} )) || { to_tty '  %snothing to choose from%s\n' "$Y" "$O"; return 1; }
+  while true; do
+    shown=()
+    for ((i = 0; i < ${#ids[@]}; i++)); do
+      [[ -z "$filter" ]] || grep -qiF -- "$filter" <<<"${ids[$i]} ${descs[$i]}" && shown+=("$i")
+    done
+    to_tty '\n  %s%s%s%s\n' "$B" "$title" "$O" "${filter:+  (matching \"$filter\")}"
+    n=0
+    for i in ${shown[@]+"${shown[@]}"}; do
+      n=$((n + 1))
+      to_tty '    %s%2d)%s [%s] %s%s%s\n' "$P" "$n" "$O" "$( (( sel[i] )) && echo x || echo ' ')" "${ids[$i]}" "${descs[$i]:+  $D${descs[$i]}}" "$O"
+    done
+    (( n == 0 )) && to_tty '    %snothing matches "%s" - press Enter for the full list%s\n' "$Y" "$filter" "$O"
+    count=0; for ((i = 0; i < ${#sel[@]}; i++)); do (( sel[i] )) && count=$((count + 1)); done
+    to_tty '  %d ticked. Numbers or ranges toggle (1 3 5-7), a = tick all shown, n = none%s, text searches. Enter = done: ' \
+      "$count" "$([[ $extra == projects ]] && echo ', f = every project in a folder')"
+    IFS= read -r a </dev/tty || { to_tty '\n'; return 1; }
+    a=$(trim "$a")
+    if [[ -z "$a" ]]; then
+      [[ -n "$filter" ]] && { filter=""; continue; }
+      (( count > 0 )) && break
+      to_tty '  %sSelect at least one.%s\n' "$Y" "$O"; continue
+    fi
+    case "$(lower "$a")" in
+      a) for i in ${shown[@]+"${shown[@]}"}; do sel[$i]=1; done; continue ;;
+      n) for ((i = 0; i < ${#sel[@]}; i++)); do sel[$i]=0; done; continue ;;
+      f) if [[ $extra == projects ]]; then
+           for p in $(folder_projects); do
+             for ((i = 0; i < ${#ids[@]}; i++)); do [[ "${ids[$i]}" == "$p" ]] && sel[$i]=1; done
+           done
+           continue
+         fi ;;
+    esac
+    if [[ "$a" =~ ^[0-9][0-9\ ,-]*$ ]]; then
+      for tok in ${a//,/ }; do
+        if [[ "$tok" =~ ^([0-9]+)-([0-9]+)$ ]]; then lo=${BASH_REMATCH[1]}; hi=${BASH_REMATCH[2]}; else lo=$tok; hi=$tok; fi
+        for ((k = lo; k <= hi; k++)); do
+          (( k >= 1 && k <= n )) && { i=${shown[$((k - 1))]}; sel[$i]=$(( 1 - sel[i] )); }
+        done
+      done
+      continue
+    fi
+    filter="$a"
+  done
+  local out=""; for ((i = 0; i < ${#ids[@]}; i++)); do (( sel[i] )) && out+="${out:+ }${ids[$i]}"; done
+  printf '%s' "$out"
+}
+
+# Every folder under the organization as id<TAB>path ("team-a / prod"), sorted by path so a folder is followed by
+# its own subfolders. At most 300 folders are looked at, and a listing that fails says so.
+folder_tree() {
+  local -a queue=() paths=(); local i=0 id name
+  # listing prints without a final newline, so the last line is read too (|| [[ -n ]]).
+  while IFS=$'\t' read -r id name || [[ -n "$id" ]]; do [[ -n "$id" ]] && { queue+=("$id"); paths+=("$name"); }; done \
+    < <(listing gcloud resource-manager folders list --organization="$ORG_ID" --format='value(ID,displayName)')
+  while (( i < ${#queue[@]} && i < 300 )); do
+    printf '%s\t%s\n' "${queue[$i]}" "${paths[$i]}"
+    while IFS=$'\t' read -r id name; do [[ -n "$id" ]] && { queue+=("$id"); paths+=("${paths[$i]} / $name"); }; done \
+      < <(gcloud resource-manager folders list --folder="${queue[$i]}" --format='value(ID,displayName)' 2>/dev/null)
+    i=$((i + 1))
+  done | sort -t$'\t' -k2
+  (( ${#queue[@]} > 300 )) && to_tty '  %s!%s more than 300 folders: only the first 300 are listed\n' "$Y" "$O"
+}
+
+# The active projects in a folder and every folder under it, at most 300 folders deep.
+projects_under_folder() {
+  local -a q=("$1"); local i=0 f
+  while (( i < ${#q[@]} && i < 300 )); do
+    gcloud projects list --filter="parent.type=folder AND parent.id=${q[$i]} AND lifecycleState:ACTIVE" --format='value(projectId)' 2>/dev/null | cut -f1
+    for f in $(gcloud resource-manager folders list --folder="${q[$i]}" --format='value(ID)' 2>/dev/null | cut -f1); do q+=("$f"); done
+    i=$((i + 1))
+  done
+}
+
+# Ask for a folder, and print the projects in it and under it.
+folder_projects() {
+  local f; f=$(choose_existing folder "gcloud resource-manager folders describe {}" "Which folder? (its projects and its subfolders' projects are ticked)" \
+    "$(folder_tree)" "" "" '^[0-9]{6,}$')
+  [[ -n "$f" ]] && projects_under_folder "$f"
+}
+
+choose_projects() {
+  local picked n mode
+  picked=$(pick_many "Which projects should send logs?" "$(project_list)" projects) || return
+  set -- $picked; n=$#
+  if (( n == 1 )); then SCOPE=project; SCOPE_ID=$1; return; fi
+  # An organization sink sees only its own organization's projects: one outside it rules option A out.
+  local p outside=""
+  if [[ -n "$ORG_ID" ]]; then
+    for p in $picked; do
+      gcloud projects get-ancestors "$p" --format='value(id)' 2>/dev/null | grep -qx "$ORG_ID" || outside+="${outside:+ }$p"
+    done
+    [[ -n "$outside" ]] && warn "not in organization $ORG_ID: $outside. An organization sink cannot see them, so each project gets its own sink."
+  fi
+  if [[ -z "$ORG_ID" || -n "$outside" ]]; then mode=per-target
+  else
+    mode=$(choose "How should these $n projects send logs?" "$(printf '%s\t%s\n' \
+      filtered "one organization sink filtered to these projects (recommended: one sink and one grant to look after; needs Logs Configuration Writer at the organization)" \
+      per-target "one sink in each project (needs Logs Configuration Writer on each project only)")" "" filtered)
+  fi
+  if [[ "$mode" == per-target ]]; then
+    SINK_MODE=per-target; SCOPE=project; SCOPE_ID=$1
+    TARGETS=$(for p in $picked; do printf 'project:%s ' "$p"; done); TARGETS=${TARGETS% }
+  else SINK_MODE=filtered; SCOPE=organization; SCOPE_ID="$ORG_ID"; PROJECT_FILTER="$picked"; fi
+  warn "projects created later are not covered until you tick them: run script step 1 again ($(again --step 1))"
+}
+
+choose_folders() {
+  local tree picked kept="" f g path
+  tree=$(folder_tree)
+  picked=$(pick_many "Which folders should send logs?" "$tree") || return
+  # A folder inside another ticked folder is already covered by that folder's sink: two sinks would deliver twice.
+  # Decided by folder IDs, walking each one's parents: display names need not be unique.
+  local anc parent
+  for f in $picked; do
+    path=$(awk -F'\t' -v id="$f" '$1==id{print $2}' <<<"$tree")
+    anc=""; parent=$(gcloud resource-manager folders describe "$f" --format='value(parent)' 2>/dev/null)
+    while [[ "$parent" == folders/* ]]; do
+      anc+=" ${parent#folders/}"
+      parent=$(gcloud resource-manager folders describe "${parent#folders/}" --format='value(parent)' 2>/dev/null)
+    done
+    for g in $picked; do
+      [[ "$g" == "$f" ]] && continue
+      [[ " $anc " == *" $g "* ]] && { warn "folder $f ($path) is inside ticked folder $g, whose sink already covers it: left out"; continue 2; }
+    done
+    kept+="${kept:+ }$f"
+  done
+  set -- $kept
+  SCOPE=folder; SCOPE_ID=$1
+  if (( $# > 1 )); then SINK_MODE=per-target; TARGETS=$(for f in $kept; do printf 'folder:%s ' "$f"; done); TARGETS=${TARGETS% }; fi
+}
+
+# grant_retrying "what" command...: run() it, and when Google says the account "does not exist" (a service account
+# is not usable for a short while after it is created), try again, up to 6 times, 10 seconds apart. Any other
+# failure, or one that outlasts the retries, is a ✗ (measured: the grant right after the create failed, silently).
+grant_retrying() {
+  local what="$1" out i; shift
+  printf '%s   $' "$D"; printf ' %q' "$@"; printf '%s\n' "$O"
+  $CHECK_ONLY && return 3
+  yes_no "Run it?" || { say "  skipped"; return 3; }
+  for i in 1 2 3 4 5 6; do
+    if out=$("$@" 2>&1 >/dev/null); then return 0; fi
+    grep -q "does not exist" <<<"$out" || break
+    (( i < 6 )) && { say "  the new account is not visible to IAM yet; trying again in ${ABSTRACT_RETRY_SLEEP:-10}s ($i of 5)"; sleep "${ABSTRACT_RETRY_SLEEP:-10}"; }
+  done
+  bad "$what failed: $(first_line "$out")"
+  return 1
+}
+
+# pick_existing VAR "what" "names": VAR's piece does not exist yet. Offer the ones already there, or the new name.
+# Used for topics only (PR #61 review): a new subscription on an existing topic reads its own copy of every message.
+# Choosing one keeps it (and this setup never deletes it: it did not make it).
+pick_existing() {
+  local var="$1" what="$2" names="$3" pick
+  [[ -n "$names" ]] || return 0
+  pick=$(choose "${!var} does not exist yet. Use an existing $what, or create ${!var}?" "$(sed 's/$/	/' <<<"$names")" "create ${!var} (new)" "+new")
+  [[ -n "$pick" && "$pick" != +new ]] && { printf -v "$var" '%s' "$pick"; save; pass "using the existing $what $pick"; }
+  return 0
+}
+
+# "kind:id=epoch" bookkeeping for the sinks this setup made, one per target.
+created_at() { local e; for e in $SINKS_CREATED; do [[ "${e%%=*}" == "$1" ]] && { printf '%s' "${e#*=}"; return; }; done; printf 0; }
+record_created() { local e out=""; for e in $SINKS_CREATED; do [[ "${e%%=*}" == "$1" ]] || out+="${out:+ }$e"; done
+  SINKS_CREATED="${out:+$out }$1=$2"; }
+
+# Run a step once per target when there is more than one sink (SINK_MODE per-target), with SCOPE and SCOPE_ID set
+# to each in turn, and the record of which sinks this setup made kept per target.
+for_targets() {
+  local fn="$1" t s0="$SCOPE" i0="$SCOPE_ID"
+  if [[ "$SINK_MODE" != per-target || -z "$TARGETS" ]]; then "$fn"; return; fi
+  for t in $TARGETS; do
+    SCOPE=${t%%:*}; SCOPE_ID=${t#*:}; SINK_CREATED_AT=$(created_at "$t")
+    say ""; say "  ${B}── $SCOPE $SCOPE_ID${O}"
+    "$fn"
+    (( ${SINK_CREATED_AT:-0} > 0 )) && record_created "$t" "$SINK_CREATED_AT"
+  done
+  SCOPE="$s0"; SCOPE_ID="$i0"; SINK_CREATED_AT=$(created_at "$s0:$i0"); save
+}
+run_step() { case "$1" in 2|4|6|9) for_targets "step$1" ;; *) "step$1" ;; esac; }
+
+scope_summary() {
+  local -a w
+  case "$SINK_MODE" in
+    filtered) w=($PROJECT_FILTER); printf '%d projects, one filtered organization sink' "${#w[@]}"; return ;;
+    per-target) w=($TARGETS); printf '%d %ss, one sink each' "${#w[@]}" "$SCOPE"; return ;;
+  esac
+  case "$SCOPE" in
+    organization) printf 'the whole organization %s' "$SCOPE_ID" ;;
+    folder) printf 'folder %s' "$SCOPE_ID" ;;
+    project) printf 'project %s (one project)' "$SCOPE_ID" ;;
+    *) printf 'nothing chosen yet (step 1)' ;;
   esac
 }
 
@@ -647,19 +880,24 @@ filter() {
 # A listing that fails is said to have failed, never read as "none".
 existing_audit_sinks() {  # existing_audit_sinks <scope flag> <our destination>
   local out
-  if ! out=$(gcloud logging sinks list "$1" --format='value(name,destination,filter)' 2>&1); then
+  # JSON, not value(): a filter can span lines (the Terraform module joins clauses with "\n  OR "), and a line-based
+  # listing turned each of those lines into a "sink" of its own (measured on the lab organization, 2026-10-18).
+  if ! out=$(gcloud logging sinks list "$1" --format=json 2>&1); then
     warn "could not list the sinks already at the $SCOPE (${out%%$'\n'*}). Check them before you add one: gcloud logging sinks list $1"
     return
   fi
-  local name dest filter found=0
-  while IFS=$'\t' read -r name dest filter; do
+  local name dest found=0
+  while IFS=$'\t' read -r name dest; do
     [[ -z "$name" || "$dest" == "$2" ]] && continue
-    # An empty filter routes every log, audit logs included. _Required and _Default are Google's own.
-    [[ "$name" == _Required || "$name" == _Default ]] && continue
-    if [[ -z "$filter" || "$filter" == *cloudaudit* ]]; then
-      warn "sink $name at the $SCOPE already exports audit logs, to $dest"; found=1
-    fi
-  done <<<"$out"
+    warn "sink $name at the $SCOPE already exports audit logs, to $dest"; found=1
+  done < <(python3 -c 'import json, sys
+try: sinks = json.loads(sys.stdin.read() or "[]")
+except ValueError: sinks = []
+for k in sinks:
+    # An empty filter routes every log, audit logs included. _Required and _Default are Google'"'"'s own.
+    if k.get("name") in ("_Required", "_Default"): continue
+    f = k.get("filter") or ""
+    if not f or "cloudaudit" in f: print(k.get("name", "?") + "\t" + k.get("destination", ""))' <<<"$out")
   (( found )) && why "A new sink adds a second copy for Abstract; it changes nothing for those. If one of them is meant to feed Abstract, stop and ask its owner first."
   (( found )) || pass "no other sink at the $SCOPE exports audit logs"
 }
@@ -750,9 +988,15 @@ step4() {
   why "filter misses while it is not in place is gone."
   [[ -n "$LOG_PROJECT" && -n "$SCOPE" ]] || { bad "finish steps 1 and 3 first"; return; }
 
+  # Not there yet: offer the topics already in the project before making a new one.
+  if ! gcloud pubsub topics describe "$TOPIC" --project="$LOG_PROJECT" >/dev/null 2>&1 && interactive; then
+    pick_existing TOPIC "topic" "$(gcloud pubsub topics list --project="$LOG_PROJECT" --format='value(name.basename())' 2>/dev/null)"
+  fi
   if gcloud pubsub topics describe "$TOPIC" --project="$LOG_PROJECT" >/dev/null 2>&1; then pass "topic $TOPIC"
   else warn "topic $TOPIC does not exist"; run gcloud pubsub topics create "$TOPIC" --project="$LOG_PROJECT" && { pass "topic created"; TOPIC_CREATED=1; save; }; fi
 
+  # Existing subscriptions are never offered: one another consumer reads would hand Abstract its stream and take
+  # messages from it. A new subscription on the chosen topic gets its own copy of every message.
   if gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT" >/dev/null 2>&1; then
     local ttl on; ttl=$(gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT" --format='value(expirationPolicy.ttl)')
     on=$(gcloud pubsub subscriptions describe "$SUB" --project="$LOG_PROJECT" --format='value(topic)')
@@ -769,6 +1013,11 @@ step4() {
   fi
 
   local sf; sf=$(scope_flag); local want; want=$(filter)
+  # Option A: the organization sink routes only the ticked projects' entries.
+  if [[ "$SINK_MODE" == filtered && -n "$PROJECT_FILTER" ]]; then
+    want=$(python3 "$HERE/sink_routes.py" --rescope "$want" "" $PROJECT_FILTER)
+    why "Filtered to the projects ticked in step 1: ${PROJECT_FILTER// /, }."
+  fi
   [[ "$DATA_ACCESS" == yes ]] && all_services_read_unconfirmed && \
     warn "these answers ask for DATA_READ on allServices, which was never confirmed, so this filter routes no Data Access logs for it. Step 6 asks: $(again --step 6)"
   local dest="pubsub.googleapis.com/projects/$LOG_PROJECT/topics/$TOPIC"
@@ -812,8 +1061,25 @@ print(" ".join(e.get("name","?") for e in d.get("exclusions",[]) if not e.get("d
       # Only ever ADD what is missing, clause by clause (sink_routes.py). An existing sink may route more
       # (firewall, DNS…); that is kept, and named: Abstract's managed parser discards what is not an audit log.
       local other_logs; other_logs=$(python3 "$HERE/sink_routes.py" --non-audit "$f" 2>/dev/null)
-      [[ -n "$other_logs" ]] && warn "sink $SINK also routes logs that are not Cloud Audit Logs: $other_logs. Abstract's managed GCP parser keeps only Cloud Audit Log records, so these are pulled and discarded. This step never removes a clause: take them out of the sink (its tfvars, if Terraform manages it) and collect them with templates/gcp/gcp-source-network-threat-logs."
+      [[ -n "$other_logs" ]] && warn "sink $SINK also routes logs that are not Cloud Audit Logs: $other_logs. Abstract's managed GCP parser keeps only Cloud Audit Log records, so these are pulled and discarded. This step never removes a clause: take them out of the sink (its tfvars, if Terraform manages it) and collect them with templates/gcp/gcp-source-network-threat-logs, on a configuration of their own that runs the extended GCP Pub/Sub parser."
       local missing_clauses; missing_clauses=$(python3 "$HERE/sink_routes.py" --missing "$f" "$want") || missing_clauses="?"
+      local have_projects; have_projects=$(python3 "$HERE/sink_routes.py" --projects "$f" 2>/dev/null)
+      local want_projects; want_projects=$(tr ' ' '\n' <<<"$PROJECT_FILTER" | grep . | sort -u | paste -sd' ' -)
+      if [[ "$SINK_MODE" == filtered && -z "$have_projects" ]]; then
+        bad "sink $SINK already routes every project at the $SCOPE, and narrowing it to the ticked projects would cut off whatever else it feeds. Give Abstract a sink of its own: put SINK=abstract-filtered-audit-sink in $STATE, then run $(again --step 4)"
+        rm -f "$ferr"; return
+      fi
+      [[ "$SINK_MODE" != filtered && -n "$have_projects" ]] && warn "sink $SINK routes only these projects: $have_projects. Logs from every other project under the $SCOPE are not sent."
+      local rescoped=false
+      if [[ "$SINK_MODE" == filtered && "$have_projects" != "$want_projects" ]]; then
+        warn "sink $SINK is filtered to: ${have_projects:-?}; step 1 ticked: $want_projects"
+        why "Its log filter is kept; only the project list changes, and any missing part is added."
+        run gcloud logging sinks update "$SINK" "$sf" --log-filter="$(python3 "$HERE/sink_routes.py" --rescope "$f" "${missing_clauses/\?/}" $PROJECT_FILTER)" \
+          && pass "sink filtered to ${want_projects// /, }"
+        rescoped=true
+      fi
+      # The project list was just rewritten (and any missing part added with it): nothing more to compare.
+      if ! $rescoped; then
       desc=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(description)' 2>/dev/null)
       # A sink Terraform built before the managed-by marker existed has no marker, but its filter carries the
       # module's "\n  OR " join, or it has the template's default name and this setup did not create it.
@@ -836,7 +1102,10 @@ print(" ".join(e.get("name","?") for e in d.get("exclusions",[]) if not e.get("d
           python3 "$HERE/sink_routes.py" --tfvars "$f" "$want" | sed 's/^/     /'
         fi
         why "Its existing filter is kept; only the missing part is added. If Terraform manages this sink, add it there and answer no."
-        run gcloud logging sinks update "$SINK" "$sf" --log-filter="($f) OR $missing_clauses" && pass "sink filter extended"
+        if [[ -n "$have_projects" ]]; then
+          run gcloud logging sinks update "$SINK" "$sf" --log-filter="$(python3 "$HERE/sink_routes.py" --rescope "$f" "$missing_clauses" $have_projects)" && pass "sink filter extended"
+        else run gcloud logging sinks update "$SINK" "$sf" --log-filter="($f) OR $missing_clauses" && pass "sink filter extended"; fi
+      fi
       fi
     fi
     rm -f "$ferr"
@@ -871,6 +1140,7 @@ step5() {
   why "Abstract signs in as its own service account and may only read the one subscription."
   why "Subscriber, never publisher, never project-wide."
   [[ -n "$LOG_PROJECT" ]] || { bad "finish step 3 first"; return; }
+  # Existing service accounts are never offered: Abstract's key would then act as whatever else that account does.
   local email="$SA@$LOG_PROJECT.iam.gserviceaccount.com"
   if gcloud iam service-accounts describe "$email" --project="$LOG_PROJECT" >/dev/null 2>&1; then pass "service account $email"
   else warn "service account $email does not exist"
@@ -887,7 +1157,8 @@ step5() {
     if [[ " $roles " == *" roles/pubsub.subscriber "* ]]; then pass "it can read $SUB (roles/pubsub.subscriber on the subscription)"
     else
       bad "it cannot read $SUB yet"
-      run gcloud pubsub subscriptions add-iam-policy-binding "$SUB" --project="$LOG_PROJECT" --member="serviceAccount:$email" --role=roles/pubsub.subscriber >/dev/null && pass "subscriber granted"
+      grant_retrying "the subscriber grant on $SUB" gcloud pubsub subscriptions add-iam-policy-binding "$SUB" --project="$LOG_PROJECT" --member="serviceAccount:$email" --role=roles/pubsub.subscriber \
+        && pass "subscriber granted"
     fi
     local extra; extra=$(tr ' ' '\n' <<<"$roles" | grep -vx 'roles/pubsub.subscriber' | grep . | paste -sd' ' -)
     [[ -n "$extra" ]] && warn "$email also holds $extra on $SUB. It needs only roles/pubsub.subscriber; remove the others."
@@ -1004,60 +1275,16 @@ ack_all_services_read() {
   return 1
 }
 
-# The services and log types step 6 turns on. A no to allServices + DATA_READ asks again at once, offering the
-# default services, so a declined answer is never saved and the next run never meets it again.
-ask_data_access_services() {
-  DA_ALL_READ_ACK=0
-  while :; do
-    DA_SERVICES=$(csv "$(ask "Services (comma-separated)" "$DA_SERVICES" valid_services)")
-    DA_TYPES=$(csv "$(ask "Log types (ADMIN_READ, DATA_WRITE, DATA_READ)" "$DA_TYPES" valid_log_types)")
-    ack_all_services_read && break
-    say "  Name the services instead (the default services are offered):"
-    DA_SERVICES="$DA_DEFAULT_SERVICES"; DA_TYPES="$DA_DEFAULT_TYPES"
-  done
-  save
-}
-
-step6() {
-  title 6 "Data Access logs (optional)"
-  why "Admin Activity logs are always on. Data Access logs (who read or changed data in BigQuery,"
-  why "Cloud Storage, KMS…, and who minted service-account tokens or exchanged federated identities)"
-  why "are OFF until you turn them on. It takes TWO switches:"
-  why "  switch 1 — generate them: the audit config at the ${SCOPE:-chosen scope}"
-  why "  switch 2 — route them:    the sink filter (step 4 adds them when this is on)"
-  why "For most services either alone does nothing, silently. BigQuery writes its Data Access logs by default,"
-  why "so it needs only the routing switch. DATA_READ is high volume; it is off by default here."
-  if [[ "$DATA_ACCESS" != yes ]] && ! $CHECK_ONLY; then
-    yes_no "Turn on Data Access logs?" || { say "  skipped — Admin Activity still flows"; return; }
-    DATA_ACCESS=yes; DA_CHANGED=0
-    why "iam.googleapis.com records service-account impersonation and token minting; sts.googleapis.com"
-    why "records Workload Identity Federation (GitHub Actions, AWS, Azure). Keep both unless you have a reason."
-    ask_data_access_services
-  fi
-  [[ "$DATA_ACCESS" == yes ]] || { say "  off (your choice)"; return; }
-  [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { bad "choose a scope first (step 1)"; return; }
-  # Saved answers (an older file, or a run left at the services prompt) are confirmed here, before switch 1 or
-  # switch 2 is looked at, whether switch 1 is already on or not. A no asks for the services at once.
-  if all_services_read_unconfirmed; then
-    if ! interactive; then
-      warn "these answers ask for DATA_READ on allServices, which was never confirmed: step 4 routes no Data Access logs for it, and this step changes nothing. Confirm it, or name the services: $(again --step 6)"
-      return
-    fi
-    if ack_all_services_read; then save
-    else
-      say "  Name the services instead (the default services are offered):"
-      DA_SERVICES="$DA_DEFAULT_SERVICES"; DA_TYPES="$DA_DEFAULT_TYPES"
-      ask_data_access_services
-    fi
-  fi
-
+# Step 6 switch 1 at SCOPE: generate Data Access logs for the answers' services and types. Returns 1 when the
+# settings could not be read, so switch 2 is not touched either.
+da_switch1() {
   local cur missing switched; switched=$(audit_services "$DA_SERVICES")
   if ! cur=$(audit_config_json); then
     bad "could not read the audit settings at the $SCOPE ($cur). Switch 1 was not checked, and nothing was changed."
     # Switch 2 decides what leaves Google; with switch 1 unknown, adding a route could start exporting logs
     # nobody checked (BigQuery's are on by default). Report and stop (PR #55 review).
     warn "routing was not changed either. Run step 6 again once the audit settings can be read."
-    return
+    return 1
   elif ! missing=$(python3 - "$cur" "$switched" "$DA_TYPES" <<'PY'
 import json, sys
 cur = json.loads(sys.argv[1]); svcs = sys.argv[2].split(","); types = sys.argv[3].split(",")
@@ -1100,7 +1327,7 @@ PY
         # On only when Google answers with the policy it stored; an error or an empty reply is not a yes.
         if [[ "$code" == 200 ]] && python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if "auditConfigs" in d and "error" not in d else 1)' <<<"$out" 2>/dev/null; then
           pass "switch 1 on"
-          DA_CHANGED=1; DA_BACKUP="$backup"; DA_ADDED="$missing"; save
+          DA_CHANGED=1; DA_BACKUP="$backup"; DA_ADDED="$missing"; da_record "$SCOPE:$SCOPE_ID" "$missing"; save
         else
           bad "Google did not confirm the change (HTTP ${code:-?}: $(python3 -c 'import json,sys
 try: print(json.load(sys.stdin)["error"]["message"])
@@ -1109,6 +1336,83 @@ except Exception: print("<empty or unreadable reply>")' <<<"$out")). Check with 
       fi
     fi
   fi
+}
+
+# "kind:id=service:TYPE,..." for each place switch 1 was turned on, with what was added there.
+# A later run at the same place adds to its record, so teardown still takes off what an earlier run added.
+da_record() { local e out="" prev=""; for e in $DA_SCOPES; do
+    if [[ "${e%%=*}" == "$1" ]]; then prev="${e#*=}"; else out+="${out:+ }$e"; fi; done
+  DA_SCOPES="${out:+$out }$1=$(printf '%s\n' ${prev//,/ } $2 | awk 'NF && !seen[$0]++' | paste -sd, -)"; }
+
+# The services and log types step 6 turns on. A no to allServices + DATA_READ asks again at once, offering the
+# default services, so a declined answer is never saved and the next run never meets it again.
+ask_data_access_services() {
+  DA_ALL_READ_ACK=0
+  while :; do
+    DA_SERVICES=$(csv "$(ask "Services (comma-separated)" "$DA_SERVICES" valid_services)")
+    DA_TYPES=$(csv "$(ask "Log types (ADMIN_READ, DATA_WRITE, DATA_READ)" "$DA_TYPES" valid_log_types)")
+    ack_all_services_read && break
+    say "  Name the services instead (the default services are offered):"
+    DA_SERVICES="$DA_DEFAULT_SERVICES"; DA_TYPES="$DA_DEFAULT_TYPES"
+  done
+  save
+}
+
+step6() {
+  title 6 "IAM and Data Access logs"
+  why "Admin Activity logs are always on, IAM policy changes included. Data Access logs (who read or changed data in BigQuery,"
+  why "Cloud Storage, KMS…, and who minted service-account tokens or exchanged federated identities)"
+  why "are OFF until you turn them on. It takes TWO switches:"
+  why "  switch 1 — generate them: the audit config at the ${SCOPE:-chosen scope}"
+  why "  switch 2 — route them:    the sink filter (step 4 adds them when this is on)"
+  why "For most services either alone does nothing, silently. BigQuery writes its Data Access logs by default,"
+  why "so it needs only the routing switch. DATA_READ is high volume; it is off by default here."
+  if [[ "$DATA_ACCESS" != yes ]] && ! $CHECK_ONLY; then
+    why "iam.googleapis.com records service-account impersonation and token minting; sts.googleapis.com"
+    why "records Workload Identity Federation (GitHub Actions, AWS, Azure). Both are ADMIN_READ: low volume."
+    if yes_no "Record IAM and identity logs (impersonation, token minting, Workload Identity Federation)?" y; then
+      DATA_ACCESS=yes; DA_CHANGED=0; DA_ALL_READ_ACK=0
+      DA_SERVICES="$DA_IDENTITY_SERVICES"; DA_TYPES="$DA_IDENTITY_TYPES"
+      if yes_no "Also record Data Access logs for BigQuery, Cloud Storage and Cloud KMS?"; then
+        DA_SERVICES="$DA_DEFAULT_SERVICES"; DA_TYPES="$DA_DEFAULT_TYPES"
+        why "Offered: ${DA_SERVICES//,/, } ($DA_TYPES). DATA_READ is left out: it is high volume."
+        if yes_no "Change the services or log types?"; then ask_data_access_services; fi
+      fi
+      save
+    elif yes_no "Turn on Data Access logs for other services instead?"; then
+      DATA_ACCESS=yes; DA_CHANGED=0
+      ask_data_access_services
+    else say "  skipped — Admin Activity still flows"; return; fi
+  fi
+  [[ "$DATA_ACCESS" == yes ]] || { say "  off (your choice)"; return; }
+  [[ -n "$SCOPE" && -n "$SCOPE_ID" ]] || { bad "choose a scope first (step 1)"; return; }
+  # Saved answers (an older file, or a run left at the services prompt) are confirmed here, before switch 1 or
+  # switch 2 is looked at, whether switch 1 is already on or not. A no asks for the services at once.
+  if all_services_read_unconfirmed; then
+    if ! interactive; then
+      warn "these answers ask for DATA_READ on allServices, which was never confirmed: step 4 routes no Data Access logs for it, and this step changes nothing. Confirm it, or name the services: $(again --step 6)"
+      return
+    fi
+    if ack_all_services_read; then save
+    else
+      say "  Name the services instead (the default services are offered):"
+      DA_SERVICES="$DA_DEFAULT_SERVICES"; DA_TYPES="$DA_DEFAULT_TYPES"
+      ask_data_access_services
+    fi
+  fi
+
+  # Switch 1 goes where the logs are generated: with option A (one filtered organization sink), each ticked project,
+  # so Data Access is not turned on, and paid for, in projects the sink never routes.
+  if [[ "$SINK_MODE" == filtered && -n "$PROJECT_FILTER" ]]; then
+    local s0="$SCOPE" i0="$SCOPE_ID" pj failed=false
+    why "Switch 1 is set in each ticked project: ${PROJECT_FILTER// /, }."
+    for pj in $PROJECT_FILTER; do
+      SCOPE=project; SCOPE_ID=$pj; say "  ${B}── project $pj${O}"
+      da_switch1 || failed=true
+    done
+    SCOPE="$s0"; SCOPE_ID="$i0"; save
+    $failed && return
+  else da_switch1 || return; fi
   local sf; sf=$(scope_flag); local routed; routed=$(routed_services "$DA_SERVICES")
   local f dropped
   if ! f=$(gcloud logging sinks describe "$SINK" "$sf" --format='value(filter)' 2>/dev/null); then
@@ -1124,13 +1428,13 @@ except Exception: print("<empty or unreadable reply>")' <<<"$out")). Check with 
 
 # ─────────────────────────────────────────────────────────────────────────────
 step7() {
-  title 7 "Google Workspace logs (optional)"
+  title 7 "Google Workspace logs"
   why "Abstract reads sign-ins, admin changes and token grants in Google Workspace from the"
   why "Workspace Reports API, not Cloud Logging, with a separate service account that a"
   why "Workspace SUPER ADMIN allows through domain-wide delegation."
   why "A Google Cloud Owner cannot do that last part; plan for the super admin."
   if [[ "$WORKSPACE" != yes ]] && ! $CHECK_ONLY; then
-    yes_no "Set up Google Workspace logs?" || { say "  skipped"; return; }
+    yes_no "Set up Google Workspace logs?" y || { say "  skipped"; return; }
     WORKSPACE=yes; WS_ADMIN=$(ask "Workspace admin email Abstract should act as" "$WS_ADMIN" valid_email); save
   fi
   [[ "$WORKSPACE" == yes ]] || { say "  off (your choice)"; return; }
@@ -1316,6 +1620,8 @@ for c in json.loads(sys.argv[1]).get("notificationChannels", []):
 # Where the probe must be written: somewhere the sink can see, with an API that is on. The logging project
 # when it sits under the scope, otherwise any active project under it, however deeply nested.
 probe_project() {
+  # Option A routes only the ticked projects, so the test event must be written in one of them.
+  [[ "$SINK_MODE" == filtered && -n "$PROJECT_FILTER" ]] && { echo "${PROJECT_FILTER%% *}"; return; }
   case "$SCOPE" in
     project) echo "$SCOPE_ID" ;;
     organization|folder)
@@ -1654,7 +1960,16 @@ remove_all() {
     return
   fi
   local sf; sf=$(scope_flag)
-  if (( ${SINK_CREATED_AT:-0} > 0 )); then
+  if [[ -n "$SINKS_CREATED" ]]; then
+    # One sink per folder or project (step 1 ticked several): each one this setup made, where it made it.
+    local e t
+    for e in $SINKS_CREATED; do t=${e%%=*}
+      gone "log sink $SINK at the ${t%%:*} ${t#*:}" gcloud logging sinks delete "$SINK" "--${t%%:*}=${t#*:}" --quiet
+    done
+    for t in $TARGETS; do
+      [[ " $SINKS_CREATED " == *" $t="* ]] || kept "log sink $SINK at the ${t%%:*} ${t#*:}: it existed before this setup, or step 4 did not make it. Review it."
+    done
+  elif (( ${SINK_CREATED_AT:-0} > 0 )); then
     # shellcheck disable=SC2086
     gone "log sink $SINK at the $SCOPE $SCOPE_ID" gcloud logging sinks delete "$SINK" $sf --quiet
   else kept "log sink $SINK: it existed before this setup. Its filter may have been extended; review it."; fi
@@ -1688,7 +2003,11 @@ remove_all() {
     rv=$(revoke_hint "$f") && byhand "$f holds a key that stays valid in Google after the file is deleted. Once you know nothing uses it: $rv"
   done
   for f in "$KEY_FILE" "$WS_KEY_FILE" ${aside[@]+"${aside[@]}"}; do [[ -f "$f" ]] && gone "key file $f" rm -f "$f"; done
-  if [[ "${DA_CHANGED:-}" == 1 ]]; then
+  if [[ -n "$DA_SCOPES" ]]; then
+    local d; for d in $DA_SCOPES; do
+      byhand "step 6 turned on Data Access logs at the ${d%%:*} $(cut -d= -f1 <<<"${d#*:}") ($(tr ',' ' ' <<<"${d#*=}")). The settings before that were saved by step 6 next to the answers file (abstract-audit-config-backup-*.json). To undo, remove those log types with get-iam-policy, edit, then set-iam-policy (keep the etag); never set a backup back over changes made since."
+    done
+  elif [[ "${DA_CHANGED:-}" == 1 ]]; then
     byhand "step 6 turned on Data Access logs at the $SCOPE $SCOPE_ID (${DA_ADDED:-see the backup}). The settings before that are in ${DA_BACKUP:-the backup step 6 saved}. To undo, remove those log types with get-iam-policy, edit, then set-iam-policy (keep the etag); never set the whole backup back over changes made since."
   elif [[ "$DATA_ACCESS" == yes && -z "${DA_CHANGED:-}" ]]; then
     byhand "Data Access audit settings may have been changed in step 6 (this answers file predates the record of it). If they were, a copy of the earlier settings was saved as abstract-audit-config-backup-*.json in the folder step 6 ran in. Compare it with get-iam-policy before changing anything."
@@ -2040,9 +2359,9 @@ td_policy_kind() { case "$1" in organization) echo organizations ;; folder) echo
 # td_audit_remove <resource url> <label>: re-read the settings (a fresh etag), save a copy next to the answers file,
 # then setIamPolicy with that etag and updateMask=auditConfigs, so role bindings are never touched.
 td_audit_remove() {
-  local cur left backup body out code
+  local cur left backup body out code pairs="${3:-$DA_ADDED}"
   cur=$(audit_config_json "$1") || { printf 'could not read the audit settings: %s\n' "$cur"; return 1; }
-  left=$(td_audit_plan "$cur" "$DA_ADDED") || { echo "could not compute the change"; return 1; }
+  left=$(td_audit_plan "$cur" "$pairs") || { echo "could not compute the change"; return 1; }
   backup="$(dirname "$STATE")/abstract-audit-config-backup-teardown-$(date +%Y%m%d%H%M%S)-$(tr -c 'a-z0-9' '-' <<<"$2" | tr -s '-' | sed 's/-$//').json"
   ( umask 077; printf '%s\n' "$cur" > "$backup" ) || { echo "could not save a copy of the settings first; nothing was sent"; return 1; }
   body=$(python3 -c 'import json, sys
@@ -2262,6 +2581,16 @@ for c in json.loads(sys.argv[1]).get("auditConfigs", []):
 # (DA_ADDED), at the scope where it added them. With no record that applies, nothing is changed: the settings are
 # listed above, and the by-hand line says how to take log types off and where step 6's copy is.
 td_audit_change() {
+  # Step 6 changed several places (folders or projects ticked in step 1): each one, with what it added there.
+  if [[ -n "$DA_SCOPES" && "${TD_DA_LOOP:-}" != 1 ]]; then
+    local d s0="$SCOPE" i0="$SCOPE_ID" a0="$DA_ADDED" c0="$DA_CHANGED"
+    for d in $DA_SCOPES; do
+      SCOPE=${d%%:*}; SCOPE_ID=$(cut -d= -f1 <<<"${d#*:}"); DA_ADDED=$(tr ',' ' ' <<<"${d#*=}"); DA_CHANGED=1
+      TD_DA_LOOP=1 td_audit_change "$1"
+    done
+    SCOPE="$s0"; SCOPE_ID="$i0"; DA_ADDED="$a0"; DA_CHANGED="$c0"
+    return
+  fi
   local why kind id
   if ! why=$(td_audit_record "$1"); then
     kind="${SCOPE:-organization}"; id="${SCOPE_ID:-$1}"; [[ "$ORG_ID" == "$1" ]] || { kind=organization; id="$1"; }
@@ -2279,7 +2608,7 @@ print("yes" if json.loads(sys.argv[1]).get("auditConfigs", []) == json.loads(sys
     || { bad "could not compare the audit settings at $label with what would be left"; return; }
   if [[ -n "$same" ]]; then td_add 6 kept "Data Access settings at $label: none of what script step 6 added (${DA_ADDED// /, }) is on now"; return; fi
   local what; what="Data Access settings at $label: take off only what script step 6 added (${DA_ADDED// /, }); everything else stays, and a copy is saved first"
-  if $TD_AUDIT; then td_add 6 remove "$what" td_audit_remove "$url" "$label"
+  if $TD_AUDIT; then td_add 6 remove "$what" td_audit_remove "$url" "$label" "$DA_ADDED"
     td_show "POST $url:getIamPolicy, save a copy, then POST $url:setIamPolicy with its etag and updateMask=auditConfigs"
   else td_add 6 kept "$what - only with --include-audit-settings"; fi
 }
@@ -2428,9 +2757,163 @@ td_run() {
   else bad "could not remove $what: $(first_line "$out")"; fi
 }
 
+
+# ── Menu, and the screens it offers ─────────────────────────────────────────────
+# What can go where. Printed by the menu (s), and the one place this list lives.
+support_matrix() {
+  title "s" "What is supported where"
+  cat <<'EOF'
+  Piece                                Organization  Folder  Project  Note
+  Sink                                 yes           yes     yes      also on a billing account (billing-account logs)
+  Audit settings (IAM, Data Access)    yes           yes     yes      lower levels can add, never take away
+  Asset feed (Cloud Asset Inventory)   yes           yes     yes      the template is organization only; kept with the extended parser
+  Security Command Center findings     yes           -       -        Standard or Premium active; kept with the extended parser
+  Google Workspace                     -             -       -        the whole Workspace account, set up by a super admin
+  Topic, subscription, service         -             -       yes      always the logging project, whatever the scope
+    account, key, health alerts
+  Network and VM logs (flow, firewall, -             -       yes      turned on in the project that owns the network or VM
+    NAT, DNS, load balancer, VM)                                       (the host project with Shared VPC); flow, firewall,
+                                                                       NAT and DNS kept with the extended parser
+EOF
+  say ""
+  why "Organization: one sink, and projects created later are covered. Folders: one sink per folder, covering"
+  why "projects created later inside it. Projects: one organization sink filtered to them, or one sink in each;"
+  why "projects created later are not covered until you tick them in step 1."
+  why "Kept with the extended parser: Abstract keeps these on a GCP Pub/Sub Source configuration of their own (one per"
+  why "subscription) that runs the extended GCP Pub/Sub parser. The managed parser as shipped keeps Cloud Audit Logs only;"
+  why "until the extended parser is in the managed integration, Abstract applies it to the configuration's parsers."
+}
+
+# Every name, ID and account this setup uses or made, on one screen.
+show_setup() {
+  title "i" "Your setup"
+  local acct; acct=$(gcloud config get-value account 2>/dev/null)
+  say "  signed in as         ${acct:-not signed in}"
+  say "  organization         ${ORG_ID:-not chosen}"
+  say "  sends logs           $(scope_summary)"
+  [[ -n "$PROJECT_FILTER" ]] && say "  ticked projects      $PROJECT_FILTER"
+  [[ -n "$TARGETS" ]] && say "  sinks at             ${TARGETS//:/ }"
+  say "  logging project      ${LOG_PROJECT:-not chosen}"
+  say "  billing account      ${BILLING:-not set by this setup}"
+  say "  topic                $TOPIC"
+  say "  subscription         $SUB      (Abstract's Subscription ID)"
+  say "  sink                 $SINK"
+  say "  Abstract's account   $SA@${LOG_PROJECT:-LOGGING_PROJECT}.iam.gserviceaccount.com"
+  say "  key id               ${KEY_ID:-none made here}      file $KEY_FILE"
+  say "  Data Access          ${DATA_ACCESS}: ${DA_SERVICES//,/, } ($DA_TYPES)"
+  [[ -n "$DA_SCOPES" ]] && say "  turned on at         $(for d in $DA_SCOPES; do printf '%s ' "${d%%=*}"; done)"
+  say "  Google Workspace     ${WORKSPACE}${WS_ADMIN:+, as $WS_ADMIN}; account $WS_SA, key id ${WS_KEY_ID:-none made here}"
+  say "  health alerts        ${ALERTS}${ALERT_EMAIL:+, to $ALERT_EMAIL}"
+  [[ -n "$GRANTS" ]] && say "  roles --grant added  ${GRANTS//;/ }"
+  say "  answers file         $STATE"
+  offer_download "$STATE" "your answers file"
+}
+
+# Organization policies that can block or change this setup. Read only: the effective policy (inheritance
+# included) at the organization, the logging project and each chosen folder or project.
+# name|kind|what it means when it is set
+POLICY_CHECKS="iam.disableServiceAccountKeyCreation|block|Abstract's key cannot be created: ask for an exception on the logging project only (a rule conditioned on a tag)
+iam.managed.disableServiceAccountKeyCreation|block|Abstract's key cannot be created: ask for an exception on the logging project only (a rule conditioned on a tag)
+gcp.restrictServiceUsage|check|the APIs this setup turns on (pubsub, logging, iam, cloudresourcemanager) must be allowed
+gcp.restrictNonCmekServices|check|if pubsub.googleapis.com is listed, the topic needs a Cloud KMS key
+gcp.resourceLocations|check|the topic's message storage policy must use an allowed region
+iam.allowedPolicyMemberDomains|check|the publisher grant to a sink's writer identity, a Google-managed account, may be refused
+iam.managed.allowedPolicyMembers|check|the publisher grant to a sink's writer identity, a Google-managed account, may be refused
+iam.disableCrossProjectServiceAccountUsage|info|keep every service account in the project that uses it (this setup does)
+iam.serviceAccountKeyExpiryHours|check|keys expire: plan when Abstract's key is rotated
+iam.serviceAccountKeyExposureResponse|info|what Google does with a key it finds published
+pubsub.enforceInTransitRegions|check|messages may only pass through allowed regions; Abstract reads from outside Google Cloud
+compute.disableSerialPortLogging|info|VM serial-port output cannot be logged
+compute.managed.disableSerialPortLogging|info|VM serial-port output cannot be logged
+iam.disableAuditLoggingExemption|recommend|turn it on, so nobody can exempt a principal from audit logs
+iam.automaticIamGrantsForDefaultServiceAccounts|recommend|turn it on, so default service accounts are not made Editor
+container.managed.enableCloudLogging|recommend|turn it on, so every GKE cluster keeps Cloud Logging"
+
+policy_places() {
+  local p t
+  [[ -n "$ORG_ID" ]] && echo "organizations/$ORG_ID"
+  [[ -n "$LOG_PROJECT" ]] && echo "projects/$LOG_PROJECT"
+  case "$SCOPE" in folder) echo "folders/$SCOPE_ID" ;; project) [[ -n "$SCOPE_ID" ]] && echo "projects/$SCOPE_ID" ;; esac
+  for t in $TARGETS; do echo "${t%%:*}s/${t#*:}"; done
+  for p in $PROJECT_FILTER; do echo "projects/$p"; done
+}
+
+policy_review() {
+  title "p" "Organization policy review"
+  why "Reads the effective policy (inherited ones included); changes nothing."
+  local places; places=$(policy_places | awk '!seen[$0]++')
+  [[ -n "$places" ]] || { bad "choose the organization and a logging project first (steps 1 and 3)"; return; }
+  why "Reading $(grep -c . <<<"$places") places, one request per policy each."
+  local quota="${LOG_PROJECT:-$(gcloud config get-value project 2>/dev/null)}" line name kind meaning place out state ok=0
+  while IFS='|' read -r name kind meaning; do
+    [[ -n "$name" ]] || continue
+    for place in $places; do
+      out=$(curl -s -H "Authorization: Bearer $(token)" ${quota:+-H "x-goog-user-project: $quota"} \
+        "https://orgpolicy.googleapis.com/v2/$place/policies/$name:getEffectivePolicy")
+      state=$(python3 -c 'import json, sys
+try: d = json.loads(sys.stdin.read())
+except ValueError: print("unknown"); sys.exit()
+if "error" in d: print("unknown " + str(d["error"].get("status", ""))); sys.exit()
+rules = (d.get("spec") or {}).get("rules", [])
+cond = any("condition" in r for r in rules)
+if any(r.get("enforce") is True for r in rules): print("enforced" + (" (with conditions)" if cond else ""))
+elif any(r.get("denyAll") for r in rules): print("set to denyAll")
+elif any(r.get("values") for r in rules):
+    v = [r["values"] for r in rules if r.get("values")][0]
+    print("restricted: " + ", ".join((v.get("allowedValues") or []) + ["not " + x for x in v.get("deniedValues") or []])[:120])
+elif any(r.get("parameters") for r in rules): print("set: " + json.dumps([r["parameters"] for r in rules if r.get("parameters")][0])[:120])
+else: print("open")' <<<"$out")
+      case "$kind:$state" in
+        *:unknown*) warn "$name on $place: could not read it (${state#unknown }). It needs Organization Policy Viewer; nothing was assumed" ;;
+        block:enforced*) bad "BLOCKS  $name is $state on $place: $meaning" ;;
+        check:open|block:open|info:open|recommend:enforced*) ok=$((ok + 1)) ;;
+        check:*|block:*) warn "CHECK   $name is $state on $place: $meaning" ;;
+        info:*) say "  ${D}i${O} $name is $state on $place: $meaning"; ok=$((ok + 1)) ;;
+        recommend:*) [[ "$place" == organizations/* ]] && say "  ${B}→${O} RECOMMEND  $name ($state at the organization): $meaning"; ok=$((ok + 1)) ;;
+      esac
+    done
+  done <<<"$POLICY_CHECKS"
+  pass "$ok readings fine or for information, across: $(tr '\n' ' ' <<<"$places")"
+  why "A recommended policy is yours to decide on; this setup never changes an organization policy."
+}
+
+main_menu() {
+  local a s who
+  while true; do
+    say ""
+    say "  ${B}What would you like to do?${O}  sending logs: $(scope_summary)"
+    say "    ${B}a${O}) Guided setup: every step, in order (recommended)"
+    say "    ${B}1${O}) Sign-in, organization, and what sends logs     ${B}6${O}) IAM and Data Access logs"
+    say "    ${B}2${O}) What you can change                            ${B}7${O}) Google Workspace"
+    say "    ${B}3${O}) Logging project                                ${B}8${O}) Health alerts"
+    say "    ${B}4${O}) Pipeline: topic, subscription and sink         ${B}9${O}) Test and verify"
+    say "    ${B}5${O}) Abstract's access: service account and key     ${B}10${O}) Values to enter in Abstract"
+    say "    ${B}p${O}) Organization policy review   ${B}s${O}) What is supported where   ${B}i${O}) Your setup: every name and ID"
+    say "    ${B}g${O}) Check or grant roles for someone   ${B}c${O}) Check everything, change nothing   ${B}x${O}) Clean up   ${B}q${O}) Quit"
+    a=$(lower "$(ask "Choose" a)")
+    PASSES=0; WARNS=0; FAILS=0
+    case "$a" in
+      a) for s in 1 2 3 4 5 6 7 8 9 10; do run_step "$s"; done; summary ;;
+      1|2|3|4|5|6|7|8|9|10) run_step "$a"; summary ;;
+      p) policy_review; summary ;;
+      s) support_matrix ;;
+      i) show_setup ;;
+      g) who=$(ask "Whose roles? An email (a user), or group: or serviceAccount: before it" "")
+         if GRANT=$(grant_member "$who"); then grant_roles; summary; else warn "\"$who\" is not a principal"; fi
+         GRANT="" ;;
+      c) CHECK_ONLY=true; for s in 1 2 3 4 5 6 7 8 9 10; do run_step "$s"; done; CHECK_ONLY=false; summary ;;
+      x) remove_all
+         say "  To delete what is marked 'would remove':  $(again --remove --confirm)"
+         say "  To list everything the setup and the templates made across the organization:  $(again --teardown)" ;;
+      q) return 0 ;;
+      *) warn "choose a, 1-10, p, s, i, g, c, x or q" ;;
+    esac
+  done
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 ARGS=("$@")
-RESET=false
+RESET=false; POLICIES=false
 # shellcheck disable=SC1090  # the state file is chosen at run time
 while [[ $# -gt 0 ]]; do case "$1" in
   --check) CHECK_ONLY=true; shift ;;
@@ -2450,6 +2933,7 @@ while [[ $# -gt 0 ]]; do case "$1" in
   --include-grants) TD_GRANTS=true; shift ;;
   --yes-i-mean-it) YES_I_MEAN_IT=true; shift ;;
   --reset) RESET=true; shift ;;
+  --policies) POLICIES=true; shift ;;
   --for) [[ "${2:-}" =~ ^(setup|infra-manager|infra-manager-sa)$ ]] || { echo "--for needs setup, infra-manager or infra-manager-sa"; exit 2; }
          GRANT_FOR="$2"; shift 2 ;;
   --sa) [[ "${2:-}" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$ ]] || { echo "--sa needs a service account email: NAME@PROJECT.iam.gserviceaccount.com"; exit 2; }
@@ -2496,6 +2980,10 @@ elif [[ -n "$GRANT" ]]; then
   grant_roles
 elif $CONFIRM; then echo "--confirm only goes with --remove"; exit 2
 else launch; need_sign_in checked
-  if [[ -n "$ONLY_STEP" ]]; then "step$ONLY_STEP"; else for s in 1 2 3 4 5 6 7 8 9 10; do "step$s"; done; fi; fi
+  if [[ -n "$ONLY_STEP" ]]; then run_step "$ONLY_STEP"
+  elif $POLICIES; then policy_review
+  # With a terminal the menu comes first; without one (CI, a pipe, --check) every step runs, as before.
+  elif interactive; then main_menu
+  else for s in 1 2 3 4 5 6 7 8 9 10; do run_step "$s"; done; fi; fi
 summary
 [[ $FAILS -eq 0 ]]

@@ -52,19 +52,7 @@ resource "google_pubsub_subscription" "abstract" {
   }
 
 
-  # Push is OPT-IN and wrong for Abstract, which pulls. A push subscription
-  # produces a feed Abstract cannot read, and the symptom is zero events with a
-  # healthy sink -- so the OIDC token is mandatory rather than optional: an
-  # unauthenticated push endpoint accepts anything that can reach it.
-  dynamic "push_config" {
-    for_each = var.push_endpoint != "" ? [1] : []
-    content {
-      push_endpoint = var.push_endpoint
-      oidc_token {
-        service_account_email = var.push_service_account_email
-      }
-    }
-  }
+  # Pull only: Abstract's integration pulls with its own credentials, so the subscription never pushes.
 
   project = var.log_project
   name    = var.subscription_name

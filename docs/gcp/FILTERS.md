@@ -20,9 +20,10 @@ log_categories = ["admin_activity", "system_event", "policy_denied", "identity_a
 ```
 
 The audit-log roots route Cloud Audit Logs: Abstract's managed GCP parser keeps only those, and
-discards anything else the sink sends. Firewall, DNS and other platform logs can be routed by
-`gcp-source-network-threat-logs`, but Abstract does not keep them today, so deploying it costs money in
-Google Cloud and adds nothing in Abstract ([Where each source is turned on](#where-each-source-is-turned-on)).
+discards anything else the sink sends. Network logs go through `gcp-source-network-threat-logs`, a sink and
+topic of their own, read by a GCP Pub/Sub Source configuration of their own that runs the extended GCP Pub/Sub
+parser: it keeps firewall, Cloud DNS, VPC Flow and Cloud NAT logs, and not load balancer or Cloud IDS logs
+([Where each source is turned on](#where-each-source-is-turned-on)).
 
 A name not in the catalog **fails at plan** with the valid list printed. That is
 deliberate: a hand-written Cloud Logging filter fails *silently* — a typo matches nothing,
@@ -98,9 +99,12 @@ The logging project only holds the topic, the subscription and the reader accoun
 | Load balancer and Cloud Armor logs | Per backend service: "You enable or disable logging for each backend service". The default sample rate is 1.0. Google's documentation describes no organization-level switch | [Global external Application Load Balancer logging and monitoring](https://docs.cloud.google.com/load-balancing/docs/https/https-logging-monitoring) |
 | Cloud IDS threat logs | An IDS endpoint in each region you monitor (a zonal resource that inspects traffic from any zone in its region), plus packet mirroring. Google's documentation describes no organization-level deployment | [Cloud IDS overview](https://docs.cloud.google.com/intrusion-detection-system/docs/overview) |
 
-> **Abstract's Google Cloud Pub/Sub integration keeps only Cloud Audit Logs today**, so flow, firewall, DNS, load
-> balancer and IDS logs sent to it are billed by Google and discarded. The commands in this table change the source
-> itself; they are the decision of the team that owns that network or service, never part of onboarding.
+> **Abstract's managed GCP Pub/Sub parser, as shipped, keeps only Cloud Audit Logs today**, so on a configuration
+> that runs only it, flow, firewall, DNS, NAT, load balancer and IDS logs are billed by Google and discarded. A
+> configuration running the extended GCP Pub/Sub parser keeps VPC Flow, firewall, Cloud NAT and Cloud DNS logs; it is
+> not in the managed integration yet, so until it is, Abstract applies it to the configuration's parsers. Load
+> balancer and Cloud IDS logs are discarded either way. The commands in this table change the source itself; they
+> are the decision of the team that owns that network or service, never part of onboarding.
 
 ## Data Access — the cost decision for the whole engagement
 

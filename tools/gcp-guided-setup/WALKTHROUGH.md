@@ -30,7 +30,7 @@ Make the scripts runnable:
 chmod +x tools/gcp-guided-setup/*.sh
 ```
 
-The script's first screen also offers to sign you in, switch account, start over or update the scripts.
+The script's first screen also offers to sign you in, switch account, start over or update the scripts. Run with no options, it then shows a menu: the guided setup (every step in order), any one step, an organization policy review, what is supported at the organization, folder and project, and one screen with every name, ID and account the setup uses. Each page below runs one step directly with `--step`.
 
 Google documentation: [Open in Cloud Shell](https://docs.cloud.google.com/shell/docs/open-in-cloud-shell#required_url_parameter) · [Use Cloud Shell](https://docs.cloud.google.com/shell/docs/using-cloud-shell#choose_ephemeral_mode) · [gcloud auth login](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login) · [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files)
 
@@ -55,8 +55,8 @@ Google documentation: [Route log entries](https://docs.cloud.google.com/logging/
 **Why.** Every later check is made for this account. The scope decides what is covered.
 
 - Whole organization: every project, including ones created later. Recommended.
-- One folder: every project in it. Projects outside it are missed.
-- One project: a pilot. Other and future projects are not covered.
+- One or more folders, ticked from a list of every folder and subfolder: one sink per folder, covering every project in it, including ones created later there. A folder inside another ticked folder is left out, because the outer folder's sink already covers it.
+- One or more projects, ticked from a list (type to search, `a` ticks every project shown, `f` ticks every project in a folder): with several, choose one organization sink filtered to those projects (recommended, one sink and one grant), or one sink in each project (needs rights on each project only). Projects created later are not covered until you tick them; run this step again to add them.
 
 ```bash
 ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 1
@@ -122,6 +122,14 @@ _Billing is optional on this path. Pub/Sub and Logging free tiers cover an audit
 
 **You should see:** A ✓ for the active project, every API, building the pipeline in the project, and "service-account keys are allowed". A ✗ on the key policy means: ask for an exception on this project before you go on.
 
+In an organization with security policies, review the ones that can block or change this setup before script step 4 builds anything. It reads the effective policy at the organization, the logging project and every folder or project you chose, and changes nothing (menu p does the same):
+
+```bash
+./tools/gcp-guided-setup/abstract-gcp-setup.sh --policies
+```
+
+**You should see:** Every BLOCKS line with a ✓. A ✗ there names the constraint and where it is enforced: ask its owner for an exception on the logging project. CHECK lines say what to confirm; RECOMMEND lines are optional hardening.
+
 Prefer Terraform? The same piece is `templates/gcp/gcp-foundation-logging-project`.
 
 Google documentation: [Create projects](https://docs.cloud.google.com/resource-manager/docs/creating-managing-projects) · [Enable and disable services](https://docs.cloud.google.com/service-usage/docs/enable-disable#enabling) · [Enable, disable, or change billing for a project](https://docs.cloud.google.com/billing/docs/how-to/modify-project#enable_billing_for_an_existing_project) · [Restrict IAM service account usage](https://docs.cloud.google.com/organization-policy/restrict-service-accounts#boolean_constraints) · [Organization policy constraints](https://docs.cloud.google.com/organization-policy/reference/org-policy-constraints)
@@ -177,7 +185,7 @@ cloudshell download ~/abstract-keys/abstract-pubsub-key.json
 
 Google documentation: [Create service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-create#creating) · [Access control with Identity and Access Management](https://docs.cloud.google.com/pubsub/docs/access-control#roles) · [Create and delete service account keys](https://docs.cloud.google.com/iam/docs/keys-create-delete#creating) · [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files)
 
-## Script step 6: Data Access logs (optional)
+## Script step 6: IAM and Data Access logs
 
 **What it does.** Turns on Data Access logs and routes them: who minted service-account tokens or impersonated a service account, who exchanged a federated identity (GitHub Actions, AWS, Azure), and who read or changed data in BigQuery, Cloud Storage and Cloud KMS. For identity it switches on iam.googleapis.com and sts.googleapis.com in the audit settings, and routes their events, which arrive as iamcredentials.googleapis.com and sts.googleapis.com. Keep both in the suggested list.
 
@@ -192,7 +200,7 @@ _DATA_READ is high volume and off by default. Start with ADMIN_READ and DATA_WRI
 ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 6
 ```
 
-Answer **no** at the first question to skip it.
+The first question, "Record IAM and identity logs", defaults to yes: it turns on iam.googleapis.com and sts.googleapis.com at ADMIN_READ, which is low volume. The second, for BigQuery, Cloud Storage and Cloud KMS, defaults to no. With one organization sink filtered to ticked projects, switch 1 is set in each of those projects, not across the organization. Answer **no** to both to skip it.
 
 **You should see:** A ✓ for switch 1 (Data Access is generated for each service you chose, iam.googleapis.com and sts.googleapis.com among them) and for switch 2 (the sink routes each of them, naming iamcredentials.googleapis.com and sts.googleapis.com).
 
@@ -200,7 +208,7 @@ Prefer Terraform? The same piece is `templates/gcp/gcp-foundation-data-access-au
 
 Google documentation: [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit#types) · [Enable Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access#auditconfig_objects) · [Service Account Credentials audit logging](https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-iamcreds) · [Security Token Service audit logging](https://docs.cloud.google.com/iam/docs/audit-logging/audit-logging-sts)
 
-## Script step 7: Google Workspace logs (optional)
+## Script step 7: Google Workspace logs
 
 **What it does.** Sets up sign-in, admin and token logs from Google Workspace, read from the Workspace Reports API; Abstract does not depend on Cloud Logging for them.
 
@@ -217,7 +225,7 @@ Google documentation: [Cloud Audit Logs overview](https://docs.cloud.google.com/
 ./tools/gcp-guided-setup/abstract-gcp-setup.sh --step 7
 ```
 
-Answer **no** at the first question to skip it.
+The first question defaults to yes. Answer **no** to skip it, for example when no Workspace super admin is available yet.
 
 **You should see:** A ✓ "delegation works: the Reports API answered as" your admin. Delegation can take a few minutes after the super admin saves it; check again with `--step 7 --check` until it does. Check before you upload or delete the key: the check signs in with the key file.
 
@@ -308,6 +316,18 @@ cloudshell download ~/abstract-audit-config-backup-*.json
 ```
 
 Google documentation: [Manage files with Cloud Shell](https://docs.cloud.google.com/shell/docs/uploading-and-downloading-files) · [Best practices for managing service account keys](https://docs.cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys) · [View logs routed to Pub/Sub](https://docs.cloud.google.com/logging/docs/export/pubsub)
+
+## More sources
+
+Each of these is a pipeline of its own, deployed with Terraform from its template's tutorial, which ends with the values for Abstract:
+
+- Network logs (firewall rules, Cloud DNS queries, VPC Flow, Cloud NAT): `templates/gcp/gcp-source-network-threat-logs`, a second sink with its own topic. Each log is turned on where the resource lives, in the project that owns the network.
+- IAM policy changes, with the policy before and after: `templates/gcp/gcp-source-asset-and-iam-changes`, an organization asset feed.
+- Security Command Center findings: `templates/gcp/gcp-source-security-command-center-findings`, organization only, with Security Command Center Standard or Premium active there.
+
+Abstract keeps these only on a GCP Pub/Sub Source configuration of their own, one per subscription, that runs the extended GCP Pub/Sub parser. The managed parser as shipped keeps Cloud Audit Logs only. The extended parser is not in the managed integration yet; until it is, Abstract applies it to the configuration's parsers. docs/gcp/ABSTRACT-INTEGRATION.md has the details.
+
+Google documentation: [VPC firewall rules logging overview](https://docs.cloud.google.com/firewall/docs/vpc-firewall-rules-logging-overview) · [VPC Flow Logs](https://docs.cloud.google.com/vpc/docs/flow-logs) · [Monitor asset changes with Pub/Sub](https://docs.cloud.google.com/asset-inventory/docs/monitor-asset-changes#create_feeds) · [Enable finding notifications for Pub/Sub](https://docs.cloud.google.com/security-command-center/docs/how-to-notifications)
 
 ## Clean up
 

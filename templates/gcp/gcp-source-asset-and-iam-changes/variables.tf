@@ -58,3 +58,9 @@ variable "labels" {
   type    = map(string)
   default = {}
 }
+
+variable "feed_id" {
+  description = "Name of the organization feed. Feed names are unique per organization, so a second deployment in the same organization (another logging project, a lab) needs its own; an existing name fails with 409 Requested entity already exists."
+  type        = string
+  default     = "abstract-asset-feed"
+}

@@ -2,8 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
-> [!WARNING]
-> Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records. Abstract's Google Cloud integration keeps only Cloud Audit Logs, which Security Command Center findings are not.
+> [!NOTE]
+> Abstract keeps these findings only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser, which stores them as gcp.scc_findings, Event Threat Detection findings included. The managed parser as shipped keeps Cloud Audit Logs only and stored none of them in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers.
 
 Security Command Center does not flow through the Log Router; it publishes to Pub/Sub through its own notification config, so no sink will ever collect it. This deployment creates that config and a dedicated topic and subscription, reusing Abstract's existing service account.
 
@@ -15,9 +15,9 @@ Editable source: [diagram.drawio](diagram.drawio)
 
 ## When to use
 
-Security Command Center Premium or Enterprise is on and its findings should reach Abstract.
+Security Command Center Standard or Premium is active at the organization and its findings should reach Abstract.
 
-**Not for:** As a way to collect audit logs; configure findings as a separate source in Abstract, because their shape differs.
+**Not for:** As a way to collect audit logs; configure findings as a GCP Pub/Sub Source configuration of their own in Abstract, because their shape differs.
 
 Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
@@ -35,9 +35,11 @@ In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, s
 
 ## Prerequisites
 
-- Security Command Center Premium or Enterprise
+- Security Command Center Standard or Premium active at the organization (tested with Premium). An organization still on legacy Security Command Center gets 400 "Security Command Center Legacy has been permanently disabled": activate it in the console first
+- roles/securitycenter.notificationConfigEditor at the organization, for the person who applies
+- Right after activation, the create can answer 400 "Precondition check failed" and still create the config: list the configs, and import it into the state if it is there
 - Abstract's service account from gcp-source-audit-logs-organization, read from its state (remote_state_bucket) or pasted
-- Abstract's managed GCP Pub/Sub parser keeps only Cloud Audit Log records, so findings are collected but NOT stored until a parser built from a captured finding is attached to this subscription's own Abstract configuration (parser pending)
+- One GCP Pub/Sub Source configuration in Abstract for this subscription, running the extended GCP Pub/Sub parser: never this subscription on the audit-log configuration
 
 ## Cost
 
@@ -77,6 +79,7 @@ SCC notifications are free; Pub/Sub throughput is small (findings, not logs).
 
 ## Outputs
 
+- `abstract_onboarding`
 - `scc_subscription`
 - `scc_topic`
 

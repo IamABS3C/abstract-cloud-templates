@@ -4,8 +4,8 @@
 
 <walkthrough-tutorial-duration duration="10"></walkthrough-tutorial-duration>
 
-> [!WARNING]
-> **Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records.** Abstract's Google Cloud integration keeps only Cloud Audit Logs, which asset and IAM-policy change records are not.
+> [!NOTE]
+> **Abstract keeps these records only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser.** Its asset sub-parser comes from this template's `parsers/cloud-asset-inventory.yml`, and stores each IAM policy change as `gcp.asset_inventory` with action `iam_policy_grant`, `iam_policy_revoke` or `iam_policy_change`. The managed parser as shipped keeps Cloud Audit Logs only and stored none of them in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers.
 
 <!-- abstract:needs -->
 **This page uses Terraform, because Cloud Asset Inventory publishes through an organization feed of its own, not a log sink, and the guided setup script builds only the sink.**
@@ -33,6 +33,13 @@ only events.
 ## Before you start
 
 You need `roles/cloudasset.owner` at the organization.
+
+Feed names are unique in an organization. The template's feed is `abstract-asset-feed` unless you set `feed_id`; a
+second deployment in the same organization (another logging project, a test) needs its own `feed_id`, or the apply
+fails with 409 "Requested entity already exists".
+
+The first apply waits 60 seconds after creating the Cloud Asset Inventory service agent before granting it publisher
+on the topic: a new agent is not grantable at once ("does not exist").
 
 <!-- abstract:signin -->
 ## Sign in first
@@ -137,8 +144,8 @@ Removing this template later (**To remove it later**, at the end of the page) ne
 ## Reuse Abstract's identity
 
 The template grants the audit-log pipeline's reader account read access to this subscription, so no second
-identity is needed once Abstract supports these records. Today Abstract does not read it, and that grant is one
-more subscription the existing key can read; **To remove it later** takes it away. Deployed that pipeline with the guided setup? Its account is
+identity or key is needed: Abstract reads this subscription with that account, through a GCP Pub/Sub Source
+configuration of its own. **To remove it later** takes the grant away. Deployed that pipeline with the guided setup? Its account is
 `abstract-pubsub-reader@LOGGING_PROJECT_ID.iam.gserviceaccount.com`, with LOGGING_PROJECT_ID your logging project's
 ID. Deployed it with Terraform? Its email is read from that template's state, or printed from its outputs, in Deploy
 with Terraform, step 2.
@@ -174,8 +181,8 @@ This piece is not part of the guided setup script. Deploy it with Terraform: fol
 
 These read, and change nothing; ORG_ID and LOG_PROJECT come from the answers file loaded in Check first.
 
-The feed exists on the organization. You should see `abstract-asset-feed`, publishing to the `abstract-asset-changes`
-topic in your logging project:
+The feed exists on the organization. You should see `abstract-asset-feed` (or your `feed_id`), publishing to the
+`abstract-asset-changes` topic in your logging project:
 
 ```bash
 gcloud asset feeds list --organization="$ORG_ID"
@@ -198,8 +205,10 @@ terraform output cai_service_agent
 
 <walkthrough-conclusion-trophy></walkthrough-conclusion-trophy>
 
-Asset changes arrive on their **own** topic and subscription. Abstract does not keep them today: its Google Cloud
-integration keeps only Cloud Audit Logs. Remove the template (below) if you deployed it only for Abstract.
+Asset changes arrive on their **own** topic and subscription. The first message is the feed's plain-text "You have
+successfully configured real time feed" greeting, sent when the feed is created or updated: the extended parser drops
+it. Add a GCP Pub/Sub Source configuration of its own in Abstract for this subscription (**Connect Abstract**, step 4
+of the Terraform section), and ask Abstract to apply the extended GCP Pub/Sub parser to it.
 
 <!-- abstract:cleanup -->
 ## Clean up
@@ -333,6 +342,18 @@ Apply exactly that plan. It creates what the plan listed; **To remove it later**
 ```bash
 terraform apply abstract.tfplan
 ```
+
+**4. Connect Abstract.** This subscription is read by the account the audit-log template made, so there is no new account and no new key.
+
+Print the values for Abstract (read-only):
+
+```bash
+terraform output abstract_onboarding
+```
+
+You should see `project_id`, your logging project, and `subscription_id`, this template's subscription. In Abstract, add a GCP Pub/Sub Source configuration of its own for them: one configuration per subscription, never this subscription on the audit-log configuration. For **Credentials**, upload a key of the audit-log reader account: the one you made for the audit-log configuration, or, if you deleted every copy after uploading it (as its page asks), a new key on that account, made the way that page's Connect Abstract step makes it.
+
+Then, before you rely on it: Abstract keeps these records only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser, whose asset sub-parser comes from this template's parsers/cloud-asset-inventory.yml: it stores each IAM policy change as gcp.asset_inventory with action iam_policy_grant, iam_policy_revoke or iam_policy_change. The managed parser as shipped keeps Cloud Audit Logs only and stored none of them in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers.
 <!-- /abstract:tfapply -->
 
 <!-- abstract:tfremove -->

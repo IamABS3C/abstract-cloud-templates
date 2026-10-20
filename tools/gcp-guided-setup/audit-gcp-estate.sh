@@ -478,9 +478,9 @@ fi
 
 # 6. Network Threat Telemetry Assessment
 heading "6. Network Threat Telemetry Assessment" "━━━━━━━━━━━━━━━━━━━━━"
-# These logs are not Cloud Audit Log records. Abstract's managed GCP parser keeps only audit logs, so
-# turning them on is worth it only together with a parser on their own Abstract configuration.
-NOT_STORED="Abstract's managed GCP parser keeps only Cloud Audit Log records, so these logs are collected but not stored until a parser for them is attached to their own Abstract configuration (see templates/gcp/gcp-source-network-threat-logs)."
+# These logs are not Cloud Audit Log records. Abstract's managed GCP parser keeps only audit logs; the extended GCP
+# Pub/Sub parser keeps flow, firewall, NAT and DNS logs on a configuration of their own.
+NOT_STORED="Abstract's managed GCP parser keeps only Cloud Audit Log records, so on it these logs are collected but not stored: send them with templates/gcp/gcp-source-network-threat-logs to a configuration of their own that runs the extended GCP Pub/Sub parser (firewall, DNS, VPC Flow and Cloud NAT logs; not load balancer or Cloud IDS logs)."
 # Read in ONE project, named in every line: an unscoped list reads gcloud's current project and used to
 # state its answer as a fact about the whole estate.
 NP="$TARGET_PROJECT"
@@ -566,7 +566,7 @@ if [[ -n "$TARGET_ORG" ]]; then
       pass "Security Command Center Notification Config found"
     else
       warn "No Security Command Center Notification Configs discovered at Organization scope."
-      add_rec "Deploy templates/gcp/gcp-source-security-command-center-findings to stream real-time threat, vulnerability, and posture findings. Abstract's managed GCP parser keeps only Cloud Audit Log records, so findings are collected but not stored until a parser built from a captured finding is attached to the subscription's own Abstract configuration."
+      add_rec "Deploy templates/gcp/gcp-source-security-command-center-findings to stream real-time threat, vulnerability, and posture findings. Abstract's managed GCP parser keeps only Cloud Audit Log records, so on it findings are collected but not stored: read the subscription with a configuration of its own that runs the extended GCP Pub/Sub parser. Needs Security Command Center Standard or Premium active at the organization."
     fi
   else
     cant "Security Command Center notification configs at Organization $TARGET_ORG" \
@@ -578,7 +578,7 @@ if [[ -n "$TARGET_ORG" ]]; then
       pass "Cloud Asset Inventory real-time feed(s) discovered"
     else
       info "No Cloud Asset Inventory organization feeds configured."
-      add_rec "Deploy templates/gcp/gcp-source-asset-and-iam-changes for real-time drift detection and IAM policy diff tracking. Asset changes are not stored by the audit-log configuration: attach the template's parsers/cloud-asset-inventory.yml to the subscription's own Abstract configuration."
+      add_rec "Deploy templates/gcp/gcp-source-asset-and-iam-changes for real-time drift detection and IAM policy diff tracking. Asset changes are not stored by the managed GCP parser on the audit-log configuration: read the subscription with a configuration of its own that runs the extended GCP Pub/Sub parser."
     fi
   else
     cant "Cloud Asset Inventory feeds at Organization $TARGET_ORG"

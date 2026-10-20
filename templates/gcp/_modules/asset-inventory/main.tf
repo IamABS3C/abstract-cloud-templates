@@ -24,6 +24,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
+    }
     google-beta = {
       source  = "hashicorp/google-beta"
       version = "~> 6.0"
@@ -64,11 +68,19 @@ resource "google_project_service_identity" "cai" {
   service  = "cloudasset.googleapis.com"
 }
 
+# A service agent just created is not usable for a short while: the publisher grant right after it failed with
+# "Service account ... does not exist" on the first apply in a new project (measured 2026-10-18), and the second
+# apply then succeeded. Waiting here makes the first apply work.
+resource "time_sleep" "cai_agent_propagation" {
+  create_duration = "60s"
+  triggers        = { agent = google_project_service_identity.cai.email }
+}
+
 resource "google_pubsub_topic_iam_member" "cai_publisher" {
   project = var.log_project
   topic   = google_pubsub_topic.assets.id
   role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${google_project_service_identity.cai.email}"
+  member  = "serviceAccount:${time_sleep.cai_agent_propagation.triggers.agent}"
 }
 
 resource "google_cloud_asset_organization_feed" "abstract" {

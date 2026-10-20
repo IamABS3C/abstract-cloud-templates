@@ -1,11 +1,11 @@
 <img src="../../../docs/brand/abstract-logo-white.svg" alt="Abstract Security" width="150">
 
-# Export network threat logs (not kept by Abstract yet)
+# Export network logs
 
 <walkthrough-tutorial-duration duration="20"></walkthrough-tutorial-duration>
 
-> [!WARNING]
-> **Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records.** Abstract's Google Cloud Pub/Sub integration keeps only Cloud Audit Log records, and firewall, Cloud DNS, load balancer (Cloud Armor) and Cloud IDS logs are not audit logs.
+> [!NOTE]
+> **Abstract keeps these logs only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser.** The managed parser as shipped keeps Cloud Audit Logs only, and stored none of 9,639 network log entries pulled in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers. It keeps firewall rule, Cloud DNS query, VPC Flow and Cloud NAT logs; load balancer (Cloud Armor) and Cloud IDS records are still discarded.
 
 <!-- abstract:needs -->
 **This page uses Terraform, because the guided setup script builds only the audit-log sink, and this is a second sink with its own filter and topic.**
@@ -13,13 +13,17 @@
 Needs: Terraform (Cloud Shell has it), a Cloud Storage bucket for its state (the Terraform section creates it), and the roles under [Check first](#check-first). [Deploy with Terraform](#deploy-with-terraform), at the end of this page, deploys it.
 <!-- /abstract:needs -->
 
-This template adds a second, filtered sink that routes four kinds of network log to their own Pub/Sub topic,
-abstract-network-threats, in your logging project:
+This template adds a second, filtered sink that routes network logs to their own Pub/Sub topic,
+abstract-network-threats, in your logging project. What Abstract keeps, with the extended parser:
 
-1. **Cloud Armor decisions**, inside Application Load Balancer request logs (`resource.type` `http_load_balancer`, `http_external_regional_lb_rule` and `internal_http_lb_rule`)
-2. **Cloud IDS threat logs** (`logName:"ids.googleapis.com%2Fthreat"`)
-3. **Cloud DNS query logs** (`logName:"dns.googleapis.com%2Fdns_queries"`)
-4. **Firewall rule logs** (`logName:"compute.googleapis.com%2Ffirewall"`)
+| Log | Category | Kept by Abstract | Stored as |
+|---|---|---|---|
+| Firewall rule logs (`compute.googleapis.com%2Ffirewall`) | `firewall` (default) | yes | `gcp.firewall` |
+| Cloud DNS query logs (`dns.googleapis.com%2Fdns_queries`) | `dns_queries` (default) | yes | `gcp.dns_queries` |
+| VPC Flow Logs (`compute.googleapis.com%2Fvpc_flows`) | `vpc_flows` (add it) | yes | `gcp.vpc_flows` |
+| Cloud NAT logs (`compute.googleapis.com%2Fnat_flows`) | `nat_flows` (add it) | yes | `gcp.nat_flows` |
+| Cloud Armor decisions, inside Application Load Balancer request logs | `load_balancer`, `load_balancer_regional_internal` (default) | no | |
+| Cloud IDS threat logs (`ids.googleapis.com%2Fthreat`) | `platform_log_filters` (default) | no | |
 
 A sink only routes what Google already writes. Each of these sources is off until the team that owns the network
 or the service turns it on, at its own source, and each adds log volume Google bills. This page checks each one,
@@ -252,15 +256,18 @@ Once it is on, this template's `firewall` category routes those logs.
 
 ## Choose the log categories
 
-If you still deploy it, knowing Abstract keeps none of it today, choose which of the four streams the sink routes:
-`firewall`, `dns_queries`, `load_balancer` and `load_balancer_regional_internal` (Cloud Armor, global and regional),
-and the Cloud IDS threat logs. Deploy with Terraform, step 2, says where each goes.
+Choose which streams the sink routes. Abstract keeps `firewall`, `dns_queries`, `vpc_flows` and `nat_flows`; the
+load balancer categories (Cloud Armor) and the Cloud IDS threat logs are routed but discarded, so leave them out
+unless something else reads this topic. VPC Flow Logs (per subnet, or for a project or the organization) and Cloud
+NAT logs (per NAT gateway) are turned on by the network owner ([Where each source is turned on](../../../docs/gcp/FILTERS.md#where-each-source-is-turned-on)).
+Deploy with Terraform, step 2, says where each goes.
 
-<walkthrough-info-message>`dns_queries`, `load_balancer` and `load_balancer_regional_internal` (Cloud Armor) are high-volume streams, so the first deploy stops on purpose until you acknowledge the volume. Measure a baseline first.</walkthrough-info-message>
+<walkthrough-info-message>`dns_queries`, `nat_flows`, `load_balancer` and `load_balancer_regional_internal` are high-volume streams and `vpc_flows` is extreme, so the first deploy stops on purpose until you acknowledge the volume. Measure a baseline first.</walkthrough-info-message>
 
 Measure a baseline: count one hour of one stream in one workload project (read-only; it stops at 10,000 entries, so
 10000 means at least that many an hour). Replace WORKLOAD_PROJECT_ID, and LOG_FILTER with the stream's filter:
 `logName:"compute.googleapis.com%2Ffirewall"` for firewall, `logName:"dns.googleapis.com%2Fdns_queries"` for DNS,
+`logName:"compute.googleapis.com%2Fvpc_flows"` for VPC Flow, `logName:"compute.googleapis.com%2Fnat_flows"` for Cloud NAT,
 `resource.type="http_load_balancer"` for the global load balancer, `logName:"ids.googleapis.com%2Fthreat"` for Cloud IDS:
 
 ```bash
@@ -270,7 +277,7 @@ gcloud logging read 'LOG_FILTER' --project=WORKLOAD_PROJECT_ID --freshness=1h --
 Multiply by 24 for a day and by the number of projects that log the stream. Cloud Logging bills the volume a sink
 routes on top of what each project already stores, so this is the number the network owner signs off.
 
-Read the `effective_filter` before you apply: it is the one filter the new sink uses for all four streams.
+Read the `effective_filter` before you apply: it is the one filter the new sink uses for every stream you chose.
 
 <!-- abstract:deploy -->
 ## Deploy
@@ -313,16 +320,16 @@ gcloud logging read 'logName:"logging.googleapis.com%2Fsink_error"' --project="$
 
 ## Connect to Abstract
 
-Not yet. Abstract's Google Cloud integration keeps only Cloud Audit Logs, so a Pub/Sub source on
-abstract-network-threats-sub would read these logs and discard them. When Abstract supports them, the values come from
-`terraform output abstract_onboarding` in this template's folder.
+Add a GCP Pub/Sub Source configuration of its own in Abstract for abstract-network-threats-sub, with the values and the
+key from **Connect Abstract**, step 4 of the Terraform section, and ask Abstract to apply the extended GCP Pub/Sub parser
+to it. On the managed parser alone it reads these logs and discards them.
 
 ## Done
 
 <walkthrough-conclusion-trophy></walkthrough-conclusion-trophy>
 
-The sink routes the network logs whose sources are turned on to the `abstract-network-threats` topic. Abstract does
-not keep them today; remove the template (below) if you deployed it only for Abstract.
+The sink routes the network logs whose sources are turned on to the `abstract-network-threats` topic, and Abstract
+keeps the firewall, DNS, VPC Flow and Cloud NAT records once its configuration runs the extended parser.
 
 <!-- abstract:cleanup -->
 ## Clean up
@@ -406,18 +413,19 @@ cloudshell edit terraform.tfvars
 ```
 <!-- /abstract:terraform -->
 
-Set the scope and the streams, with ORG_ID your organization's ID. Keep only the streams whose source is turned on:
+Set the scope and the streams, with ORG_ID your organization's ID. These are the streams Abstract keeps; keep only
+those whose source is turned on:
 
 ```hcl
 sink_scope           = "organization"
 org_id               = "ORG_ID"
-log_categories       = ["firewall", "dns_queries", "load_balancer", "load_balancer_regional_internal"]
-platform_log_filters = ["ids.googleapis.com%2Fthreat"]
+log_categories       = ["firewall", "dns_queries", "vpc_flows", "nat_flows"]
+platform_log_filters = []
 ```
 
-For a folder sink set `sink_scope = "folder"` and `folder_id` instead of `org_id`. With `dns_queries`,
-`load_balancer` or `load_balancer_regional_internal`, the first plan stops on purpose: once the baseline is measured
-and signed off, add `acknowledge_high_volume = true`.
+For a folder sink set `sink_scope = "folder"` and `folder_id` instead of `org_id`. With `dns_queries`, `vpc_flows`,
+`nat_flows`, `load_balancer` or `load_balancer_regional_internal`, the first plan stops on purpose: once the baseline
+is measured and signed off, add `acknowledge_high_volume = true`.
 
 <!-- abstract:tfapply -->
 **3. Preview, then apply exactly what you previewed.**
@@ -451,6 +459,66 @@ Print the filter the sink uses (read-only). You should see one Cloud Logging fil
 ```bash
 terraform output -raw effective_filter
 ```
+
+**4. Connect Abstract.** Terraform makes no key for Abstract, so no key sits in the state; make it with gcloud, once.
+
+Print the values for Abstract (read-only):
+
+```bash
+terraform output abstract_onboarding
+```
+
+You should see `project_id`, your logging project: enter it as **Project ID** in Abstract's GCP Pub/Sub Source. `subscription_id` is the **Subscription ID**, the short name. `service_account_email` is the account the key below belongs to.
+
+Keep the reader account's email in SA_EMAIL:
+
+```bash
+export SA_EMAIL="$(terraform output -json abstract_onboarding | jq -r .service_account_email)"
+```
+
+Check it. You should see an address ending in @ and your logging project's ID, then .iam.gserviceaccount.com:
+
+```bash
+echo "Reader account: ${SA_EMAIL:?not set: run the apply first}"
+```
+
+Make a folder for the key outside the repository clone, readable only by you:
+
+```bash
+mkdir -m 700 -p ~/abstract-keys
+```
+
+Create the key, as a file only you can read. This adds one key to the reader account in your logging project; anyone holding the file can read the subscription. The last command in this step revokes it:
+
+```bash
+(umask 077 && gcloud iam service-accounts keys create ~/abstract-keys/abstract-network-key.json --iam-account="$SA_EMAIL" --project="$LOG_PROJECT")
+```
+
+In Cloud Shell, save it to your computer:
+
+```bash
+cloudshell download ~/abstract-keys/abstract-network-key.json
+```
+
+Upload it to Abstract with the two values above. Once Abstract has saved the integration, delete the copy here, and the downloaded file on your computer:
+
+```bash
+rm -f ~/abstract-keys/abstract-network-key.json
+```
+
+To revoke the key later (a rotation, or removing the integration), list the reader account's keys (read-only). The one Abstract holds has the ID in the `private_key_id` of the file you uploaded:
+
+```bash
+gcloud iam service-accounts keys list --iam-account="$SA_EMAIL" --project="$LOG_PROJECT" --managed-by=user
+```
+
+Then delete it, replacing KEY_ID with that ID. Abstract can no longer read from that moment; nothing else changes:
+
+```bash
+gcloud iam service-accounts keys delete KEY_ID --iam-account="$SA_EMAIL" --project="$LOG_PROJECT"
+```
+
+Then, before you rely on it: Abstract keeps these logs only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser. The managed parser as shipped keeps Cloud Audit Logs only, and stored none of 9,639 network log entries pulled in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers. It keeps firewall rule, Cloud DNS query, VPC Flow and Cloud NAT logs; load balancer (Cloud Armor) and Cloud IDS records are still discarded.
 <!-- /abstract:tfapply -->
 
 <!-- abstract:tfremove -->

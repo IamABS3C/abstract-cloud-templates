@@ -1,23 +1,23 @@
-# Firewall, DNS and IDS logs to Abstract: filtered sink
+# Network logs to Abstract: filtered sink
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
-> [!WARNING]
-> Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records. Abstract's Google Cloud Pub/Sub integration keeps only Cloud Audit Log records, and firewall, Cloud DNS, load balancer (Cloud Armor) and Cloud IDS logs are not audit logs.
+> [!NOTE]
+> Abstract keeps these logs only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser. The managed parser as shipped keeps Cloud Audit Logs only, and stored none of 9,639 network log entries pulled in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers. It keeps firewall rule, Cloud DNS query, VPC Flow and Cloud NAT logs; load balancer (Cloud Armor) and Cloud IDS records are still discarded.
 
-Routes firewall rule, Cloud DNS query, load balancer (Cloud Armor) and Cloud IDS threat logs to a Pub/Sub topic for Abstract. Abstract's managed GCP parser does not yet store these logs: it keeps only Cloud Audit Log records, and these are not.
+Routes network logs to a Pub/Sub topic of their own with a second, filtered sink: firewall rule and Cloud DNS query logs, VPC Flow and Cloud NAT logs when you add them, and load balancer (Cloud Armor) and Cloud IDS threat logs. Abstract keeps the firewall, DNS, VPC Flow and Cloud NAT records once this subscription's configuration runs the extended GCP Pub/Sub parser.
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization
 
-![How Firewall, DNS and IDS logs to Abstract: filtered sink fits together](diagram.png)
+![How Network logs to Abstract: filtered sink fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
 ## When to use
 
-Network detections need firewall, DNS, Cloud Armor or Cloud IDS logs, and a parser for them is being built.
+Network detections need firewall, Cloud DNS, VPC Flow or Cloud NAT logs in Abstract.
 
-**Not for:** Expecting these logs to be searchable in Abstract today: the managed parser does not store them.
+**Not for:** On a configuration that runs only the managed GCP Pub/Sub parser: it stores none of these logs. Cloud Armor and Cloud IDS records are not kept by the extended parser either.
 
 Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
@@ -36,7 +36,8 @@ In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, s
 ## Prerequisites
 
 - Logging turned on at each source: per-rule firewall logging, a DNS server policy with logging, logging on the load balancer backend services, and a Cloud IDS endpoint with Packet Mirroring
-- A parser for these jsonPayload records on this subscription's own Abstract configuration; until one exists the logs are collected and not stored
+- One GCP Pub/Sub Source configuration in Abstract for this subscription, running the extended GCP Pub/Sub parser: never this subscription on the audit-log configuration
+- To route only what Abstract keeps: log_categories = ["firewall", "dns_queries", "vpc_flows", "nat_flows"] and platform_log_filters = []. vpc_flows is extreme tier; the network owner turns it on (per subnet, or for a project or the organization) with a sampling rate
 - acknowledge_high_volume = true, set only after measuring a 7-day baseline: the default categories are high tier and the plan stops without it
 
 ## Cost

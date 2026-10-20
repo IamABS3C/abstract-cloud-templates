@@ -155,66 +155,76 @@ Add `gmail`/`drive` only after measuring; they dwarf everything else combined.
 
 ---
 
-## Security Command Center — findings
+## Network logs, asset changes and Security Command Center findings
 
-**Not collected by Abstract yet.** Abstract's Google Cloud integration keeps only Cloud Audit Logs, which
-Security Command Center findings are not, so deploying this template costs money in Google Cloud and adds
-nothing in Abstract today.
+Each of these has its own topic and subscription, and each subscription gets **its own GCP Pub/Sub Source
+configuration**: one configuration per subscription, never a second subscription on the audit-log configuration.
+There is no separate integration for findings or assets; it is the same GCP Pub/Sub Source.
 
-**Its own topic and subscription**, because findings are a different shape from audit logs.
+Abstract keeps them only when the configuration runs the **extended GCP Pub/Sub parser**. The managed parser as
+shipped keeps Cloud Audit Logs only. Measured on an Abstract test tenant on 19 October 2026, with the managed parser:
+9,639 network log entries pulled, 0 stored; Security Command Center findings, 0 stored; asset changes, 0 stored
+(and 2 parsing errors, from the feed's plain-text greeting).
 
-Terraform path only (this template has no guided step). Go to the template's folder:
+The extended parser is YAML only: a dispatcher that recognises each message and hands it to one sub-parser, the
+managed audit pipeline unchanged, and network, asset and Security Command Center sub-parsers built from messages
+captured in a test organization. Anything else is still dropped. Audit logs come out the same as on the managed
+parser: compared with a configuration left on it, the 7 event types both stored had identical field sets.
+**It is not in the managed integration yet. Until it is, Abstract applies it to the configuration's parsers**:
+ask for it when you add the configuration.
 
-```bash
-cd templates/gcp/gcp-source-security-command-center-findings
-```
+| Source | Template | Subscription | Read with | Stored as |
+|---|---|---|---|---|
+| Network logs | `gcp-source-network-threat-logs` | `abstract-network-threats-sub` | its own account, `abstract-net-threat-reader` | `gcp.vpc_flows`, `gcp.firewall`, `gcp.nat_flows`, `gcp.dns_queries` |
+| Asset changes | `gcp-source-asset-and-iam-changes` | `abstract-asset-changes-sub` | the audit-log reader account | `gcp.asset_inventory`, `action` `iam_policy_grant`, `iam_policy_revoke` or `iam_policy_change` |
+| Security Command Center findings | `gcp-source-security-command-center-findings` | `abstract-audit-logs-sub-scc` | the audit-log reader account | `gcp.scc_findings`, as `type` `event` |
 
-Print its values (read-only):
-
-```bash
-terraform output
-```
-
-Configure as a **separate source** in Abstract. Do not expect the audit-log parser to handle
-the finding shape: the managed **GCP Pub/Sub Source** parser drops every message that is not a
-Cloud Audit Log, after counting it as collected. Findings are collected and never stored.
-
----
-
-## Asset inventory — resource and IAM-policy changes
-
-**Not collected by Abstract yet.** Abstract's Google Cloud integration keeps only Cloud Audit Logs, which
-asset and IAM-policy change records are not, so deploying this template costs money in Google Cloud and adds
-nothing in Abstract today. The guided setup no longer offers it.
-
-Terraform path only (this template has no guided step). Go to the template's folder:
-
-```bash
-cd templates/gcp/gcp-source-asset-and-iam-changes
-```
-
-Print its values (read-only):
+Terraform path only: each is deployed with Terraform from its template's tutorial, which ends with **Connect
+Abstract**. In the template's folder, print the values (read-only):
 
 ```bash
 terraform output -json abstract_onboarding
 ```
 
-Also a separate source, and it needs its own parser. The managed **GCP Pub/Sub Source** parser
-drops every message that is not a Cloud Audit Log: the configuration counts asset changes as
-collected, and none is stored. Create a GCP Pub/Sub Source configuration on
-`abstract-asset-changes-sub`, then replace its parser with
-[`parsers/cloud-asset-inventory.yml`](../../templates/gcp/gcp-source-asset-and-iam-changes/parsers/cloud-asset-inventory.yml)
-(`PATCH /v3/configurations/{id}/parsers` with `{"parsers": {"default.yml": <file>}, "mapper": null}`).
+Then add the configuration with the same three fields as the audit logs: **Project ID** (your logging project),
+**Subscription ID** (the short name in the table) and **Credentials** (a key of the account in the table).
 
+### Network logs
+
+Kept: firewall rule logs, Cloud DNS query logs, VPC Flow Logs and Cloud NAT logs. Not kept, even by the extended
+parser: load balancer request logs (where Cloud Armor's decisions are) and Cloud IDS threat logs, so leave them out
+of `log_categories` and `platform_log_filters` unless something else reads the topic. Each log is turned on where
+the resource lives, by the team that owns it, in the project that owns the network (the host project with Shared
+VPC): [FILTERS.md, Where each source is turned on](FILTERS.md#where-each-source-is-turned-on).
+
+### Asset changes
+
+The asset sub-parser is
+[`parsers/cloud-asset-inventory.yml`](../../templates/gcp/gcp-source-asset-and-iam-changes/parsers/cloud-asset-inventory.yml).
 It diffs the policy before and after, so each change arrives as `action` `iam_policy_grant`,
 `iam_policy_revoke` or `iam_policy_change`, with the roles in `user.target.roles`, the members in
 `related.user` (the same fields the audit-log parser uses), and each role and member pair in
-`ext.iam_granted` / `ext.iam_revoked`. The feed's first message is a plain-text greeting; the
-parser drops it.
+`ext.iam_granted` / `ext.iam_revoked`. The feed sends one plain-text "You have successfully configured real time
+feed" message when it is created or updated; the extended parser drops it.
 
 Worth explaining to a customer, because it sounds redundant and is not: `admin_activity`
 says **who called which API**; this says **what the policy now is, and what it was before.**
 Three API paths to the same IAM binding give three audit entries and one identical diff.
+
+The feed is set on the organization, and feed names are unique there: a second deployment in the same organization
+sets its own `feed_id`.
+
+### Security Command Center findings
+
+Stored as `gcp.scc_findings`, Event Threat Detection findings included: 76 in the first hour of the test. They are
+stored as `type` `event`, because a parser record marked `type` `finding` is collected and never stored.
+
+Before you deploy, Security Command Center Standard or Premium must be active at the organization (tested with
+Premium): an organization still on legacy Security Command Center gets 400 "Security Command Center Legacy has
+been permanently disabled". Whoever applies needs `roles/securitycenter.notificationConfigEditor` at the
+organization. Right after activation, the create can answer 400 "Precondition check failed" and still create the
+notification config: list the configs, and import it into the Terraform state if it is there (the template's
+tutorial has the command).
 
 ---
 
@@ -240,14 +250,15 @@ well as `subscriber` on the subscription. Both are granted by the module.
 
 ## One identity, or several?
 
-The modules default to **reusing** the service account `gcp-source-audit-logs-organization` creates, and you
-should keep that:
+The asset and Security Command Center templates **reuse** the service account
+`gcp-source-audit-logs-organization` creates, and you should keep that:
 
-- one key to rotate instead of four
+- fewer keys to rotate
 - one grant to audit
 - one thing to revoke if it leaks
 
-Pass `remote_state_bucket` and the identity is read from state rather than retyped.
+Pass `remote_state_bucket` and the identity is read from state rather than retyped. The network and bucket
+templates make a reader account of their own (the network one is `abstract-net-threat-reader`).
 
 ---
 

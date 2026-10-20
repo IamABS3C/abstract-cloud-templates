@@ -4,8 +4,8 @@
 
 <walkthrough-tutorial-duration duration="10"></walkthrough-tutorial-duration>
 
-> [!WARNING]
-> **Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records.** Abstract's Google Cloud integration keeps only Cloud Audit Logs, which Security Command Center findings are not.
+> [!NOTE]
+> **Abstract keeps these findings only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser,** which stores them as `gcp.scc_findings`, Event Threat Detection findings included. The managed parser as shipped keeps Cloud Audit Logs only and stored none of them in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers.
 
 <!-- abstract:needs -->
 **This page uses Terraform, because Security Command Center publishes through a notification config of its own, not a log sink, and the guided setup script builds only the sink.**
@@ -20,8 +20,18 @@ export.</walkthrough-info-message>
 
 ## Before you start
 
-Needs **SCC Premium or Enterprise**, and
-`roles/securitycenter.notificationConfigEditor` at the organization.
+Needs **Security Command Center Standard or Premium active at the organization** (tested with Premium), and
+`roles/securitycenter.notificationConfigEditor` at the organization for whoever applies. An organization still on
+legacy Security Command Center gets 400 "Security Command Center Legacy has been permanently disabled": activate
+Security Command Center in the console first.
+
+Right after activation, the create can answer 400 "Precondition check failed" and still create the notification
+config. List the configs (Verify, below); if `abstract-findings` is there, import it into the state and plan again,
+which should show no changes. ORG_ID comes from the answers file:
+
+```bash
+terraform import 'module.scc.google_scc_v2_organization_notification_config.abstract[0]' "organizations/$ORG_ID/locations/global/notificationConfigs/abstract-findings"
+```
 
 <!-- abstract:signin -->
 ## Sign in first
@@ -126,8 +136,8 @@ Removing this template later (**To remove it later**, at the end of the page) ne
 ## Reuse Abstract's existing identity
 
 The template grants the audit-log pipeline's reader account read access to this subscription, so no second
-identity is needed once Abstract supports these records. Today Abstract does not read it, and that grant is one
-more subscription the existing key can read; **To remove it later** takes it away. Deployed that pipeline with the guided setup? Its account is
+identity or key is needed: Abstract reads this subscription with that account, through a GCP Pub/Sub Source
+configuration of its own. **To remove it later** takes the grant away. Deployed that pipeline with the guided setup? Its account is
 `abstract-pubsub-reader@LOGGING_PROJECT_ID.iam.gserviceaccount.com`, with LOGGING_PROJECT_ID your logging project's
 ID. Deployed it with Terraform? Its email is read from that template's state, or printed from its outputs, in Deploy
 with Terraform, step 2.
@@ -166,8 +176,9 @@ gcloud pubsub subscriptions describe abstract-audit-logs-sub-scc --project="$LOG
 
 <walkthrough-conclusion-trophy></walkthrough-conclusion-trophy>
 
-Findings arrive on their **own** topic and subscription. Abstract does not keep them today: its Google Cloud
-integration keeps only Cloud Audit Logs. Remove the template (below) if you deployed it only for Abstract.
+Findings arrive on their **own** topic and subscription. Add a GCP Pub/Sub Source configuration of its own in
+Abstract for this subscription (**Connect Abstract**, step 4 of the Terraform section), and ask Abstract to apply the
+extended GCP Pub/Sub parser to it.
 
 <!-- abstract:cleanup -->
 ## Clean up
@@ -298,6 +309,18 @@ Apply exactly that plan. It creates what the plan listed; **To remove it later**
 ```bash
 terraform apply abstract.tfplan
 ```
+
+**4. Connect Abstract.** This subscription is read by the account the audit-log template made, so there is no new account and no new key.
+
+Print the values for Abstract (read-only):
+
+```bash
+terraform output abstract_onboarding
+```
+
+You should see `project_id`, your logging project, and `subscription_id`, this template's subscription. In Abstract, add a GCP Pub/Sub Source configuration of its own for them: one configuration per subscription, never this subscription on the audit-log configuration. For **Credentials**, upload a key of the audit-log reader account: the one you made for the audit-log configuration, or, if you deleted every copy after uploading it (as its page asks), a new key on that account, made the way that page's Connect Abstract step makes it.
+
+Then, before you rely on it: Abstract keeps these findings only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser, which stores them as gcp.scc_findings, Event Threat Detection findings included. The managed parser as shipped keeps Cloud Audit Logs only and stored none of them in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers.
 <!-- /abstract:tfapply -->
 
 <!-- abstract:tfremove -->

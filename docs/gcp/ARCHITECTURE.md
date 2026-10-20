@@ -10,8 +10,8 @@ not in Terraform.
 | Scope | Covers future projects | Use when |
 |---|---|---|
 | **Organization** | ✅ by containment | Almost always. One deployment, permanent |
-| **Folder** | ✅ within that subtree | Org-scope IAM is not granted yet, or a genuine trust boundary splits the estate |
-| **Project** | ❌ | Pilot only. Prove the pipeline, then replace it |
+| **One or more folders** | ✅ within each subtree | Org-scope IAM is not granted yet, or a genuine trust boundary splits the estate. One sink per folder |
+| **One or more projects** | ❌ until ticked | A known set of projects: one organization sink filtered to them (option A, needs org IAM), or one sink in each (option B), which is also the pilot |
 | **Billing account** | n/a | Billing logs, which live **outside** the resource hierarchy |
 
 **The decision is rarely technical.** It is *who holds `roles/logging.configWriter` at
@@ -88,7 +88,12 @@ These are the ones that change designs. All verified against Google's published 
 | **Pub/Sub publish quota is consumed in the DESTINATION project** | Size the logging project, not the source projects |
 | **No cross-organization sink** | A sink cannot route logs from one organization into another organization's project. A multi-org customer needs one deployment per org |
 | **Workspace audit logs do not traverse the Log Router** | Separate pipeline. See [WORKSPACE.md](WORKSPACE.md) |
-| **SCC findings do not traverse the Log Router** | Own NotificationConfig |
+| **SCC findings do not traverse the Log Router** | Own NotificationConfig, organization only |
+| **Cloud Asset changes do not traverse the Log Router** | Own organization feed |
+
+Wherever a sink sits, two things never move: the topic, the subscriptions, Abstract's accounts and the alerts always
+live in the logging project, and network and VM logging is turned on where the resource lives (the project that owns
+the network, the host project with Shared VPC), never at the sink's scope.
 
 ### Regions and residency
 

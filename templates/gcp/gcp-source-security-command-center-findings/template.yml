@@ -3,7 +3,7 @@ title: 'Security Command Center findings to Abstract: notification feed'
 cloud: gcp
 role: source
 scope: organization
-not_kept_by_abstract: 'Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract''s Google Cloud integration supports these records. Abstract''s Google Cloud integration keeps only Cloud Audit Logs, which Security Command Center findings are not.'
+abstract_requires: 'Abstract keeps these findings only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser, which stores them as gcp.scc_findings, Event Threat Detection findings included. The managed parser as shipped keeps Cloud Audit Logs only and stored none of them in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration''s parsers.'
 summary: Security Command Center does not flow through the Log Router; it publishes to Pub/Sub through
   its own notification config, so no sink will ever collect it. This deployment creates that config and
   a dedicated topic and subscription, reusing Abstract's existing service account.
@@ -32,12 +32,16 @@ never_touches:
 - SCC settings, mute rules and existing notification configs
 - The audit-log topic, subscription and sink
 prerequisites:
-- Security Command Center Premium or Enterprise
+- 'Security Command Center Standard or Premium active at the organization (tested with Premium). An organization
+  still on legacy Security Command Center gets 400 "Security Command Center Legacy has been permanently disabled":
+  activate it in the console first'
+- roles/securitycenter.notificationConfigEditor at the organization, for the person who applies
+- 'Right after activation, the create can answer 400 "Precondition check failed" and still create the config:
+  list the configs, and import it into the state if it is there'
 - Abstract's service account from gcp-source-audit-logs-organization, read from its state (remote_state_bucket)
   or pasted
-- Abstract's managed GCP Pub/Sub parser keeps only Cloud Audit Log records, so findings are collected
-  but NOT stored until a parser built from a captured finding is attached to this subscription's own Abstract
-  configuration (parser pending)
+- 'One GCP Pub/Sub Source configuration in Abstract for this subscription, running the extended GCP Pub/Sub
+  parser: never this subscription on the audit-log configuration'
 parameters:
 - name: org_id
   type: string
@@ -94,6 +98,7 @@ parameters:
     01-organization, so existing state is found.
   default: 01-organization
 outputs:
+- abstract_onboarding
 - scc_subscription
 - scc_topic
 abstract:
@@ -107,9 +112,10 @@ verify:
   command: gcloud pubsub subscriptions describe abstract-audit-logs-sub-scc --project="$LOG_PROJECT"
   healthy: The subscription is described, on the findings topic.
 cost: SCC notifications are free; Pub/Sub throughput is small (findings, not logs).
-when_to_use: Security Command Center Premium or Enterprise is on and its findings should reach Abstract.
-when_not_to_use: As a way to collect audit logs; configure findings as a separate source in Abstract,
-  because their shape differs.
+when_to_use: Security Command Center Standard or Premium is active at the organization and its findings
+  should reach Abstract.
+when_not_to_use: As a way to collect audit logs; configure findings as a GCP Pub/Sub Source configuration
+  of their own in Abstract, because their shape differs.
 live_test: static
 references:
 - scc-notifications

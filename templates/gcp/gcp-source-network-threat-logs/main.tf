@@ -14,9 +14,10 @@
 # Single aggregated sink routing network and perimeter security events to an
 # Abstract Security Pub/Sub pull subscription.
 #
-# NOT STORED BY ABSTRACT YET: none of these are Cloud Audit Log records, and
-# Abstract's managed GCP Pub/Sub parser keeps only audit logs. They reach the
-# topic; until a parser ships they are delivered and not stored.
+# None of these are Cloud Audit Log records, and Abstract's managed GCP Pub/Sub
+# parser keeps only audit logs. Abstract keeps the firewall, DNS, VPC Flow and
+# Cloud NAT records on a configuration of their own that runs the extended GCP
+# Pub/Sub parser; load balancer and Cloud IDS records are discarded either way.
 #
 # This deployment creates none of the sources: logging on backend services,
 # Cloud IDS endpoints with Packet Mirroring, DNS server policies and per-rule

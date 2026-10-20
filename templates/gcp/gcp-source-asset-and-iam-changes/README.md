@@ -2,8 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
-> [!WARNING]
-> Abstract does not keep these logs today. Deploying this template costs money in Google Cloud and adds nothing in Abstract until Abstract's Google Cloud integration supports these records. Abstract's Google Cloud integration keeps only Cloud Audit Logs, which asset and IAM-policy change records are not.
+> [!NOTE]
+> Abstract keeps these records only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser, whose asset sub-parser comes from this template's parsers/cloud-asset-inventory.yml: it stores each IAM policy change as gcp.asset_inventory with action iam_policy_grant, iam_policy_revoke or iam_policy_change. The managed parser as shipped keeps Cloud Audit Logs only and stored none of them in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers.
 
 Cloud Asset Inventory publishes to Pub/Sub through its own feed, which no log sink can carry. It records what an IAM policy now is and what it was before, the diff a detection wants, alongside the audit log of who called which API.
 
@@ -17,7 +17,7 @@ Editable source: [diagram.drawio](diagram.drawio)
 
 Alongside gcp-source-audit-logs-organization, for policy diffs and asset inventory.
 
-**Not for:** As a replacement for the audit-log sink; the two answer different questions. Configure it as a separate source in Abstract.
+**Not for:** As a replacement for the audit-log sink; the two answer different questions. Configure it as a GCP Pub/Sub Source configuration of its own in Abstract.
 
 Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/gcp/GUIDE.md).
 
@@ -38,7 +38,9 @@ In Cloud Shell, create `backend.tf` first (TUTORIAL.md, the Terraform section, s
 - Abstract's service account from gcp-source-audit-logs-organization, read from its state or pasted as subscriber_service_account_email
 - An empty asset_types feeds every asset type and is refused without acknowledge_all_asset_types
 - roles/cloudasset.owner at the organization, and the Cloud Asset API on the billing project, whose service agent (service-PROJECT_NUMBER@gcp-sa-cloudasset.iam.gserviceaccount.com, with PROJECT_NUMBER that project's number) publishes
-- A separate Abstract configuration for this subscription with parsers/cloud-asset-inventory.yml attached to it, never to the audit-log configuration: a configuration-level parser replaces the managed one
+- One GCP Pub/Sub Source configuration in Abstract for this subscription, running the extended GCP Pub/Sub parser: never this subscription on the audit-log configuration
+- A feed_id no other feed in the organization uses: feed names are unique per organization, and an existing one fails with 409
+- The feed publishes one plain-text "You have successfully configured real time feed" message when it is created or updated; the extended parser drops it, and the managed parser records it as a parsing error
 
 ## Cost
 
@@ -56,6 +58,7 @@ Asset feeds are free; Pub/Sub throughput follows the rate of IAM and resource ch
 | `content_type` | string | no | IAM_POLICY (default, highest security value) \| RESOURCE \| ORG_POLICY \| ACCESS_POLICY \| OS_INVENTORY \| RELATIONSHIP |  |
 | `asset_types` | array | no | Asset types to watch. Empty means everything and requires acknowledge_all_asset_types. |  |
 | `acknowledge_all_asset_types` | bool | no | Required when asset_types is empty, which feeds every asset type in the organization. |  |
+| `feed_id` | string | no | Name of the organization feed. Feed names are unique per organization, so a second deployment in the same organization (another logging project, a lab) needs its own; an existing name fails with 409 Requested entity already exists. |  |
 | `retention_days` | int | no | Pub/Sub message retention in days. This is the entire recovery window: unacked messages older than this are deleted. |  |
 | `labels` | object | no | Labels applied to every resource this template creates. |  |
 

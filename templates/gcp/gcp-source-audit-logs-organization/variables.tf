@@ -9,9 +9,9 @@ variable "log_project" {
 }
 
 variable "log_categories" {
-  description = "Named sources to route, from templates/gcp/_modules/log-export/log_catalog.tf. The default is the three Cloud Audit Logs Abstract's managed GCP Pub/Sub parser stores; it drops every record that is not a Cloud Audit Log, so use gcp-source-network-threat-logs for firewall, DNS and load-balancer logs. Add identity_access to route service account token minting (iamcredentials) and Workload Identity Federation (sts)."
+  description = "Named sources to route, from templates/gcp/_modules/log-export/log_catalog.tf. The default is the Cloud Audit Logs Abstract's managed GCP Pub/Sub parser stores, plus identity_access (service account token minting and Workload Identity Federation); the parser drops every record that is not a Cloud Audit Log, so send firewall, DNS, VPC Flow and NAT logs through gcp-source-network-threat-logs, to a configuration of their own that runs the extended GCP Pub/Sub parser."
   type        = list(string)
-  default     = ["admin_activity", "system_event", "policy_denied"]
+  default     = ["admin_activity", "system_event", "policy_denied", "identity_access"]
 }
 
 variable "data_access_services" {

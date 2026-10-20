@@ -216,8 +216,10 @@ variable "log_categories" {
 
     Default is the three Cloud Audit Logs that Abstract's managed GCP Pub/Sub parser
     stores: Admin Activity, System Event and Policy Denied. That parser drops every
-    record that is not a Cloud Audit Log, so the networking, compute and database
-    categories are routed, pulled and then discarded until a parser for them ships.
+    record that is not a Cloud Audit Log, so on it the networking, compute and database
+    categories are routed, pulled and then discarded. firewall, dns_queries, vpc_flows
+    and nat_flows are kept on a configuration of their own that runs the extended GCP
+    Pub/Sub parser: route them with gcp-source-network-threat-logs.
     identity_access is a Cloud Audit Log too, and the way to route token minting
     and federation events.
   EOT
@@ -242,29 +244,6 @@ variable "acknowledge_high_volume" {
 
 
 
-
-# --- Delivery mode -----------------------------------------------------------
-
-variable "push_endpoint" {
-  description = <<-EOT
-    Optional Pub/Sub PUSH endpoint (HTTPS).
-
-    LEAVE THIS EMPTY for Abstract. The Abstract GCP integration is a PULL consumer -- it
-    authenticates with a service-account key and pulls from the subscription. Setting a
-    push endpoint creates a subscription Abstract cannot read from, and the symptom is
-    zero events with a perfectly healthy sink.
-
-    Set it only when the destination is an HTTP collector that expects to be pushed to.
-  EOT
-  type        = string
-  default     = ""
-}
-
-variable "push_service_account_email" {
-  description = "Service account whose OIDC token signs push requests. Required when push_endpoint is set -- an unauthenticated push endpoint accepts anything that can reach it."
-  type        = string
-  default     = ""
-}
 
 # --- Google Workspace / Cloud Identity ---------------------------------------
 

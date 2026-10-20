@@ -17,6 +17,7 @@ terraform {
   required_providers {
     google      = { source = "hashicorp/google", version = "~> 6.0" }
     google-beta = { source = "hashicorp/google-beta", version = "~> 6.0" }
+    time        = { source = "hashicorp/time", version = "~> 0.12" }
   }
 }
 
@@ -45,6 +46,7 @@ module "asset_inventory" {
   asset_types                      = var.asset_types
   acknowledge_all_asset_types      = var.acknowledge_all_asset_types
   retention_days                   = var.retention_days
+  feed_id                          = var.feed_id
   labels                           = var.labels
 
   depends_on = [google_project_service.required]

@@ -170,10 +170,6 @@ locals {
 resource "terraform_data" "validate_categories" {
   lifecycle {
     precondition {
-      condition     = var.push_endpoint == "" || var.push_service_account_email != ""
-      error_message = "push_endpoint requires push_service_account_email for OIDC. An unauthenticated push endpoint accepts anything that can reach it.\nNote: Abstract PULLS -- leave push_endpoint empty unless the destination is an HTTP collector."
-    }
-    precondition {
       condition     = var.sink_scope != "project" || var.acknowledge_pilot_scope
       error_message = "sink_scope = project covers ONE project and does not include future projects.\nThat defeats the point of an aggregated sink. For a deliberate pilot set acknowledge_pilot_scope = true, and schedule the org conversation."
     }

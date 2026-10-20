@@ -3,7 +3,60 @@
 This repo uses provenance tiers rather than a blanket claim, because "it validates" and
 "it deploys" are different things and blurring them is how customers get surprised.
 
-**Last live run: 2026-08-26, against a real GCP organization.**
+**Last live runs: 18 to 20 October 2026, against a test Google Cloud organization and an Abstract test tenant**
+(the section below). The sections after it are the earlier runs, kept for their evidence.
+
+---
+
+## Proven 18 to 20 October 2026: four methods, and what Abstract stored
+
+Every method below reached the topic, and Abstract stored and parsed the audit logs it sent. Which projects the
+events came from was read from each event's project ID in Abstract.
+
+| Method | Scope | What happened |
+|---|---|---|
+| Guided script, option A: one organization sink filtered to the ticked projects | two projects | Script step 9's test event arrived; Abstract stored audit logs only from the two ticked projects |
+| Guided script, option B: one sink in each ticked project | two projects | The test event arrived in both projects; Abstract stored logs from both |
+| Local Terraform, `gcp-source-audit-logs-folder` | one folder | Abstract stored logs only from the project in that folder |
+| Infrastructure Manager, `gcp-source-audit-logs-folder` from the public repository at a release tag | one folder | Preview first: 11 to create, 0 to destroy. Then apply: deployment `ACTIVE`. Abstract stored the audit logs. The first full run of this path. The service account's roles were granted with `--grant serviceAccount:EMAIL --for infra-manager-sa` |
+
+The read-only `--check` of the two script setups passed 42 and 60 checks. Script step 6 turned on the IAM and
+identity logs by default; with option A it set the audit settings in each ticked project. Script step 7 (Google
+Workspace) reported "delegation works: the Reports API answered" once a super admin added the delegation, and
+Abstract's Google Workspace integration stored and parsed the Workspace events.
+
+### What Abstract stored, by parser
+
+| Feed | Managed GCP Pub/Sub Source parser, as shipped | Extended GCP Pub/Sub parser |
+|---|---|---|
+| Cloud Audit Logs | stored | stored, the same: 7 event types stored by both had identical field sets |
+| Network logs (VPC Flow, firewall, Cloud NAT, Cloud DNS) | 9,639 pulled, 0 stored | stored as `gcp.vpc_flows`, `gcp.firewall`, `gcp.nat_flows`, `gcp.dns_queries` |
+| Cloud Asset changes | 0 stored, 2 parsing errors (the feed's plain-text greeting) | stored; the greeting dropped |
+| Security Command Center findings | 0 stored | stored as `gcp.scc_findings`: 76 in the first hour, Event Threat Detection findings included |
+
+The extended parser is YAML only, a dispatcher with audit, network, asset and Security Command Center
+sub-parsers, and was applied to each configuration's parsers: it is not in the managed integration yet.
+
+In this run the asset sub-parser of the day stored asset changes as `gcp.asset_changes`. It has since been replaced
+by this repository's policy-diffing parser,
+[`parsers/cloud-asset-inventory.yml`](../../templates/gcp/gcp-source-asset-and-iam-changes/parsers/cloud-asset-inventory.yml),
+which stores them as `gcp.asset_inventory` with `action` `iam_policy_grant`, `iam_policy_revoke` or
+`iam_policy_change`. Measured on the tenant on 20 October: one role granted and then removed arrived as two
+events, `iam_policy_grant` and `iam_policy_revoke`, each with the role in `user.target.roles` and the member in
+`related.user`.
+
+### Found live, and fixed
+
+| Found | Fix |
+|---|---|
+| A sink whose filter spans several lines (the Terraform module writes them) was read as several sinks | The script reads existing sinks as JSON: one sink, whatever its filter |
+| The subscriber grant right after creating a service account failed silently: a new account is not grantable for a few seconds | The script retries the grant |
+| The use-existing questions for topic, subscription and account had no default | Enter creates the new one |
+| `gcp-source-asset-and-iam-changes`: the first apply failed with "does not exist", granting the Cloud Asset service agent | The template waits 60 seconds for the agent before granting it |
+| `gcp-source-asset-and-iam-changes`: a second deployment in one organization failed with 409, because feed names are unique per organization | A `feed_id` variable, default `abstract-asset-feed` |
+| `gcp-source-security-command-center-findings`: 403 creating the notification config | Whoever applies needs `roles/securitycenter.notificationConfigEditor` at the organization; the template says so |
+| `gcp-source-security-command-center-findings`: 400 "Security Command Center Legacy has been permanently disabled" | Security Command Center Standard or Premium must be active at the organization first (tested with Premium) |
+| `gcp-source-security-command-center-findings`: right after activation, 400 "Precondition check failed", yet the config was created | List the configs and import it into the state; the next plan shows no changes |
 
 ---
 
@@ -35,16 +88,15 @@ That proves structure. It does not prove runtime.
 
 | Not yet executed | Why it matters |
 |---|---|
-| `gcp-source-google-workspace-logs` | Domain-wide delegation is a Workspace super-admin action; untested end to end |
-| `gcp-source-security-command-center-findings` | Needs SCC Premium/Enterprise. Abstract's Google Cloud integration keeps only Cloud Audit Logs, which SCC findings are not (inferred from the integration's pipeline rule, not tested live), so the guide lists it as not collected |
-| `gcp-archive-log-bucket`, `gcp-source-cloud-storage-bucket-logs`, `gcp-source-asset-and-iam-changes` | Not applied |
+| `gcp-archive-log-bucket`, `gcp-source-cloud-storage-bucket-logs` | Not applied |
 | `gcp-source-billing-account-logs` | Validated only; needs `billing.admin` on the billing account. Billing-account audit logs are AuditLog records, so the managed parser keeps them |
-| `gcp-source-network-threat-logs` | Validated only, and **Abstract's managed GCP parser does not yet store these logs** (firewall, DNS, Cloud Armor and Cloud IDS are not AuditLog records). It needs a configuration-level parser built from a captured payload |
-| **Infrastructure Manager path** | Blocked — see below |
+| Load balancer (Cloud Armor) and Cloud IDS logs from `gcp-source-network-threat-logs` | No sub-parser handles them: the extended parser's dispatcher drops what it does not recognise (read from its YAML, not measured) |
 
-## 🔴 Blocked — could not be tested, and the reason is useful
+Since October, `gcp-source-network-threat-logs`, `gcp-source-asset-and-iam-changes`,
+`gcp-source-security-command-center-findings` and the Workspace path have run against a live organization, and
+Infrastructure Manager too (the section above).
 
-### Infrastructure Manager requires billing
+## Infrastructure Manager requires billing
 
 `gcloud services enable config.googleapis.com cloudbuild.googleapis.com` returned:
 
@@ -53,9 +105,9 @@ reason: UREQ_PROJECT_BILLING_NOT_OPEN
 ```
 
 Neither API enabled. Infra Manager runs Terraform on **Cloud Build**, and Cloud Build
-requires an open billing account. The test organization has a billing account in `open:
-False` state across all five projects, so the Infra Manager path could not be exercised at
-all.
+requires an open billing account. In August the test organization's billing account was in `open:
+False` state across all five projects, so the Infra Manager path could not be exercised. With open billing it
+ran in October (the section above).
 
 **This is a genuinely useful finding rather than just a gap.** It means:
 
@@ -312,14 +364,14 @@ Where the live console differed from Google's documentation, the guide follows t
 | Policy Troubleshooter | **Add Another Pair** | **Add another pair**, up to five pairs a query |
 | Organization policies | (not stated) | an **Enforcement state** column reading Inactive or Active |
 
-Not captured: the Infrastructure Manager create form (the test project has no open billing account, so the API
-cannot be turned on there), the alerting policy form, and the Pub/Sub **Messages** tab, which would show real audit
+Not captured: the Infrastructure Manager create form (on 13 October the test project had no open billing account,
+so the API could not be turned on there), the alerting policy form, and the Pub/Sub **Messages** tab, which would show real audit
 events.
 
 ## To raise the tier further
 
 One apply each, in a project with billing:
 
-2. **Infrastructure Manager** against `gcp-source-audit-logs-organization`, in any billed project
-3. **One deployment through a GCS backend**, so the documented practice has been done once
-4. `gcp-source-google-workspace-logs`, which additionally needs a Workspace super admin
+1. **One deployment through a GCS backend**, recorded here, so the documented practice has been done once
+2. `gcp-archive-log-bucket` and `gcp-source-cloud-storage-bucket-logs`
+3. The extended GCP Pub/Sub parser with the policy-diffing asset sub-parser, measured on the tenant
