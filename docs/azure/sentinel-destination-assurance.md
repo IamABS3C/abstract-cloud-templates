@@ -2,14 +2,14 @@
 
 This is the assurance guide for security, cloud and SOC teams deciding whether to connect
 Abstract to a production Microsoft Sentinel workspace. It covers the Abstract Azure
-Sentinel Destination integration and the two templates in this repository that prepare
+Sentinel Destination integration and the three templates in this repository that prepare
 Azure for it:
 
 | Template | Use it when |
 | --- | --- |
-| [`sentinel-destination`](../../templates/azure/azure-destination-sentinel/README.md) | **Recommended for production.** You create the Entra app registration yourself (or with [`new-app-registration.sh`](../../templates/azure/azure-destination-sentinel/scripts/new-app-registration.sh)) and pass its service principal. No privileged identity is involved. |
-| [`sentinel-destination-graph`](../../templates/azure/azure-destination-sentinel-app-by-graph/README.md) | **Recommended when you want the app created for you.** Creates the app registration and service principal as the person deploying, with the Microsoft Graph Bicep extension. **No managed identity has to exist first.** Optionally creates a managed identity that owns only this app to generate the secret. Azure CLI or PowerShell only. |
-| [`sentinel-destination-with-app`](../../templates/azure/azure-destination-sentinel-app-by-script/README.md) | Portal wizard alternative. A deployment script creates the app registration and client secret, running as a **tier-0 managed identity you must create beforehand** (see [Identities](#6-identities-and-permissions)). |
+| [`azure-destination-sentinel`](../../templates/azure/azure-destination-sentinel/README.md) | **Recommended for production.** You create the Entra app registration yourself (or with [`new-app-registration.sh`](../../templates/azure/azure-destination-sentinel/scripts/new-app-registration.sh)) and pass its service principal. No privileged identity is involved. |
+| [`azure-destination-sentinel-app-by-graph`](../../templates/azure/azure-destination-sentinel-app-by-graph/README.md) | **Recommended when you want the app created for you.** Creates the app registration and service principal as the person deploying, with the Microsoft Graph Bicep extension. **No managed identity has to exist first.** Optionally creates a managed identity that owns only this app to generate the secret. Azure CLI or PowerShell only. |
+| [`azure-destination-sentinel-app-by-script`](../../templates/azure/azure-destination-sentinel-app-by-script/README.md) | Portal wizard alternative. A deployment script creates the app registration and client secret, running as a **tier-0 managed identity you must create beforehand** (see [Identities](#6-identities-and-permissions)). |
 
 Every statement below comes from one of three places, and says which when it matters:
 - the templates and scripts in this repository, which are the source of truth;
@@ -30,7 +30,7 @@ Anything not established one of those ways is marked **Not verified**.
 - **In an existing workspace the standard template adds three resources**: a custom table
   (`AbstractEventLogs_CL`), a Data Collection Endpoint and a Data Collection Rule. With
   defaults it also adds a diagnostic setting and one role assignment, both on that DCR.
-  The with-app template additionally creates a Key Vault, a deployment script and the Entra
+  The script template additionally creates a Key Vault, a deployment script and the Entra
   app ([section 3](#3-exactly-what-each-template-creates-or-changes)).
 - **With the default roles, the identity Abstract uses can only publish rows to that one
   DCR.** It gets Monitoring Metrics Publisher on the DCR, nothing on the workspace, and no
@@ -88,7 +88,7 @@ formatting.
 
 ## 2. Choosing a deployment
 
-| Question | Standard | Graph (no managed identity) | With-app (bring your own identity) |
+| Question | Standard | Graph (no managed identity) | Script (bring your own identity) |
 | --- | --- | --- | --- |
 | Who creates the app registration? | You, before deploying | The template, as the person deploying | A deployment script, as your managed identity |
 | Managed identity needed beforehand? | No | **No** | **Yes**, holding Graph `Application.ReadWrite.All` |
@@ -107,7 +107,7 @@ workspace (set `existingWorkspaceLocation`).
 
 ## 3. Exactly what each template creates or changes
 
-### Standard template (`sentinel-destination`)
+### Standard template (`azure-destination-sentinel`)
 
 | Resource | Created when | What it contains | In an existing workspace |
 | --- | --- | --- | --- |
@@ -122,7 +122,7 @@ workspace (set `existingWorkspaceLocation`).
 
 Source: `templates/azure/azure-destination-sentinel/main.bicep`.
 
-### Graph template (`sentinel-destination-graph`)
+### Graph template (`azure-destination-sentinel-app-by-graph`)
 
 Everything in the standard table above (it calls the standard template as a module, with
 the new service principal as `principalId`). In addition:
@@ -135,7 +135,7 @@ the new service principal as `principalId`). In addition:
 | Graph app role `Application.ReadWrite.OwnedBy` for that identity | `automateSecret` | Lets it manage only apps it owns |
 | Key Vault (RBAC authorization, soft delete, purge protection) | `automateSecret` | Holds only the client secret |
 | Role: Key Vault Secrets Officer for the identity; Secrets User for `secretReaderObjectId` | `automateSecret` (reader only if supplied) | On the new vault only |
-| Deployment script `abstract-create-secret` | `automateSecret` | Runs the same script as the with-app template, as the identity, to add the secret and store it |
+| Deployment script `abstract-create-secret` | `automateSecret` | Runs the same script as the script template, as the identity, to add the secret and store it |
 
 Microsoft Graph Bicep cannot create client secrets (**Microsoft docs**), which is why the
 secret is either created by you or by the optional deployment script. `what-if` does not
@@ -154,7 +154,7 @@ preview the Graph resources, and deleting the resource group does not delete the
     *Insufficient privileges* (it can still read app registrations' properties);
   - the stored secret signed in and ingested a row through the DCR (HTTP 204).
 
-### With-app template (`sentinel-destination-with-app`)
+### Script template (`azure-destination-sentinel-app-by-script`)
 
 Everything in the standard table above, except that the role assignment always goes to
 the service principal the script creates. In addition:
@@ -220,9 +220,9 @@ places.
 
 | Identity | Created by | Microsoft Graph | Azure roles (scope) | Least privilege? |
 | --- | --- | --- | --- | --- |
-| **Abstract runtime app** (the one Abstract authenticates as) | You, the operator scripts, or the with-app script | **None** | Monitoring Metrics Publisher (the DCR). Monitoring Contributor (the DCR) only if `grantMonitoringContributor` | Yes, by default |
+| **Abstract runtime app** (the one Abstract authenticates as) | You, the operator scripts, or the script template's script | **None** | Monitoring Metrics Publisher (the DCR). Monitoring Contributor (the DCR) only if `grantMonitoringContributor` | Yes, by default |
 | **Secret writer** (Graph template with `automateSecret`) | The template | `Application.ReadWrite.OwnedBy`, and owner of this one app only | Key Vault Secrets Officer (the new vault) | Yes |
-| **Provisioning identity** (with-app only) | You, before deploying | `Application.ReadWrite.All` | Key Vault Secrets Officer (the new vault, or your existing vault) | No — see below |
+| **Provisioning identity** (script template only) | You, before deploying | `Application.ReadWrite.All` | Key Vault Secrets Officer (the new vault, or your existing vault) | No — see below |
 | **Secret reader** (optional) | You name it | None | Key Vault Secrets User (the vault) | Acceptable |
 
 **Monitoring Metrics Publisher** grants `Microsoft.Insights/Telemetry/Write`, the only
@@ -234,7 +234,7 @@ error-log setting.
 
 **The provisioning identity is tier-0.** `Application.ReadWrite.All` can add a credential
 to any app registration in the tenant, which can be used to act as that app. If you use
-the with-app template:
+the script template:
 
 - keep the identity in a resource group only administrators can write to;
 - remove its Graph permission, or delete it, after onboarding;
@@ -253,7 +253,7 @@ identity cannot add a secret to any other app.
 | Abstract runtime secret (default roles) | Send made-up rows to the Abstract table and, if ASIM is on, to the ASIM tables | Read any data; change rules, tables, the DCR or workspace settings |
 | The same, with Monitoring Contributor granted | The above, plus rewrite or delete the DCR (stopping ingestion) and remove its error logs | Read workspace data; touch Sentinel content |
 | Secret writer (Graph template) | Add or remove secrets on this one app, and read app registrations' properties | Change any app it does not own (**Measured**) |
-| Provisioning identity (with-app) | Add a secret to any app registration in the tenant | — treat as a tenant-compromise risk |
+| Provisioning identity (script template) | Add a secret to any app registration in the tenant | — treat as a tenant-compromise risk |
 
 ---
 
@@ -337,7 +337,7 @@ those tables automatically (**Microsoft docs**), so:
 | Retention beyond the free period | Yes |
 | `DCRLogErrors` | Yes, normally tiny |
 | DCE, DCR, role assignments | **Not verified** as free; no charge is published |
-| With-app extras | Key Vault operations; a few cents per deployment-script run |
+| Script template extras | Key Vault operations; a few cents per deployment-script run |
 
 Abstract's own filtering, deduplication and aggregation happen before any of this, which
 is where the savings come from.
@@ -397,6 +397,13 @@ DCRLogErrors | where TimeGenerated > ago(1h) | summarize count() by OperationNam
 
 Compare the Abstract table count with the event count Abstract reports for the route.
 
+Run the `DCRLogErrors` query even when sending looks healthy. The Logs Ingestion API
+answers `204` when it receives a request, before it checks the data, so a rejected request
+shows up only in `DCRLogErrors`, a few minutes later. **Measured:** a deliberately
+malformed request got `204`, and "Received data is not a valid JSON array." appeared in
+`DCRLogErrors` about four minutes later. A new table took about six minutes to show its
+first rows; an existing table about a minute and a half.
+
 **Roll back completely**, in this order:
 
 1. Stop the route in Abstract (or delete the destination).
@@ -405,7 +412,7 @@ Compare the Abstract table count with the event count Abstract reports for the r
 4. Delete the Abstract table **only if its data can go** (this deletes the data).
 5. Delete the Entra app registration (it deletes its service principal) and its Key
    Vault secret.
-6. With-app template: delete the Key Vault if the template created it. Purge protection
+6. Script template: delete the Key Vault if the template created it. Purge protection
    keeps it recoverable for its soft-delete period.
 
 **What cannot be undone:**
@@ -436,6 +443,20 @@ only ever adds its own items:
 The Verdict playbook adds a comment and, for a malicious verdict, raises severity to
 High; it never changes an incident's status.
 
+**Before the first install**, Microsoft Sentinel needs permission to run the playbooks:
+someone with Owner or User Access Administrator grants **Microsoft Sentinel Automation
+Contributor** on the playbooks' resource group to the Azure Security Insights service
+principal (application ID `98785600-1bb7-4fb9-b9fa-19afe2c8a360`, the same in every
+tenant). **Measured:** without it the deploy fails with "Missing required permissions for
+Microsoft Sentinel on the playbook resource"; a deploy one minute after the grant still
+failed, and one about ten minutes after it succeeded.
+
+```bash
+az role assignment create --assignee 98785600-1bb7-4fb9-b9fa-19afe2c8a360 \
+  --role "Microsoft Sentinel Automation Contributor" \
+  --scope /subscriptions/<subscription-id>/resourceGroups/<rg>
+```
+
 Items are identified by fixed IDs. Reinstalling or updating the pack restores the pack's
 own items to their shipped state (including disabled), so tune copies rather than the
 originals. Review each item before enabling it.
@@ -459,7 +480,7 @@ originals. Review each item before enabling it.
 - [ ] Never **seed, replay or backfill** test data into a production workspace.
 - [ ] Keep `enableDcrErrorLogs` on and alert on new `DCRLogErrors` rows.
 - [ ] Run `what-if` before every deployment and wait 15 minutes after DCR changes.
-- [ ] If you used the with-app template, **remove the provisioning identity's Graph
+- [ ] If you used the script template, **remove the provisioning identity's Graph
       permission** afterwards.
 - [ ] Install the content pack only if wanted, and review each rule before enabling it.
 
@@ -479,7 +500,7 @@ originals. Review each item before enabling it.
 - Events kept arriving after Monitoring Contributor was removed from the destination's
   service principal.
 - DCR updates take about 15 minutes to settle.
-- The with-app deployment script's decisions, tested on every change against a stubbed Azure CLI:
+- The script template's deployment script's decisions, tested on every change against a stubbed Azure CLI:
   - it stores a new secret through a file, never on a command line;
   - it refuses a secret tagged for another app, even when rotation is forced;
   - it refuses an untagged same-named secret unless rotation is forced;
@@ -489,7 +510,7 @@ originals. Review each item before enabling it.
 
 **Not verified:**
 
-- The with-app template's latest changes against a live tenant: purge protection,
+- The script template's latest changes against a live tenant: purge protection,
   `cleanupPreference: Always`, and file-based secret writes. The script logic was tested
   only against the stubbed CLI.
 - The Graph template from the portal: Microsoft documents Microsoft Graph Bicep only for

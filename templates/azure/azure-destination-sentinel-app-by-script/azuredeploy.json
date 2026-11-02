@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "9622636066221458524"
+      "templateHash": "1975505723972729259"
     }
   },
   "parameters": {
@@ -95,8 +95,9 @@
     "keyVaultName": {
       "type": "string",
       "defaultValue": "",
+      "maxLength": 24,
       "metadata": {
-        "description": "Key Vault name (3-24 lowercase alphanumerics/hyphens, globally unique). Leave empty to auto-generate abstract-kv-<hash>."
+        "description": "Key Vault name (3-24 lowercase alphanumerics/hyphens, globally unique). Leave empty to auto-generate abskv-<hash>."
       }
     },
     "existingKeyVaultResourceId": {
@@ -191,7 +192,7 @@
       "type": "bool",
       "defaultValue": false,
       "metadata": {
-        "description": "Also write each event into Microsoft's ASIM normalized tables (ASimAuthenticationEventLogs and the others listed in asimSchemas), mapped from the Abstract Common Schema by solutions/asim. Off by default. Microsoft's built-in ASIM parsers read those tables, so once this is on every ASIM analytics rule, hunting query and workbook already running in the workspace also sees Abstract data: expect new alerts, duplicates where Microsoft's own connector collects the same vendor, and a second copy of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns left empty). Every event still also lands in the Abstract table."
+        "description": "Also write each event into Microsoft's ASIM normalized tables (ASimAuthenticationEventLogs and the others listed in asimSchemas), mapped from the Abstract Common Schema by the Abstract ASIM mappings. Off by default. Microsoft's built-in ASIM parsers read those tables, so once this is on every ASIM analytics rule, hunting query and workbook already running in the workspace also sees Abstract data: expect new alerts, duplicates where Microsoft's own connector collects the same vendor, and a second copy of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns left empty). Every event still also lands in the Abstract table."
       }
     },
     "asimSchemas": {
@@ -200,7 +201,7 @@
         "*"
       ],
       "metadata": {
-        "description": "ASIM schemas to write, by name (for example ['Authentication', 'NetworkSession']). ['*'] (default) writes every schema solutions/asim maps; [] writes none."
+        "description": "ASIM schemas to write, by name (for example ['Authentication', 'NetworkSession']). ['*'] (default) writes every schema the Abstract ASIM mappings cover; [] writes none."
       }
     },
     "customTableRetentionDays": {
@@ -932,7 +933,7 @@
     "effectiveWorkspaceName": "[if(parameters('createWorkspace'), if(empty(parameters('workspaceName')), variables('autoWorkspaceName'), parameters('workspaceName')), parameters('workspaceName'))]",
     "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('effectiveWorkspaceName'))]",
     "effectiveLocation": "[if(parameters('createWorkspace'), parameters('location'), if(empty(parameters('existingWorkspaceLocation')), parameters('location'), parameters('existingWorkspaceLocation')))]",
-    "keyVaultResourceName": "[if(empty(parameters('keyVaultName')), format('abstract-kv-{0}', uniqueString(resourceGroup().id)), parameters('keyVaultName'))]",
+    "keyVaultResourceName": "[if(empty(parameters('keyVaultName')), format('abskv-{0}', uniqueString(resourceGroup().id)), parameters('keyVaultName'))]",
     "effectiveKeyVaultName": "[if(equals(parameters('keyVaultMode'), 'Existing'), last(split(parameters('existingKeyVaultResourceId'), '/')), if(equals(parameters('keyVaultMode'), 'Create'), variables('keyVaultResourceName'), ''))]",
     "existingKeyVaultSubscriptionId": "[split(parameters('existingKeyVaultResourceId'), '/')[2]]",
     "existingKeyVaultResourceGroupName": "[split(parameters('existingKeyVaultResourceId'), '/')[4]]",

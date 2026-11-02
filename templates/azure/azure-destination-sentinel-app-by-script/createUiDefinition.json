@@ -252,7 +252,7 @@
             "visible": true,
             "options": {
               "style": "Warning",
-              "text": "ASIM tables are off by default. When on, every ASIM analytics rule, hunting query and workbook already running in this workspace also reads Abstract data: expect new alerts, duplicate events where Microsoft's own connector collects the same vendor, and a second billed copy of each mapped event. Turn it on in a staging workspace first, or one schema at a time. Details: solutions/docs/sentinel-destination-assurance.md in the Abstract-MS-Azure repository."
+              "text": "ASIM tables are off by default. When on, every ASIM analytics rule, hunting query and workbook already running in this workspace also reads Abstract data: expect new alerts, duplicate events where Microsoft's own connector collects the same vendor, and a second billed copy of each mapped event. Turn it on in a staging workspace first, or one schema at a time. Details: docs/azure/sentinel-asim.md in the IamABS3C/abstract-cloud-templates repository."
             }
           },
           {
@@ -431,7 +431,7 @@
             "type": "Microsoft.Common.TextBox",
             "label": "Key Vault name (leave empty to auto-generate)",
             "defaultValue": "",
-            "toolTip": "Name of the new Key Vault. Empty = auto-generate abstract-kv-<hash>. Must be globally unique.",
+            "toolTip": "Name of the new Key Vault. Empty = auto-generate abskv-<hash>. Must be globally unique.",
             "constraints": {
               "required": false,
               "regex": "^$|^[a-z][a-z0-9-]{1,22}[a-z0-9]$",

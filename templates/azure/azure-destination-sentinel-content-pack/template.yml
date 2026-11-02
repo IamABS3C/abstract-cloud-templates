@@ -25,6 +25,11 @@ permissions:
 - role: Microsoft Sentinel Responder
   where: The workspace
   why: 'Each playbook''s managed identity: Playbooks comment on and update incidents.'
+- role: Microsoft Sentinel Automation Contributor
+  where: The resource group that holds the playbooks (this one)
+  why: 'Microsoft Sentinel (the Azure Security Insights service principal): Lets the two run-playbook automation
+    rules call the playbooks; without it the deploy fails with "Missing required permissions for Microsoft
+    Sentinel on the playbook resource". Granting it needs Owner or User Access Administrator.'
 creates:
 - The solution package record (contentPackages) with linked metadata
 - Two data connector definitions (connector tiles)
@@ -43,6 +48,11 @@ prerequisites:
 - A Key Vault secret URI for the Abstract API key (keyVaultSecretUri)
 - The Abstract API base URL and vendor account ID for the playbooks, or configure them later
 - Review each rule and enable the ones you want; they install disabled
+- 'Before the first deploy, someone with Owner or User Access Administrator on this resource group grants
+  Microsoft Sentinel permission to run playbooks, then waits about 10 minutes for Azure to apply it (measured:
+  a deploy one minute after the grant still failed): az role assignment create --assignee 98785600-1bb7-4fb9-b9fa-19afe2c8a360
+  --role "Microsoft Sentinel Automation Contributor" --scope /subscriptions/SUBSCRIPTION_ID/resourceGroups/RESOURCE_GROUP
+  (98785600-... is the application ID of Azure Security Insights, the same in every tenant)'
 parameters:
 - name: workspace
   type: string

@@ -26,5 +26,6 @@ for a in "$@"; do
     *) ARGS+=("$a") ;;
   esac
 done
-az deployment mg "$MODE" --management-group-id "${ARGS[0]:?management group id}" --location "${ARGS[1]:?location}" \
+# A fixed deployment name per template keeps each template's outputs in its own history; a later --name wins.
+az deployment mg "$MODE" --name azure-source-all-logs-management-group-policy --management-group-id "${ARGS[0]:?management group id}" --location "${ARGS[1]:?location}" \
   --template-file azuredeploy.json --parameters "$PARAMS" "${ARGS[@]:2}"

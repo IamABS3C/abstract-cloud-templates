@@ -222,8 +222,8 @@ outputs:
 - rbacEnabled
 - abstractDestinationOnboarding
 verify:
-- check: The destination fields are available
-  command: az deployment group show -g <resource-group> -n <deployment-name> --query properties.outputs.abstractDestinationOnboarding.value
+- check: The destination fields are available (from ./deploy.sh; after a portal deploy, use the name shown under the resource group's Deployments)
+  command: az deployment group show -g <resource-group> -n azure-destination-event-hub --query properties.outputs.abstractDestinationOnboarding.value
   healthy: eventHubName and the location of the Send-only connection string are listed.
 live_test: static
 lint_skip:

@@ -14,5 +14,6 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-az deployment group "$MODE" --resource-group "${ARGS[0]:?resource group}" \
+# A fixed deployment name per template keeps each template's outputs in its own history; a later --name wins.
+az deployment group "$MODE" --name azure-foundation-event-hub --resource-group "${ARGS[0]:?resource group}" \
   --template-file azuredeploy.json --parameters "$PARAMS" "${ARGS[@]:1}"

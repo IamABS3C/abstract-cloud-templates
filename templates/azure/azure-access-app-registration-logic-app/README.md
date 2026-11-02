@@ -25,8 +25,12 @@ Not sure this is the right one, or what to deploy before it? Answer a few questi
 Or from a shell, in this folder:
 
 ```bash
-./deploy.sh
+az group create -n RESOURCE_GROUP -l LOCATION   # skip if it exists
+./deploy.sh RESOURCE_GROUP
+./deploy.sh RESOURCE_GROUP --yes
 ```
+
+`./deploy.sh RESOURCE_GROUP` previews the change with what-if and changes nothing; adding `--yes` deploys. Add `--parameters NAME=VALUE` after the scope to override a parameter.
 
 ## Prerequisites
 

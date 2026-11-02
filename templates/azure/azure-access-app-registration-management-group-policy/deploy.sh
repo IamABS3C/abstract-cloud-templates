@@ -23,5 +23,6 @@ case "${1:-}" in
 esac
 MODE=what-if; ARGS=()
 for a in "$@"; do [ "$a" = "--yes" ] && MODE=create || ARGS+=("$a"); done
-az deployment mg "$MODE" --management-group-id "${ARGS[0]:?management group id}" --location "${ARGS[1]:?location}" \
+# A fixed deployment name per template keeps each template's outputs in its own history; a later --name wins.
+az deployment mg "$MODE" --name azure-access-app-registration-management-group-policy --management-group-id "${ARGS[0]:?management group id}" --location "${ARGS[1]:?location}" \
   --template-file azuredeploy.json --parameters @parameters.example.json "${ARGS[@]:2}"

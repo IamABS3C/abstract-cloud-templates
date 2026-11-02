@@ -34,7 +34,7 @@
 //  resources. Deleting the resource group does not delete the app registration.
 //
 //    az deployment group create -g <rg> --mode Incremental \
-//      --template-file solutions/templates/destinations/sentinel-destination-graph.bicep \
+//      --template-file main.bicep \
 //      --parameters createWorkspace=false workspaceName=<workspace>
 // =============================================================================
 extension microsoftGraphV1

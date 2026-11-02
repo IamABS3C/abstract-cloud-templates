@@ -19,8 +19,12 @@ Not sure this is the right one, or what to deploy before it? Answer a few questi
 Or from a shell, in this folder:
 
 ```bash
-./deploy.sh
+az group create -n RESOURCE_GROUP -l LOCATION   # skip if it exists
+./deploy.sh RESOURCE_GROUP
+./deploy.sh RESOURCE_GROUP --yes
 ```
+
+`./deploy.sh RESOURCE_GROUP` previews the change with what-if and changes nothing; adding `--yes` deploys. Add `--parameters NAME=VALUE` after the scope to override a parameter.
 
 ## Prerequisites
 
@@ -102,4 +106,4 @@ Or from a shell, in this folder:
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The destination fields are available | `az deployment group show -g <resource-group> -n <deployment-name> --query properties.outputs.abstractDestinationOnboarding.value` | eventHubName and the location of the Send-only connection string are listed. |
+| The destination fields are available (from ./deploy.sh; after a portal deploy, use the name shown under the resource group's Deployments) | `az deployment group show -g <resource-group> -n azure-destination-event-hub --query properties.outputs.abstractDestinationOnboarding.value` | eventHubName and the location of the Send-only connection string are listed. |

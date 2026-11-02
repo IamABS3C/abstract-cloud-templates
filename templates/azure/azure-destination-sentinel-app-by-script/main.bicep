@@ -22,7 +22,7 @@
 //  WHAT IT NEVER TOUCHES: analytics rules, automation rules, hunting queries,
 //  workbooks, watchlists, data connectors, parsers, other tables, workspace
 //  settings of an existing workspace, or the SecurityInsights solution of an
-//  existing workspace. See solutions/docs/sentinel-destination-assurance.md.
+//  existing workspace. See docs/public/azure/sentinel-destination-assurance.md.
 //
 //  PREREQUISITES (cannot be bootstrapped inside ARM)
 //    * A USER-ASSIGNED MANAGED IDENTITY for the provisioning script. Tenant
@@ -41,8 +41,7 @@
 //  SECURITY NOTE: the client secret is never returned in deployment outputs. If
 //  Key Vault is skipped, create the secret in Entra and copy it once into Abstract.
 //
-//  Compile:  az bicep build --file sentinel-destination-with-app.bicep \
-//                --outfile sentinel-destination-with-app.azuredeploy.json
+//  azuredeploy.json beside this file is compiled from it by: python -m tools.templates generate
 // =============================================================================
 
 // ---------------------------------------------------------------------------
@@ -100,7 +99,8 @@ param forceSecretRotation bool = false
 @description('Create a new Key Vault, use an existing vault by resource ID, or skip Key Vault. In None mode, create the client secret in Entra after deployment.')
 param keyVaultMode string = 'Create'
 
-@description('Key Vault name (3-24 lowercase alphanumerics/hyphens, globally unique). Leave empty to auto-generate abstract-kv-<hash>.')
+@description('Key Vault name (3-24 lowercase alphanumerics/hyphens, globally unique). Leave empty to auto-generate abskv-<hash>.')
+@maxLength(24)
 param keyVaultName string = ''
 
 @description('Full resource ID of the existing Key Vault. Used only when keyVaultMode is Existing.')
@@ -146,10 +146,10 @@ param transformKql string = 'source'
 @description('Send the Data Collection Rule\'s ingestion errors (rejected requests, malformed payloads, limit and transformation errors) to the DCRLogErrors table in the workspace. Without it, data Azure refuses or drops is invisible to the customer and to Abstract.')
 param enableDcrErrorLogs bool = true
 
-@description('Also write each event into Microsoft\'s ASIM normalized tables (ASimAuthenticationEventLogs and the others listed in asimSchemas), mapped from the Abstract Common Schema by solutions/asim. Off by default. Microsoft\'s built-in ASIM parsers read those tables, so once this is on every ASIM analytics rule, hunting query and workbook already running in the workspace also sees Abstract data: expect new alerts, duplicates where Microsoft\'s own connector collects the same vendor, and a second copy of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns left empty). Every event still also lands in the Abstract table.')
+@description('Also write each event into Microsoft\'s ASIM normalized tables (ASimAuthenticationEventLogs and the others listed in asimSchemas), mapped from the Abstract Common Schema by the Abstract ASIM mappings. Off by default. Microsoft\'s built-in ASIM parsers read those tables, so once this is on every ASIM analytics rule, hunting query and workbook already running in the workspace also sees Abstract data: expect new alerts, duplicates where Microsoft\'s own connector collects the same vendor, and a second copy of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns left empty). Every event still also lands in the Abstract table.')
 param enableAsim bool = false
 
-@description('ASIM schemas to write, by name (for example [\'Authentication\', \'NetworkSession\']). [\'*\'] (default) writes every schema solutions/asim maps; [] writes none.')
+@description('ASIM schemas to write, by name (for example [\'Authentication\', \'NetworkSession\']). [\'*\'] (default) writes every schema the Abstract ASIM mappings cover; [] writes none.')
 param asimSchemas array = [
   '*'
 ]
@@ -176,7 +176,8 @@ var effectiveLocation = createWorkspace ? location : (empty(existingWorkspaceLoc
 // The Create-mode vault resource always gets a valid name. It is deployed only in
 // Create mode, but ARM still resolves its id (module names, dependsOn) in every
 // mode, and an empty name there fails template validation in None mode.
-var keyVaultResourceName = empty(keyVaultName) ? 'abstract-kv-${uniqueString(resourceGroup().id)}' : keyVaultName
+// abskv- plus the 13-character uniqueString is 19 characters; Key Vault allows 24.
+var keyVaultResourceName = empty(keyVaultName) ? 'abskv-${uniqueString(resourceGroup().id)}' : keyVaultName
 var effectiveKeyVaultName = keyVaultMode == 'Existing' ? last(split(existingKeyVaultResourceId, '/')) : (keyVaultMode == 'Create' ? keyVaultResourceName : '')
 var existingKeyVaultSubscriptionId = split(existingKeyVaultResourceId, '/')[2]
 var existingKeyVaultResourceGroupName = split(existingKeyVaultResourceId, '/')[4]
@@ -198,7 +199,7 @@ var customTableRetentionProperty = customTableRetentionDays > 0 ? { totalRetenti
 var effectiveStreamColumns = useGeneratedSchema ? generatedSchema.streamColumns : tableColumns
 var effectiveTransformKql = useGeneratedSchema ? generatedSchema.transformKql : transformKql
 
-// ACS-to-ASIM mappings, generated by gen-sentinel-asim.py from solutions/asim/*.kql. They
+// ACS-to-ASIM mappings, generated by tools/templates/sentinel.py from _modules/sentinel/asim/*.kql. They
 // read the generated ACS stream columns, so they are skipped when tableColumns overrides
 // the schema, and the ASim tables exist only when Microsoft Sentinel is on the workspace.
 var asimRouteCatalog = loadJsonContent('../_modules/sentinel/sentinel-asim-routes.generated.json').routes

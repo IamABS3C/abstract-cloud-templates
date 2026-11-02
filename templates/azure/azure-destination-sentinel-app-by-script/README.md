@@ -25,8 +25,12 @@ Not sure this is the right one, or what to deploy before it? Answer a few questi
 Or from a shell, in this folder:
 
 ```bash
-./deploy.sh
+az group create -n RESOURCE_GROUP -l LOCATION   # skip if it exists
+./deploy.sh RESOURCE_GROUP
+./deploy.sh RESOURCE_GROUP --yes
 ```
+
+`./deploy.sh RESOURCE_GROUP` previews the change with what-if and changes nothing; adding `--yes` deploys. Add `--parameters NAME=VALUE` after the scope to override a parameter.
 
 ## Prerequisites
 
@@ -54,7 +58,7 @@ Ingestion into the Abstract table is charged at the table's plan (Analytics by d
 | `secretName` | string | no | Name of the Key Vault secret holding the client secret. |  |
 | `forceSecretRotation` | bool | no | Force a NEW client secret even when the vault already holds a valid one. Leave false. The script now rotates only when no secret exists or the existing one expires within 30 days, which makes re-running this template safe - the previous behaviour minted a fresh secret on every deployment, so a re-run silently created a new Key Vault version while Abstract kept using the old value. Set true only for a deliberate rotation, and update Abstract with the new value. |  |
 | `keyVaultMode` | string | no | Create a new Key Vault, use an existing vault by resource ID, or skip Key Vault. In None mode, create the client secret in Entra after deployment. |  |
-| `keyVaultName` | string | no | Key Vault name (3-24 lowercase alphanumerics/hyphens, globally unique). Leave empty to auto-generate abstract-kv-&lt;hash&gt;. |  |
+| `keyVaultName` | string | no | Key Vault name (3-24 lowercase alphanumerics/hyphens, globally unique). Leave empty to auto-generate abskv-&lt;hash&gt;. |  |
 | `existingKeyVaultResourceId` | string | no | Full resource ID of the existing Key Vault. Used only when keyVaultMode is Existing. |  |
 | `createWorkspace` | bool | no | Create a new Log Analytics workspace. Set false to target an EXISTING workspace in THIS resource group. |  |
 | `workspaceName` | string | no | Workspace name. Creating: empty auto-generates abstract-sentinel-&lt;hash&gt;. Existing: the exact name (in this resource group). |  |
@@ -68,8 +72,8 @@ Ingestion into the Abstract table is charged at the table's plan (Analytics by d
 | `tableColumns` | array | no | Custom table columns. Leave empty (recommended) to use the generated ACS schema: one column per top-level key of the event Abstract sends, with a DCR transformation that sets TimeGenerated. Supply columns only for a custom payload shape; the DCR stream then uses the same columns and transformKql. |  |
 | `transformKql` | string | no | DCR transformation used only when tableColumns is supplied. The generated schema carries its own transformation. |  |
 | `enableDcrErrorLogs` | bool | no | Send the Data Collection Rule's ingestion errors (rejected requests, malformed payloads, limit and transformation errors) to the DCRLogErrors table in the workspace. Without it, data Azure refuses or drops is invisible to the customer and to Abstract. |  |
-| `enableAsim` | bool | no | Also write each event into Microsoft's ASIM normalized tables (ASimAuthenticationEventLogs and the others listed in asimSchemas), mapped from the Abstract Common Schema by solutions/asim. Off by default. Microsoft's built-in ASIM parsers read those tables, so once this is on every ASIM analytics rule, hunting query and workbook already running in the workspace also sees Abstract data: expect new alerts, duplicates where Microsoft's own connector collects the same vendor, and a second copy of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns left empty). Every event still also lands in the Abstract table. |  |
-| `asimSchemas` | array | no | ASIM schemas to write, by name (for example ['Authentication', 'NetworkSession']). ['*'] (default) writes every schema solutions/asim maps; [] writes none. |  |
+| `enableAsim` | bool | no | Also write each event into Microsoft's ASIM normalized tables (ASimAuthenticationEventLogs and the others listed in asimSchemas), mapped from the Abstract Common Schema by the Abstract ASIM mappings. Off by default. Microsoft's built-in ASIM parsers read those tables, so once this is on every ASIM analytics rule, hunting query and workbook already running in the workspace also sees Abstract data: expect new alerts, duplicates where Microsoft's own connector collects the same vendor, and a second copy of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns left empty). Every event still also lands in the Abstract table. |  |
+| `asimSchemas` | array | no | ASIM schemas to write, by name (for example ['Authentication', 'NetworkSession']). ['*'] (default) writes every schema the Abstract ASIM mappings cover; [] writes none. |  |
 | `customTableRetentionDays` | int | no | Retention of the Abstract table in days. 0 (default) sends no retention, so an existing table keeps its retention and a new table uses the workspace default. A value shortens or lengthens the table's total retention; shortening deletes data older than the new value. |  |
 | `grantMonitoringContributor` | bool | no | Also grant Monitoring Contributor on the DCR. Off by default: sending data through the Logs Ingestion API needs only Monitoring Metrics Publisher, and Monitoring Contributor would let a leaked Abstract credential rewrite or delete the DCR and its error-log setting. Turn on only if your Abstract destination setup specifically asks for it. |  |
 | `customTablePlan` | string | no | Table plan for the Abstract table. Keep (default) keeps the plan an existing table already has, and create a new table as Analytics: a redeploy then never changes a table's plan, or its cost, by accident. Analytics runs analytics rules and our content pack on it. Auxiliary is the Sentinel data lake tier: cheap long retention and KQL jobs, but no analytics rules or alerts. Basic sits between them. Setting a plan on an existing table switches it; Azure applies the new plan to the whole table. |  |
@@ -120,6 +124,6 @@ Ingestion into the Abstract table is charged at the table's plan (Analytics by d
 
 | Check | Command | Healthy when |
 |---|---|---|
-| The outputs carry the three values the Abstract destination needs | `az deployment group show -g <resource-group> -n <deployment-name> --query properties.outputs` | dataCollectionRuleImmutableId, dataCollectionEndpointUrl and logStreamName (Custom-AbstractEventLogs_CL) are present. |
+| The outputs carry the three values the Abstract destination needs (from ./deploy.sh; after a portal deploy, use the name shown under the resource group's Deployments) | `az deployment group show -g <resource-group> -n azure-destination-sentinel-app-by-script --query properties.outputs` | dataCollectionRuleImmutableId, dataCollectionEndpointUrl and logStreamName (Custom-AbstractEventLogs_CL) are present. |
 | Events are landing in the Abstract table | `AbstractEventLogs_CL \| where TimeGenerated > ago(1h) \| summarize count() by vendor, product` | A count that matches the event count Abstract reports for the route. |
-| Azure is not rejecting rows | `DCRLogErrors \| where TimeGenerated > ago(1h) \| summarize count() by OperationName, Message` | No rows. |
+| Azure is not rejecting rows | `DCRLogErrors \| where TimeGenerated > ago(1h) \| summarize count() by OperationName, Message` | No rows. Check this even when sending succeeds; the ingestion API answers 204 before it validates the data, and a rejected request shows up only here, a few minutes later. |

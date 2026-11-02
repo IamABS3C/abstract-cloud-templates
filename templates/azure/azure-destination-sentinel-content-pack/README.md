@@ -25,8 +25,12 @@ Not sure this is the right one, or what to deploy before it? Answer a few questi
 Or from a shell, in this folder:
 
 ```bash
-./deploy.sh
+az group create -n RESOURCE_GROUP -l LOCATION   # skip if it exists
+./deploy.sh RESOURCE_GROUP
+./deploy.sh RESOURCE_GROUP --yes
 ```
+
+`./deploy.sh RESOURCE_GROUP` previews the change with what-if and changes nothing; adding `--yes` deploys. Add `--parameters NAME=VALUE` after the scope to override a parameter.
 
 ## Prerequisites
 
@@ -34,6 +38,7 @@ Or from a shell, in this folder:
 - A Key Vault secret URI for the Abstract API key (keyVaultSecretUri)
 - The Abstract API base URL and vendor account ID for the playbooks, or configure them later
 - Review each rule and enable the ones you want; they install disabled
+- Before the first deploy, someone with Owner or User Access Administrator on this resource group grants Microsoft Sentinel permission to run playbooks, then waits about 10 minutes for Azure to apply it (measured: a deploy one minute after the grant still failed): az role assignment create --assignee 98785600-1bb7-4fb9-b9fa-19afe2c8a360 --role "Microsoft Sentinel Automation Contributor" --scope /subscriptions/SUBSCRIPTION_ID/resourceGroups/RESOURCE_GROUP (98785600-... is the application ID of Azure Security Insights, the same in every tenant)
 
 ## Parameters
 
@@ -53,6 +58,7 @@ Or from a shell, in this folder:
 - **Contributor** on The Sentinel workspace's resource group: Deployer: Install the solution content, workbooks, playbooks and their API connections; Contributor includes Microsoft.Resources/deployments/*. The template creates no role assignments, so the playbook identities' roles below are granted separately by someone with Owner or User Access Administrator.
 - **Key Vault Secrets User** on The Key Vault secret holding the Abstract API key: Each playbook's managed identity: Playbooks fetch the key at runtime; the template never stores it.
 - **Microsoft Sentinel Responder** on The workspace: Each playbook's managed identity: Playbooks comment on and update incidents.
+- **Microsoft Sentinel Automation Contributor** on The resource group that holds the playbooks (this one): Microsoft Sentinel (the Azure Security Insights service principal): Lets the two run-playbook automation rules call the playbooks; without it the deploy fails with "Missing required permissions for Microsoft Sentinel on the playbook resource". Granting it needs Owner or User Access Administrator.
 
 ## Creates
 

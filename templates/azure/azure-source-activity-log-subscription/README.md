@@ -25,8 +25,11 @@ Not sure this is the right one, or what to deploy before it? Answer a few questi
 Or from a shell, in this folder:
 
 ```bash
-./deploy.sh
+./deploy.sh LOCATION
+./deploy.sh LOCATION --yes
 ```
+
+`./deploy.sh LOCATION` previews the change with what-if and changes nothing; adding `--yes` deploys. Add `--parameters NAME=VALUE` after the scope to override a parameter.
 
 ## Prerequisites
 
