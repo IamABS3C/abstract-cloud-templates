@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Prepares Azure for the Abstract Azure Sentinel Destination: a Data Collection Endpoint, a Data Collection Rule and the custom Abstract table, in a new or existing workspace, with Monitoring Metrics Publisher on the DCR for the app you created. Recommended for production; no privileged identity is involved.
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
@@ -66,11 +68,18 @@ Ingestion into the Abstract table is charged at the table's plan (Analytics by d
 | `enableDcrErrorLogs` | bool | no | Send the Data Collection Rule's ingestion errors (rejected requests, malformed payloads, limit and transformation errors) to the DCRLogErrors table in the workspace. Without it, data Azure refuses or drops is invisible to the customer and to Abstract. |  |
 | `enableAsim` | bool | no | Also write each event into Microsoft's ASIM normalized tables (ASimAuthenticationEventLogs and the others listed in asimSchemas), mapped from the Abstract Common Schema by the Abstract ASIM mappings. Off by default. Microsoft's built-in ASIM parsers read those tables, so once this is on every ASIM analytics rule, hunting query and workbook already running in the workspace also sees Abstract data: expect new alerts, duplicates where Microsoft's own connector collects the same vendor, and a second copy of each mapped event in billing. Turn it on in a staging workspace first, or one schema at a time with asimSchemas. Needs Microsoft Sentinel on the workspace and the generated Abstract schema (tableColumns left empty). Every event still also lands in the Abstract table. |  |
 | `asimSchemas` | array | no | ASIM schemas to write, by name (for example ['Authentication', 'NetworkSession']). ['*'] (default) writes every schema the Abstract ASIM mappings cover; [] writes none. |  |
+| `excludeAsimFromAbstractTable` | bool | no | With enableAsim on, keep each event that an ASIM dataflow takes out of the Abstract table, so it is stored once (in its ASim table) instead of twice. Off by default to keep existing deployments unchanged. Content that reads only the Abstract table, such as the Abstract content pack before it reads the ASim tables too, no longer sees those events. Events no ASIM dataflow takes still land in the Abstract table. |  |
+| `asimExcludeKql` | string | no | A KQL condition over the Abstract stream selecting events that one of your additionalDataFlows stores. Those events are written by no ASIM dataflow and never go to the lake table, and with excludeAsimFromAbstractTable on they are also kept out of the Abstract table, so each is stored once, in the additionalDataFlows table. It must match exactly what that dataflow takes, or events are lost or stored twice. Empty (default) changes nothing. Set by the Abstract Security for Microsoft Sentinel solution; leave empty when deploying this template on its own. |  |
+| `lakeTableName` | string | no | Name of a second custom table on the Auxiliary (lake-only) plan, for events nothing in Sentinel reads, for example AbstractLake_CL. Empty (default) turns the lake route off. Lake rows cost data lake ingestion and processing (about 0.15 USD per GB at eastus list price against 4.30 in the analytics tier) and are searchable with KQL in the data lake, but analytics rules, ASIM parsers and custom detections do not run on them. |  |
+| `lakeCategories` | array | no | ACS event categories to send to the lake table instead of the Abstract table, for example ['network', 'dns']. An event matches when its event.category contains one of them. Events an ASIM dataflow takes never go to the lake. Empty (default) turns the lake route off. |  |
+| `lakeRetentionDays` | int | no | Total retention of the lake table in days (30 to 4383). |  |
 | `customTableRetentionDays` | int | no | Retention of the Abstract table in days. 0 (default) sends no retention, so an existing table keeps its retention and a new table uses the workspace default. A value shortens or lengthens the table's total retention; shortening deletes data older than the new value. |  |
 | `customTablePlan` | string | no | Table plan for the Abstract table. Keep (default) keeps the plan an existing table already has, and create a new table as Analytics: a redeploy then never changes a table's plan, or its cost, by accident. Analytics runs analytics rules and our content pack on it. Auxiliary is the Sentinel data lake tier: cheap long retention and KQL jobs, but no analytics rules or alerts. Basic sits between them. Setting a plan on an existing table switches it; Azure applies the new plan to the whole table. |  |
 | `grantMonitoringContributor` | bool | no | Also grant Monitoring Contributor on the DCR. Off by default: sending data through the Logs Ingestion API needs only Monitoring Metrics Publisher, and Monitoring Contributor would let a leaked Abstract credential rewrite or delete the DCR and its error-log setting. Turn on only if your Abstract destination setup specifically asks for it. |  |
 | `principalId` | string | no | Object ID of the service principal Abstract authenticates as (the Enterprise Application object ID, NOT the Application/client ID). Leave empty to skip role assignments and grant them yourself later. | `az ad sp show --id <application-client-id> --query id -o tsv` |
 | `principalType` | string | no | Type of the principal being granted RBAC (avoids PrincipalNotFound on freshly created SPNs). |  |
+| `additionalTables` | array | no | Extra tables to create before the Data Collection Rule, for the dataflows in additionalDataFlows (for example a vendor table such as OktaV2_CL). Each item is {name, columns}. Empty (default) creates none. Set by the Abstract Security for Microsoft Sentinel solution; leave empty when deploying this template on its own. |  |
+| `additionalDataFlows` | array | no | Extra DCR dataflows on the Abstract stream, each {transformKql, outputStream}. They read the same stream as the catch-all and do not change what it keeps. Azure allows at most 20 dataflows per DCR, counting the catch-all, the ASIM routes and the lake route. Set by the Abstract Security for Microsoft Sentinel solution; leave empty when deploying this template on its own. |  |
 
 ## Permissions
 
@@ -105,6 +114,7 @@ Ingestion into the Abstract table is charged at the table's plan (Analytics by d
 - `dataCollectionEndpointUrl`
 - `logStreamName`
 - `rbacAssigned`
+- `dataFlowCount`
 - `abstractSentinelOnboarding`
 
 ## Example parameter profiles

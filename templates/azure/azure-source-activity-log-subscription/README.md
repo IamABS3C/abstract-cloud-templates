@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 The pilot path: streams one subscription's Activity Log, every ARM create, update and delete and every RBAC change, to the Abstract Event Hub. Use it to prove the pipeline on one subscription, then move to the management-group policy for the estate.
 
 **Cloud:** azure · **Role:** source · **Scope:** subscription

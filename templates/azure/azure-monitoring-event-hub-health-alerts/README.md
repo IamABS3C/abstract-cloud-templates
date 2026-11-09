@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Event Hubs publishes no consumer-lag metric, so when the Abstract consumer stalls, incoming traffic keeps arriving, nothing errors, and retention quietly expires the backlog. These alert rules watch for outgoing traffic collapsing while incoming continues, plus the producer-side and capacity failures.
 
 **Cloud:** azure · **Role:** monitoring · **Scope:** resource-group

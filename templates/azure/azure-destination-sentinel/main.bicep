@@ -104,6 +104,23 @@ param asimSchemas array = [
   '*'
 ]
 
+@description('With enableAsim on, keep each event that an ASIM dataflow takes out of the Abstract table, so it is stored once (in its ASim table) instead of twice. Off by default to keep existing deployments unchanged: content that reads only the Abstract table, such as the Abstract content pack before it reads the ASim tables too, no longer sees those events. Events no ASIM dataflow takes, and everything when enableAsim is off, still land in the Abstract table.')
+param excludeAsimFromAbstractTable bool = false
+
+@description('A KQL condition over the Abstract stream selecting events that one of your additionalDataFlows stores. Those events are written by no ASIM dataflow and never go to the lake table, and with excludeAsimFromAbstractTable on they are also kept out of the Abstract table, so each is stored once, in the additionalDataFlows table. It must match exactly what that dataflow takes, or events are lost or stored twice. Empty (default) changes nothing. Set by the Abstract Security for Microsoft Sentinel solution; leave empty when deploying this template on its own.')
+param asimExcludeKql string = ''
+
+@description('Name of a second custom table on the Auxiliary (lake-only) plan, for events nothing in Sentinel reads, for example AbstractLake_CL. Empty (default) turns the lake route off. Lake rows cost data lake ingestion and processing (about 0.15 USD per GB at eastus list price against 4.30 in the analytics tier) and are searchable with KQL in the data lake, but analytics rules, ASIM parsers and custom detections do not run on them.')
+param lakeTableName string = ''
+
+@description('ACS event categories to send to the lake table instead of the Abstract table, for example [\'network\', \'dns\']. An event matches when its event.category contains one of them. Events an ASIM dataflow takes never go to the lake. Empty (default) turns the lake route off.')
+param lakeCategories array = []
+
+@description('Total retention of the lake table in days (30 to 4383).')
+@minValue(30)
+@maxValue(4383)
+param lakeRetentionDays int = 365
+
 @description('Retention of the Abstract table in days. 0 (default) sends no retention, so an existing table keeps its retention and a new table uses the workspace default. A value shortens or lengthens the table\'s total retention; shortening deletes data older than the new value.')
 @minValue(0)
 @maxValue(4383)
@@ -112,6 +129,12 @@ param customTableRetentionDays int = 0
 @description('Table plan for the Abstract table. Keep (default) keeps the plan an existing table already has, and create a new table as Analytics: a redeploy then never changes a table\'s plan, or its cost, by accident. Analytics runs analytics rules and our content pack on it. Auxiliary is the Sentinel data lake tier: cheap long retention and KQL jobs, but no analytics rules or alerts. Basic sits between them. Setting a plan on an existing table switches it; Azure applies the new plan to the whole table.')
 @allowed(['Keep', 'Analytics', 'Basic', 'Auxiliary'])
 param customTablePlan string = 'Keep'
+
+@description('Extra tables to create before the Data Collection Rule, for dataflows passed in additionalDataFlows (for example a vendor table such as OktaV2_CL). Each item is {name, columns}, columns in Log Analytics table format. Empty (default) creates none. Used by the Abstract Security for Microsoft Sentinel solution; leave empty when deploying this template on its own.')
+param additionalTables array = []
+
+@description('Extra DCR dataflows on the Abstract stream, each {transformKql, outputStream}. They read the same Custom-<table> stream as the catch-all and do not change what the catch-all keeps. Empty (default) adds none. Azure allows at most 20 dataflows per DCR, counting the catch-all, the ASIM routes and the lake route. Used by the Abstract Security for Microsoft Sentinel solution; leave empty when deploying this template on its own.')
+param additionalDataFlows array = []
 
 // ---------------------------------------------------------------------------
 // RBAC for the Abstract service principal (granted on the DCR)
@@ -168,8 +191,59 @@ var asimFlows = [for route in enabledAsimRoutes: {
   destinations: [
     logAnalyticsDestinationName
   ]
-  transformKql: route.transformKql
+  transformKql: empty(asimExcludeKql) ? route.transformKql : 'source\n| where not(${asimExcludeKql})\n${substring(route.transformKql, length('source\n'))}'
   outputStream: route.outputStream
+}]
+
+// One home per event. Each enabled ASIM route's own filter becomes a flag (generated: selectionKql / selectedFlag /
+// tempColumns); the lake flag takes the chosen categories that no ASIM route takes. The Abstract table then drops what
+// the ASIM routes take (when excludeAsimFromAbstractTable is on) and what the lake takes. Spliced in after `source`.
+var lakeEnabled = !empty(lakeTableName) && !empty(lakeCategories) && useGeneratedSchema
+var asimAny = empty(enabledAsimRoutes) ? 'false' : '(${join(map(enabledAsimRoutes, route => route.selectedFlag), ' or ')})'
+var excludeAsim = excludeAsimFromAbstractTable && !empty(enabledAsimRoutes)
+// Events an additionalDataFlows lane stores (asimExcludeKql): no ASIM dataflow and no lake for them, and with store-once
+// on, no Abstract table either. Dropped explicitly, because an ASIM selection flag is false for an event no route maps.
+// The lane selection is computed once, as the _lane column, so the catch-all and lake transforms carry its text one time
+// only (Azure caps a transformKql at 15,360 characters).
+var laneNotClause = empty(asimExcludeKql) ? '' : ' and not(_lane)'
+var needsSelection = excludeAsim || lakeEnabled
+var selectionParts = concat(empty(asimExcludeKql) ? [] : ['| extend _lane = (${asimExcludeKql})'], empty(enabledAsimRoutes) ? [] : map(enabledAsimRoutes, route => route.selectionKql), lakeEnabled ? [
+  '| extend _lake_category = tolower(tostring(event.category))'
+  '| extend _lake = (${join(map(lakeCategories, c => '_lake_category has \'${toLower(c)}\''), ' or ')}) and not(${asimAny})${laneNotClause}'
+] : [])
+var selectionColumns = concat(empty(asimExcludeKql) ? [] : ['_lane'], empty(enabledAsimRoutes) ? [] : flatten(map(enabledAsimRoutes, route => concat([route.selectedFlag], route.tempColumns))), lakeEnabled ? [
+  '_lake'
+  '_lake_category'
+] : [])
+var transformBody = substring(effectiveTransformKql, length('source\n'))
+var catchAllDropBase = excludeAsim ? (lakeEnabled ? '${asimAny} or _lake' : asimAny) : '_lake'
+var catchAllDrop = (excludeAsim && !empty(asimExcludeKql)) ? '${catchAllDropBase} or _lane' : catchAllDropBase
+var catchAllTransformKql = needsSelection ? 'source\n${join(selectionParts, '\n')}\n| where not(${catchAllDrop})\n| project-away ${join(selectionColumns, ', ')}\n${transformBody}' : effectiveTransformKql
+var lakeTransformKql = 'source\n${join(selectionParts, '\n')}\n| where _lake\n| project-away ${join(selectionColumns, ', ')}\n${transformBody}'
+var lakeStreamName = 'Custom-${lakeTableName}'
+var lakeFlows = lakeEnabled ? [
+  {
+    streams: [
+      streamName
+    ]
+    destinations: [
+      logAnalyticsDestinationName
+    ]
+    transformKql: lakeTransformKql
+    outputStream: lakeStreamName
+  }
+] : []
+
+// Caller-supplied dataflows on the same input stream (see additionalDataFlows).
+var extraFlows = [for flow in additionalDataFlows: {
+  streams: [
+    streamName
+  ]
+  destinations: [
+    logAnalyticsDestinationName
+  ]
+  transformKql: flow.transformKql
+  outputStream: flow.outputStream
 }]
 
 // Stream name for a DCR-based custom table is always Custom-<table>.
@@ -221,6 +295,36 @@ resource customTable 'Microsoft.OperationalInsights/workspaces/tables@2026-03-01
   ] : []
 }
 
+// Lake-only table (Auxiliary plan): same columns as the Abstract table, so the same transformation fills it.
+resource lakeTable 'Microsoft.OperationalInsights/workspaces/tables@2026-03-01' = if (lakeEnabled) {
+  name: '${effectiveWorkspaceName}/${empty(lakeTableName) ? 'unused_CL' : lakeTableName}'
+  properties: {
+    plan: 'Auxiliary'
+    totalRetentionInDays: lakeRetentionDays
+    schema: {
+      name: lakeTableName
+      columns: customTableArmColumns
+    }
+  }
+  dependsOn: createWorkspace ? [
+    workspace
+  ] : []
+}
+
+// Tables for additionalDataFlows (created only when that parameter supplies them).
+resource additionalTable 'Microsoft.OperationalInsights/workspaces/tables@2026-03-01' = [for table in additionalTables: {
+  name: '${effectiveWorkspaceName}/${table.name}'
+  properties: {
+    schema: {
+      name: table.name
+      columns: table.columns
+    }
+  }
+  dependsOn: createWorkspace ? [
+    workspace
+  ] : []
+}]
+
 // ---------------------------------------------------------------------------
 // Data Collection Endpoint
 // ---------------------------------------------------------------------------
@@ -270,13 +374,15 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2024-03-11' = {
         destinations: [
           logAnalyticsDestinationName
         ]
-        transformKql: effectiveTransformKql
+        transformKql: catchAllTransformKql
         outputStream: streamName
       }
-    ], asimFlows)
+    ], asimFlows, lakeFlows, extraFlows)
   }
   dependsOn: [
     customTable
+    lakeTable
+    additionalTable
     sentinelOnboarding
   ]
 }
@@ -334,6 +440,7 @@ output dataCollectionRuleImmutableId string = dcr.properties.immutableId
 output dataCollectionEndpointUrl string = dce.properties.logsIngestion.endpoint
 output logStreamName string = streamName
 output rbacAssigned bool = !empty(principalId)
+output dataFlowCount int = 1 + length(asimFlows) + length(lakeFlows) + length(extraFlows)
 
 output abstractSentinelOnboarding object = {
   azureMonitorDetails: {

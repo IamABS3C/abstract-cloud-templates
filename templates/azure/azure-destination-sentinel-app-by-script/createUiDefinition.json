@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "![Abstract Security](https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/portal-badge.png)\n\n# ABSTRACT SECURITY\n**The Security Data Pipeline Platform.** Send detection-ready data straight into Microsoft Sentinel — normalized, enriched, cost-optimized.\n\n[abstract.security](https://abstract.security) · [Documentation](https://docs.abstractsecurity.app/docs/integrations/destination-integrations/azure-sentinel-destination/)\n\n---\n### Azure Sentinel — Destination Integration (one-click app registration)\nThis deployment creates the ingestion stack and an Entra app registration for Abstract. Choose a new Key Vault, an existing Key Vault, or no Key Vault. With no Key Vault, this deployment does **not** create a client secret; create it in Entra after deployment and copy it once into Abstract.\n\n⚠️ **Prerequisites:** the provisioning identity needs the Microsoft Graph application permission `Application.ReadWrite.All` (not `AppRoleAssignment.ReadWrite.All`), granted with admin consent by a Global Administrator once per tenant. The deploying principal needs **Owner** (or **Contributor + User Access Administrator**) on the deployment resource group.\n\nThe app registration is Abstract's runtime identity; the supplied managed identity is only the provisioning runner. The template grants the runtime service principal both **Monitoring Metrics Publisher** and **Monitoring Contributor** on the DCR.",
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-app-by-script/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Abstract to Sentinel: app registration created by script**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. The portal-wizard variant of the Sentinel destination: a deployment script creates the Entra app registration and, with Key Vault, its client secret, then the template builds the same ingestion stack. It runs as a tier-0 managed identity you create beforehand, so it suits portal-only teams and labs.\n\n### Azure Sentinel — Destination Integration (one-click app registration)\nThis deployment creates the ingestion stack and an Entra app registration for Abstract. Choose a new Key Vault, an existing Key Vault, or no Key Vault. With no Key Vault, this deployment does **not** create a client secret; create it in Entra after deployment and copy it once into Abstract.\n\n⚠️ **Prerequisites:** the provisioning identity needs the Microsoft Graph application permission `Application.ReadWrite.All` (not `AppRoleAssignment.ReadWrite.All`), granted with admin consent by a Global Administrator once per tenant. The deploying principal needs **Owner** (or **Contributor + User Access Administrator**) on the deployment resource group.\n\nThe app registration is Abstract's runtime identity; the supplied managed identity is only the provisioning runner. The template grants the runtime service principal both **Monitoring Metrics Publisher** and **Monitoring Contributor** on the DCR.",
         "resourceGroup": {
           "constraints": {
             "validations": []
@@ -14,7 +14,18 @@
         }
       }
     },
-    "basics": [],
+    "basics": [
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
+      }
+    ],
     "steps": [
       {
         "name": "workspace",

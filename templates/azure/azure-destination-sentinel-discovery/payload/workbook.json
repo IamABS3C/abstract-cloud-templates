@@ -1,0 +1,628 @@
+{
+ "version": "Notebook/1.0",
+ "items": [
+  {
+   "type": 1,
+   "content": {
+    "json": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-discovery/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n## Sentinel inventory (read-only)\nOpen this from **Microsoft Sentinel > Workbooks** (or the Log Analytics workspace > Workbooks) so the Logs tabs run against that workspace. Each grid has **Export to Excel** in its toolbar.\n\nNot in this workbook, by design: the **Content Hub** list and the **full analytics rule list with the tables each rule reads**. They need Azure Resource Manager list calls that page through results, and Learn does not document the workbook format for paged ARM results. `Get-SentinelInventory.ps1` collects both (`content_hub_solutions.csv`, `analytic_rules.csv`, `rule_table_map.csv`).",
+    "style": "info"
+   },
+   "name": "header"
+  },
+  {
+   "type": 9,
+   "content": {
+    "version": "KqlParameterItem/1.0",
+    "crossComponentResources": [
+     "value::all"
+    ],
+    "parameters": [
+     {
+      "id": "b3c1c6f2-6a43-4f57-9a0e-5f3f0d7d1a01",
+      "version": "KqlParameterItem/1.0",
+      "name": "Subscription",
+      "type": 6,
+      "isRequired": true,
+      "multiSelect": true,
+      "quote": "'",
+      "delimiter": ",",
+      "query": "resources\n| where type =~ 'microsoft.insights/datacollectionrules' or type =~ 'microsoft.operationalinsights/workspaces'\n| summarize count() by subscriptionId\n| order by subscriptionId asc\n| project subscriptionId, label=subscriptionId, selected=true",
+      "crossComponentResources": [
+       "value::all"
+      ],
+      "value": [],
+      "typeSettings": {
+       "additionalResourceOptions": [],
+       "showDefault": false
+      },
+      "timeContext": {
+       "durationMs": 86400000
+      },
+      "queryType": 1,
+      "resourceType": "microsoft.resourcegraph/resources"
+     }
+    ],
+    "style": "above",
+    "queryType": 1,
+    "resourceType": "microsoft.resourcegraph/resources"
+   },
+   "name": "parameters"
+  },
+  {
+   "type": 11,
+   "content": {
+    "version": "LinkItem/1.0",
+    "style": "tabs",
+    "links": [
+     {
+      "cellValue": "selectedTab",
+      "linkTarget": "parameter",
+      "linkLabel": "Tables & volume",
+      "subTarget": "tables",
+      "style": "link"
+     },
+     {
+      "cellValue": "selectedTab",
+      "linkTarget": "parameter",
+      "linkLabel": "Connectors & health",
+      "subTarget": "connectors",
+      "style": "link"
+     },
+     {
+      "cellValue": "selectedTab",
+      "linkTarget": "parameter",
+      "linkLabel": "DCRs",
+      "subTarget": "dcrs",
+      "style": "link"
+     },
+     {
+      "cellValue": "selectedTab",
+      "linkTarget": "parameter",
+      "linkLabel": "Agents",
+      "subTarget": "agents",
+      "style": "link"
+     },
+     {
+      "cellValue": "selectedTab",
+      "linkTarget": "parameter",
+      "linkLabel": "CEF/Syslog senders",
+      "subTarget": "senders",
+      "style": "link"
+     },
+     {
+      "cellValue": "selectedTab",
+      "linkTarget": "parameter",
+      "linkLabel": "Analytic rules",
+      "subTarget": "rules",
+      "style": "link"
+     },
+     {
+      "cellValue": "selectedTab",
+      "linkTarget": "parameter",
+      "linkLabel": "Cost & benefits",
+      "subTarget": "cost",
+      "style": "link"
+     },
+     {
+      "cellValue": "selectedTab",
+      "linkTarget": "parameter",
+      "linkLabel": "Workbooks, playbooks & lake",
+      "subTarget": "content",
+      "style": "link"
+     }
+    ]
+   },
+   "name": "tabs"
+  },
+  {
+   "type": 1,
+   "content": {
+    "json": "Billable and free GB per table, last 30 complete days (Usage table). Table plan, retention and Classic vs DCR-based are not in any log table; the script reads them from the Tables API."
+   },
+   "name": "text - 3",
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "tables"
+   }
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "Usage\n| where TimeGenerated > ago(31d)\n| where StartTime >= startofday(ago(30d)) and EndTime < startofday(now())\n| summarize BillableGB = sumif(Quantity, IsBillable == true) / 1000.,\n            FreeGB = sumif(Quantity, IsBillable == false) / 1000.,\n            FirstRecordUtc = min(StartTime), LastCompleteDayRecordUtc = max(EndTime),\n            Solutions = make_set(Solution, 20)\n            by DataType",
+    "size": 0,
+    "title": "Billable and free GB per table, last 30 complete days",
+    "timeContext": {
+     "durationMs": 2764800000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "tables"
+   },
+   "name": "A1 usage-by-table"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "Usage\n| where TimeGenerated > ago(31d)\n| where StartTime >= startofday(ago(30d)) and EndTime < startofday(now())\n| summarize GB = sum(Quantity) / 1000. by Day = startofday(StartTime), DataType, IsBillable\n| order by Day asc, DataType asc",
+    "size": 0,
+    "title": "GB per day per table",
+    "timeContext": {
+     "durationMs": 2764800000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "tables"
+   },
+   "name": "A3 usage-daily"
+  },
+  {
+   "type": 1,
+   "content": {
+    "json": "SentinelHealth covers selected connectors only, and only when **Settings > Auditing and health monitoring** is on. \"Failed to resolve table\" means it is off. The second grid is the last Usage record per table: the \"last data\" signal the script joins to each connector."
+   },
+   "name": "text - 6",
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "connectors"
+   }
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "let window = 30d;\nSentinelHealth\n| where TimeGenerated > ago(window)\n| where SentinelResourceType == \"Data connector\"\n| summarize arg_max(TimeGenerated, Status, Description, OperationName, SentinelResourceKind, Reason) by SentinelResourceName, SentinelResourceId\n| join kind=leftouter (\n    SentinelHealth\n    | where TimeGenerated > ago(window)\n    | where SentinelResourceType == \"Data connector\"\n    | summarize Failures = countif(Status == \"Failure\"), Successes = countif(Status == \"Success\"), Events = count() by SentinelResourceId\n  ) on SentinelResourceId\n| project ConnectorName = SentinelResourceName, ConnectorKind = SentinelResourceKind, LastStatus = Status, LastOperation = OperationName,\n          LastReason = Reason, LastDescription = Description, LastEventUtc = TimeGenerated, Failures, Successes, Events, SentinelResourceId",
+    "size": 0,
+    "title": "Data connector health (SentinelHealth)",
+    "timeContext": {
+     "durationMs": 2678400000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "connectors"
+   },
+   "name": "A4 connector-health"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "Usage\n| where TimeGenerated > ago(30d)\n| summarize LastUsageRecordUtc = max(EndTime) by DataType",
+    "size": 0,
+    "title": "Last data received per table (Usage)",
+    "timeContext": {
+     "durationMs": 2678400000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "connectors"
+   },
+   "name": "A2 usage-last-seen"
+  },
+  {
+   "type": 1,
+   "content": {
+    "json": "Data collection rules, endpoints and associations in the selected subscriptions (Azure Resource Graph). Only resources this account can read are shown."
+   },
+   "name": "text - 9",
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "dcrs"
+   }
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "resources\n| where type =~ 'microsoft.insights/datacollectionrules'\n| mv-expand df = properties.dataFlows\n| mv-expand stream = df.streams\n| project dcrName = name, resourceGroup, subscriptionId, kind,\n          stream = tostring(stream), outputStream = tostring(df.outputStream),\n          destinations = tostring(df.destinations), transformKql = tostring(df.transformKql),\n          dataCollectionEndpointId = tostring(properties.dataCollectionEndpointId),\n          logAnalyticsDestinations = tostring(properties.destinations.logAnalytics), id\n| order by dcrName asc",
+    "size": 0,
+    "title": "DCR dataflows: input stream to output table, transform, destinations",
+    "showExportToExcel": true,
+    "queryType": 1,
+    "resourceType": "microsoft.resourcegraph/resources",
+    "crossComponentResources": [
+     "{Subscription}"
+    ],
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "dcrs"
+   },
+   "name": "B1 dcr-dataflows"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "insightsresources\n| where type =~ 'microsoft.insights/datacollectionruleassociations'\n| extend targetResourceId = tostring(split(tolower(id), '/providers/microsoft.insights/datacollectionruleassociations/')[0])\n| project targetResourceId, dataCollectionRuleId = tostring(properties.dataCollectionRuleId),\n          dataCollectionEndpointId = tostring(properties.dataCollectionEndpointId), associationName = name, id\n| order by targetResourceId asc",
+    "size": 0,
+    "title": "DCR associations: which machine feeds which DCR",
+    "showExportToExcel": true,
+    "queryType": 1,
+    "resourceType": "microsoft.resourcegraph/resources",
+    "crossComponentResources": [
+     "{Subscription}"
+    ],
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "dcrs"
+   },
+   "name": "B2 dcr-associations"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "resources\n| where type =~ 'microsoft.insights/datacollectionendpoints'\n| project dceName = name, resourceGroup, subscriptionId, location,\n          logsIngestionEndpoint = tostring(properties.logsIngestion.endpoint),\n          publicNetworkAccess = tostring(properties.networkAcls.publicNetworkAccess), id",
+    "size": 0,
+    "title": "Data collection endpoints",
+    "showExportToExcel": true,
+    "queryType": 1,
+    "resourceType": "microsoft.resourcegraph/resources",
+    "crossComponentResources": [
+     "{Subscription}"
+    ],
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "dcrs"
+   },
+   "name": "B3 dces"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "resources\n| where type =~ 'microsoft.operationsmanagement/solutions'\n| where name startswith 'SecurityInsights'\n| project solutionName = name, workspaceResourceId = tolower(tostring(properties.workspaceResourceId)),\n          sentinelSku = tostring(properties.sku.name), sentinelCapacityReservationLevel = tostring(properties.sku.capacityReservationLevel)\n| join kind=leftouter (\n    resources\n    | where type =~ 'microsoft.operationalinsights/workspaces'\n    | project workspaceResourceId = tolower(id), workspaceName = name, logAnalyticsSku = tostring(properties.sku.name),\n              logAnalyticsCapacityReservationLevel = tostring(properties.sku.capacityReservationLevel),\n              retentionInDays = tostring(properties.retentionInDays), dailyQuotaGb = tostring(properties.workspaceCapping.dailyQuotaGb)\n  ) on workspaceResourceId\n| project-away workspaceResourceId1",
+    "size": 0,
+    "title": "Sentinel workspaces, Sentinel and Log Analytics pricing tier",
+    "showExportToExcel": true,
+    "queryType": 1,
+    "resourceType": "microsoft.resourcegraph/resources",
+    "crossComponentResources": [
+     "{Subscription}"
+    ],
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "dcrs"
+   },
+   "name": "B4 sentinel-workspaces-and-pricing"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "Heartbeat\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, OSType, OSName, OSMajorVersion, OSMinorVersion, Version, ComputerEnvironment, ResourceId, ResourceType, ComputerIP, SourceSystem, Solutions) by Computer, Category\n| extend AgentType = case(Category == \"Azure Monitor Agent\", \"AMA\",\n                          Category == \"Direct Agent\", \"Direct Agent (legacy Log Analytics agent, MMA/OMS)\",\n                          Category startswith \"SCOM\", \"SCOM\",\n                          \"Other\")\n| project Computer, AgentType, Category, OSType, OSName, OSMajorVersion, OSMinorVersion, AgentVersion = Version,\n          ComputerEnvironment, ResourceId, ResourceType, ComputerIP, SourceSystem, Solutions, LastHeartbeatUtc = TimeGenerated\n| order by Computer asc",
+    "size": 0,
+    "title": "Agents reporting (Heartbeat): AMA vs legacy agent",
+    "timeContext": {
+     "durationMs": 2678400000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "agents"
+   },
+   "name": "A6 agents"
+  },
+  {
+   "type": 1,
+   "content": {
+    "json": "One complete day (yesterday) on purpose: CommonSecurityLog and Syslog are large. For more days, run the same query day by day."
+   },
+   "name": "text - 15",
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "senders"
+   }
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "CommonSecurityLog\n| where TimeGenerated between (startofday(ago(1d)) .. startofday(now()))\n| summarize Events = count(), BilledGB = sum(_BilledSize) / 1e9, FirstSeenUtc = min(TimeGenerated), LastSeenUtc = max(TimeGenerated)\n            by DeviceVendor, DeviceProduct, DeviceVersion, Computer, CollectorHostName, IsBillable = _IsBillable\n| order by BilledGB desc",
+    "size": 0,
+    "title": "CommonSecurityLog by vendor, product, device and collector (yesterday)",
+    "timeContext": {
+     "durationMs": 172800000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "senders"
+   },
+   "name": "A7 cef-senders-1day"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "Syslog\n| where TimeGenerated between (startofday(ago(1d)) .. startofday(now()))\n| summarize Events = count(), BilledGB = sum(_BilledSize) / 1e9, FirstSeenUtc = min(TimeGenerated), LastSeenUtc = max(TimeGenerated),\n            ProcessNames = make_set(ProcessName, 10)\n            by Computer, HostName, CollectorHostName, Facility, IsBillable = _IsBillable\n| order by BilledGB desc",
+    "size": 0,
+    "title": "Syslog by computer, host, collector and facility (yesterday)",
+    "timeContext": {
+     "durationMs": 172800000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "senders"
+   },
+   "name": "A8 syslog-senders-1day"
+  },
+  {
+   "type": 1,
+   "content": {
+    "json": "Rule runs and failures from SentinelHealth (needs health monitoring on). The complete rule list, with the tables each rule query names, comes from the script."
+   },
+   "name": "text - 18",
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "rules"
+   }
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "SentinelHealth\n| where TimeGenerated > ago(30d)\n| where SentinelResourceType == \"Analytics rule\"\n| summarize Runs = count(), Failures = countif(Status == \"Failure\"), LastRunUtc = max(TimeGenerated)\n            by RuleName = SentinelResourceName, RuleKind = SentinelResourceKind, SentinelResourceId",
+    "size": 0,
+    "title": "Analytics rule runs and failures (SentinelHealth)",
+    "timeContext": {
+     "durationMs": 2678400000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "rules"
+   },
+   "name": "A5 analytics-rule-health"
+  },
+  {
+   "type": 1,
+   "content": {
+    "json": "List price per table, before benefits and discounts. Change **PricePerGB** in the query (Edit) to your region or commitment tier. Benefits already applied (Microsoft 365 E5 data grant, Defender for Servers) come from the Operation table: the Usage table does not show them."
+   },
+   "name": "text - 20",
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "cost"
+   }
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "let PricePerGB = 4.30;\nUsage\n| where TimeGenerated > ago(31d)\n| where StartTime >= startofday(ago(30d)) and EndTime < startofday(now())\n| where IsBillable == true\n| summarize BillableGBPerDay = sum(Quantity) / 1000. / 30 by DataType\n| extend ListUSDPerMonth = round(BillableGBPerDay * 30.4 * PricePerGB, 2)\n| order by ListUSDPerMonth desc",
+    "size": 0,
+    "title": "Billable GB per day and list USD per month, per table",
+    "timeContext": {
+     "durationMs": 2764800000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "cost"
+   },
+   "name": "A10 list-cost-by-table"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "Operation\n| where TimeGenerated > ago(30d)\n| where Detail startswith \"Benefit amount used\"\n| parse Detail with \"Benefit amount used: \" BenefitUsedGB \" GB\"\n| parse OperationKey with \"Benefit type used: \" BenefitType\n| summarize BenefitGB = sum(todouble(BenefitUsedGB)), DaysWithBenefit = dcount(startofday(TimeGenerated)), LastUtc = max(TimeGenerated) by BenefitType",
+    "size": 0,
+    "title": "Data ingestion benefits applied (Operation table)",
+    "timeContext": {
+     "durationMs": 2678400000
+    },
+    "showExportToExcel": true,
+    "queryType": 0,
+    "resourceType": "microsoft.operationalinsights/workspaces",
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "cost"
+   },
+   "name": "A9 benefits-used"
+  },
+  {
+   "type": 1,
+   "content": {
+    "json": "Sentinel workbooks and playbooks in the selected subscriptions, and whether the Sentinel data lake onboarding resource exists. The queries inside workbooks, workspace functions and ASIM parsers, hunting queries, UEBA settings and Microsoft's SOC optimization list need Azure Resource Manager calls: the script reads them."
+   },
+   "name": "text - 23",
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "content"
+   }
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "resources\n| where type =~ 'microsoft.insights/workbooks'\n| extend category = tostring(properties.category), sourceId = tostring(properties.sourceId)\n| where category =~ 'sentinel'\n| project id, displayName = tostring(properties.displayName), sourceId, timeModified = tostring(properties.timeModified), subscriptionId, resourceGroup",
+    "size": 0,
+    "title": "Sentinel workbooks and the workspace each reads",
+    "showExportToExcel": true,
+    "queryType": 1,
+    "resourceType": "microsoft.resourcegraph/resources",
+    "crossComponentResources": [
+     "{Subscription}"
+    ],
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "content"
+   },
+   "name": "B6 sentinel-workbooks"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "resources\n| where type =~ 'microsoft.logic/workflows'\n| extend triggers = tostring(properties.definition.triggers)\n| where triggers has 'Microsoft_Sentinel' or triggers has 'azuresentinel'\n| project id, name, state = tostring(properties.state), subscriptionId, resourceGroup, location",
+    "size": 0,
+    "title": "Playbooks triggered by Microsoft Sentinel",
+    "showExportToExcel": true,
+    "queryType": 1,
+    "resourceType": "microsoft.resourcegraph/resources",
+    "crossComponentResources": [
+     "{Subscription}"
+    ],
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "content"
+   },
+   "name": "B7 sentinel-playbooks"
+  },
+  {
+   "type": 3,
+   "content": {
+    "version": "KqlItem/1.0",
+    "query": "resources\n| where type =~ 'microsoft.sentinelplatformservices/sentinelplatformservices'\n| project id, name, subscriptionId, resourceGroup, location",
+    "size": 0,
+    "title": "Sentinel data lake onboarding resource",
+    "showExportToExcel": true,
+    "queryType": 1,
+    "resourceType": "microsoft.resourcegraph/resources",
+    "crossComponentResources": [
+     "{Subscription}"
+    ],
+    "visualization": "table",
+    "gridSettings": {
+     "filter": true
+    }
+   },
+   "conditionalVisibility": {
+    "parameterName": "selectedTab",
+    "comparison": "isEqualTo",
+    "value": "content"
+   },
+   "name": "B5 sentinel-data-lake"
+  }
+ ],
+ "styleSettings": {}
+}

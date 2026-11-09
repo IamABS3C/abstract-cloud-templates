@@ -3,9 +3,9 @@
   "contentVersion": "1.0.0.0",
   "metadata": {
     "title": "Abstract Security - API Sync (multi-endpoint connector)",
-    "description": "One scheduled Logic App that syncs multiple Abstract API endpoints into Sentinel custom tables so the Competitive & TCO workbook can compare live: Insights (AbstractInsights_CL), tune-at-source filters (AbstractTuningFilters_CL), pipeline IO metrics raw-in/forwarded-out (AbstractPipelineMetrics_CL), and detection effectiveness (AbstractDetectionEffectiveness_CL). Endpoints confirmed against the Abstract Security API. Toggle branches by editing the definition; add endpoints with the same HTTP->Select->Send pattern.",
+    "description": "One scheduled Logic App that syncs multiple Abstract API endpoints into Sentinel custom tables: Insights (AbstractInsights_CL), tune-at-source filters (AbstractTuningFilters_CL), pipeline IO metrics raw-in/forwarded-out (AbstractPipelineMetrics_CL), and detection effectiveness (AbstractDetectionEffectiveness_CL). Endpoints confirmed against the Abstract Security API. Toggle branches by editing the definition; add endpoints with the same HTTP->Select->Send pattern.",
     "prerequisites": "Abstract API key + vendor account id; Log Analytics workspace id + primary key. Prefer Key Vault.",
-    "author": "Abstract Security - Solutions Engineering"
+    "author": "Abstract Security - support@abstract.security"
   },
   "parameters": {
     "PlaybookName": {

@@ -3,9 +3,35 @@
   "contentVersion": "1.0.0.0",
   "metadata": {
     "title": "Abstract Security - Enrich Incident",
-    "description": "Microsoft Sentinel playbook. On incident creation, queries the Abstract Security pipeline (StreamViewer search) for related events over the last N hours and posts them back as an incident comment. Demonstrates pulling Abstract's fuller, normalized context into a Sentinel investigation.",
-    "prerequisites": "An Abstract API key (Bearer) and vendor account id. Best practice: store the key in Azure Key Vault and reference it; the securestring parameter here is for lab use.",
-    "author": "Abstract Security - Solutions Engineering"
+    "description": "When an incident is created, searches the Abstract API for related events over a configurable window and adds them to the incident as a comment.",
+    "prerequisites": [
+      "An Abstract API key stored as a secret in Azure Key Vault.",
+      "The Abstract vendor account ID of your tenant."
+    ],
+    "author": {
+      "name": "Abstract Security"
+    },
+    "postDeployment": [
+      "Authorize the Microsoft Sentinel connection of this Logic App.",
+      "Grant its managed identity Key Vault Secrets User on the secret and Microsoft Sentinel Responder on the workspace."
+    ],
+    "entities": [],
+    "tags": [
+      "Enrichment"
+    ],
+    "support": {
+      "tier": "partner"
+    },
+    "lastUpdateTime": "2026-11-08T00:00:00Z",
+    "releaseNotes": [
+      {
+        "version": "1.0",
+        "title": "Initial version",
+        "notes": [
+          "Initial version"
+        ]
+      }
+    ]
   },
   "parameters": {
     "PlaybookName": {

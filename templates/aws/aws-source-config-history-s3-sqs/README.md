@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Creates a hardened bucket AWS Config may deliver to, the SQS queue it notifies for each configuration history file, the role Abstract assumes to read them and, only when you opt in, this Region's AWS Config delivery channel. Abstract reads it with the generic S3 source and a custom parser. Deployed in a test account on 2026-10-07. A Config history file reached the queue, and the role was assumed with its External ID.
 
 **Cloud:** aws · **Role:** source · **Scope:** account

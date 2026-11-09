@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Optional: enables the APIs the pipeline needs on an existing project, or creates a dedicated logging project with a billing account. Most customers already have a security or logging project and can skip it.
 
 **Cloud:** gcp · **Role:** foundation · **Scope:** project

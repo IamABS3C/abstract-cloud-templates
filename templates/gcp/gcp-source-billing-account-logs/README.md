@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 A Cloud Logging sink created on the billing account itself. An organization sink routes the organization and the folders and projects under it; a billing account is a separate resource with its own sink. It routes the billing account's Admin Activity audit logs (IAM changes, project link and unlink, account changes) to Pub/Sub for Abstract. It is not a cost export.
 
 **Cloud:** gcp · **Role:** source · **Scope:** billing-account

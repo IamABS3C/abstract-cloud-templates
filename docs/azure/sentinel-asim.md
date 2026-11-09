@@ -148,14 +148,14 @@ trims the native connectors.
 
 ## Verified
 
-On a test workspace, from QA1 through the Abstract Azure Sentinel Destination, with these
+On a test workspace, from an Abstract test tenant through the Abstract Azure Sentinel Destination, with these
 templates deployed:
 
-- **Live feeds** (AWS CloudTrail from QA1's event generator, and a live Okta System Log):
+- **Live feeds** (AWS CloudTrail from that tenant's event generator, and a live Okta System Log):
   over a settled six-minute window, 323 of 340 AWS events (95%) and 5 of 5 Okta events
   landed in an ASIM table. The other 17 were S3 bucket calls that the Abstract parser labels
   `file` without a file path. Every event also landed in the Abstract table.
-- **The other schemas**, using QA1's stored API test events replayed through the DCR: every
+- **The other schemas**, using that tenant's stored API test events replayed through the DCR: every
   event that meets a schema's rule landed in its table (NetworkSession 80, Dns 40,
   WebSession 21, ProcessEvent 48, FileEvent 28, Authentication 57, AuditEvent 2). The two
   DNS-category events not mapped have no query name.
@@ -174,7 +174,7 @@ Not yet shown:
 - **A Microsoft rule alerting on these rows.** Ten published ASIM rules ran against them and
   returned nothing, because the test data contains none of the activity they look for; two
   older ones also read `SrcDvcIpAddr`, which the built-in parser does not produce.
-- **RegistryEvent.** It is mapped, but QA1 has no registry events.
+- **RegistryEvent.** It is mapped, but the test tenant has no registry events.
 - Whether UEBA reads these tables, and whether Microsoft's data allowances cover them.
 
 ## The Abstract Sentinel Destination documentation

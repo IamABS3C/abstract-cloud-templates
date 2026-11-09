@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 A separate pipeline: Abstract's Google Workspace integration reads Workspace audit data from the Admin SDK Reports API, so no Cloud Logging sink or Pub/Sub topic is involved. Terraform creates the service account; a Workspace super admin then grants domain-wide delegation by hand.
 
 **Cloud:** gcp · **Role:** source · **Scope:** project

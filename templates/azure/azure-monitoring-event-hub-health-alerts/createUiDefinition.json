@@ -10,7 +10,7 @@
         "visible": true,
         "options": {
           "icon": "Warning",
-          "text": "Azure Event Hubs publishes NO consumer-lag metric. When the Abstract consumer stalls, incoming messages keep flowing, no error is raised, every health dashboard stays green, and message retention quietly expires the backlog — after which the data is gone permanently. These alerts infer the stall from outgoing traffic collapsing while incoming traffic continues. Without them, that failure is effectively undetectable.",
+          "text": "Azure Event Hubs publishes NO consumer-lag metric. When the Abstract consumer stalls, incoming messages keep flowing, no error is raised, every health dashboard stays green, and message retention quietly expires the backlog \u2014 after which the data is gone permanently. These alerts infer the stall from outgoing traffic collapsing while incoming traffic continues. Without them, that failure is effectively undetectable.",
           "uri": "https://learn.microsoft.com/azure/event-hubs/monitor-event-hubs-reference"
         }
       },
@@ -18,7 +18,7 @@
         "name": "namespaceName",
         "type": "Microsoft.Common.TextBox",
         "label": "Event Hubs namespace to monitor",
-        "toolTip": "Name of the EXISTING namespace. Deploy the Event Hub source template first — this one only adds alerts.",
+        "toolTip": "Name of the EXISTING namespace. Deploy the Event Hub source template first \u2014 this one only adds alerts.",
         "constraints": {
           "required": true,
           "validations": [
@@ -52,7 +52,7 @@
         "type": "Microsoft.Common.TextBox",
         "label": "Action Group resource ID (who gets notified)",
         "defaultValue": "",
-        "toolTip": "Full resource ID of an existing Action Group. Leave empty to create the rules without notifications — they will appear in Azure Monitor but nobody will be told when they fire.",
+        "toolTip": "Full resource ID of an existing Action Group. Leave empty to create the rules without notifications \u2014 they will appear in Azure Monitor but nobody will be told when they fire.",
         "constraints": {
           "required": false,
           "validations": [
@@ -70,7 +70,7 @@
         "visible": "[empty(basics('actionGroupId'))]",
         "options": {
           "icon": "Warning",
-          "text": "No Action Group supplied. The alert rules will be created and will evaluate, but NOBODY WILL BE NOTIFIED when they fire. That is rarely what you want for a data-loss alert — supply an Action Group, or plan to attach one afterwards."
+          "text": "No Action Group supplied. The alert rules will be created and will evaluate, but NOBODY WILL BE NOTIFIED when they fire. That is rarely what you want for a data-loss alert \u2014 supply an Action Group, or plan to attach one afterwards."
         }
       },
       {
@@ -78,6 +78,16 @@
         "type": "Microsoft.Common.CheckBox",
         "label": "Create the rules disabled, for review first",
         "toolTip": "Useful on a noisy estate: deploy, read the thresholds, then enable."
+      },
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
       }
     ],
     "steps": [
@@ -91,7 +101,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Defaults are deliberately conservative — they are meant to catch a real outage without paging anyone over a quiet afternoon. Tune the stall window to comfortably exceed the Abstract consumer's poll interval."
+              "text": "Defaults are deliberately conservative \u2014 they are meant to catch a real outage without paging anyone over a quiet afternoon. Tune the stall window to comfortably exceed the Abstract consumer's poll interval."
             }
           },
           {
@@ -130,7 +140,7 @@
             "max": 1440,
             "defaultValue": 60,
             "showStepMarkers": false,
-            "toolTip": "Zero incoming messages for this long means the PRODUCER side broke — a deleted diagnostic setting, a revoked Send key, or a firewall change that blocked Azure Monitor's own delivery.",
+            "toolTip": "Zero incoming messages for this long means the PRODUCER side broke \u2014 a deleted diagnostic setting, a revoked Send key, or a firewall change that blocked Azure Monitor's own delivery.",
             "constraints": {
               "required": true
             },
@@ -159,11 +169,26 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "0 - Critical", "value": 0 },
-                { "label": "1 - Error", "value": 1 },
-                { "label": "2 - Warning", "value": 2 },
-                { "label": "3 - Informational", "value": 3 },
-                { "label": "4 - Verbose", "value": 4 }
+                {
+                  "label": "0 - Critical",
+                  "value": 0
+                },
+                {
+                  "label": "1 - Error",
+                  "value": 1
+                },
+                {
+                  "label": "2 - Warning",
+                  "value": 2
+                },
+                {
+                  "label": "3 - Informational",
+                  "value": 3
+                },
+                {
+                  "label": "4 - Verbose",
+                  "value": 4
+                }
               ]
             },
             "visible": true
@@ -177,11 +202,26 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "0 - Critical", "value": 0 },
-                { "label": "1 - Error", "value": 1 },
-                { "label": "2 - Warning", "value": 2 },
-                { "label": "3 - Informational", "value": 3 },
-                { "label": "4 - Verbose", "value": 4 }
+                {
+                  "label": "0 - Critical",
+                  "value": 0
+                },
+                {
+                  "label": "1 - Error",
+                  "value": 1
+                },
+                {
+                  "label": "2 - Warning",
+                  "value": 2
+                },
+                {
+                  "label": "3 - Informational",
+                  "value": 3
+                },
+                {
+                  "label": "4 - Verbose",
+                  "value": 4
+                }
               ]
             },
             "visible": true
@@ -207,7 +247,7 @@
             "visible": true,
             "options": {
               "icon": "Warning",
-              "text": "The Auto-Inflate COST ratchet is deliberately not alerted on here. Auto-Inflate scales throughput units up and never scales them back down, so one traffic spike sets a permanent new floor on the bill — and because Capture is metered per throughput unit, it inflates that line too. There is no platform metric for the provisioned throughput-unit count; the scale events land in the AutoScaleLogs diagnostic category, which needs a diagnostic setting on the namespace itself sending to a Log Analytics workspace. This template cannot assume that exists. Until it is wired up, review provisioned throughput units by hand each month.",
+              "text": "The Auto-Inflate COST ratchet is deliberately not alerted on here. Auto-Inflate scales throughput units up and never scales them back down, so one traffic spike sets a permanent new floor on the bill \u2014 and because Capture is metered per throughput unit, it inflates that line too. There is no platform metric for the provisioned throughput-unit count; the scale events land in the AutoScaleLogs diagnostic category, which needs a diagnostic setting on the namespace itself sending to a Log Analytics workspace. This template cannot assume that exists. Until it is wired up, review provisioned throughput units by hand each month.",
               "uri": "https://learn.microsoft.com/azure/event-hubs/event-hubs-auto-inflate"
             }
           },
@@ -217,7 +257,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Why the consumer-stall rule is a log search and not a metric alert: Event Hubs metrics are sparse. When nothing is consuming, the platform may emit no outgoing datapoints at all rather than emitting zeros — so a metric alert of the form 'outgoing < threshold' has nothing to evaluate and sits in Insufficient Data forever. The KQL used here synthesises a zero row when the metric is silent, which makes 'no data' and 'zero throughput' the same alertable condition."
+              "text": "Why the consumer-stall rule is a log search and not a metric alert: Event Hubs metrics are sparse. When nothing is consuming, the platform may emit no outgoing datapoints at all rather than emitting zeros \u2014 so a metric alert of the form 'outgoing < threshold' has nothing to evaluate and sits in Insufficient Data forever. The KQL used here synthesises a zero row when the metric is silent, which makes 'no data' and 'zero throughput' the same alertable condition."
             }
           }
         ]
@@ -236,6 +276,11 @@
       "dataLossSeverity": "[steps('thresholds').dataLossSeverity]",
       "capacitySeverity": "[steps('thresholds').capacitySeverity]",
       "tags": "[steps('thresholds').tags]"
+    },
+    "config": {
+      "basics": {
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-monitoring-event-hub-health-alerts/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Azure alerts when the Abstract feed stalls**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Event Hubs publishes no consumer-lag metric, so when the Abstract consumer stalls, incoming traffic keeps arriving, nothing errors, and retention quietly expires the backlog. These alert rules watch for outgoing traffic collapsing while incoming continues, plus the producer-side and capacity failures."
+      }
     }
   }
 }

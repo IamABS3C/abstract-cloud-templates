@@ -170,6 +170,43 @@ parameters:
     (default) writes every schema the Abstract ASIM mappings cover; [] writes none.
   default:
   - '*'
+- name: excludeAsimFromAbstractTable
+  type: bool
+  required: false
+  description: With enableAsim on, keep each event that an ASIM dataflow takes out of the Abstract table, so it is
+    stored once (in its ASim table) instead of twice. Off by default to keep existing deployments unchanged. Content
+    that reads only the Abstract table, such as the Abstract content pack before it reads the ASim tables too, no
+    longer sees those events. Events no ASIM dataflow takes still land in the Abstract table.
+  default: false
+- name: asimExcludeKql
+  type: string
+  required: false
+  description: A KQL condition over the Abstract stream selecting events that one of your additionalDataFlows stores.
+    Those events are written by no ASIM dataflow and never go to the lake table, and with excludeAsimFromAbstractTable
+    on they are also kept out of the Abstract table, so each is stored once, in the additionalDataFlows table. It must
+    match exactly what that dataflow takes, or events are lost or stored twice. Empty (default) changes nothing. Set by
+    the Abstract Security for Microsoft Sentinel solution; leave empty when deploying this template on its own.
+  default: ''
+- name: lakeTableName
+  type: string
+  required: false
+  description: Name of a second custom table on the Auxiliary (lake-only) plan, for events nothing in Sentinel reads,
+    for example AbstractLake_CL. Empty (default) turns the lake route off. Lake rows cost data lake ingestion and
+    processing (about 0.15 USD per GB at eastus list price against 4.30 in the analytics tier) and are searchable with
+    KQL in the data lake, but analytics rules, ASIM parsers and custom detections do not run on them.
+  default: ''
+- name: lakeCategories
+  type: array
+  required: false
+  description: ACS event categories to send to the lake table instead of the Abstract table, for example
+    ['network', 'dns']. An event matches when its event.category contains one of them. Events an ASIM dataflow takes
+    never go to the lake. Empty (default) turns the lake route off.
+  default: []
+- name: lakeRetentionDays
+  type: int
+  required: false
+  description: Total retention of the lake table in days (30 to 4383).
+  default: 365
 - name: customTableRetentionDays
   type: int
   required: false
@@ -216,6 +253,22 @@ parameters:
   - ServicePrincipal
   - User
   - Group
+- name: additionalTables
+  type: array
+  required: false
+  description: Extra tables to create before the Data Collection Rule, for the dataflows in additionalDataFlows
+    (for example a vendor table such as OktaV2_CL). Each item is {name, columns}. Empty (default) creates none.
+    Set by the Abstract Security for Microsoft Sentinel solution; leave empty when deploying this template on
+    its own.
+  default: []
+- name: additionalDataFlows
+  type: array
+  required: false
+  description: Extra DCR dataflows on the Abstract stream, each {transformKql, outputStream}. They read the
+    same stream as the catch-all and do not change what it keeps. Azure allows at most 20 dataflows per DCR,
+    counting the catch-all, the ASIM routes and the lake route. Set by the Abstract Security for Microsoft
+    Sentinel solution; leave empty when deploying this template on its own.
+  default: []
 outputs:
 - workspaceName
 - workspaceResourceId
@@ -224,6 +277,7 @@ outputs:
 - dataCollectionEndpointUrl
 - logStreamName
 - rbacAssigned
+- dataFlowCount
 - abstractSentinelOnboarding
 verify:
 - check: The outputs carry the three values the Abstract destination needs (from ./deploy.sh; after a portal deploy, use the name shown under the resource group's Deployments)

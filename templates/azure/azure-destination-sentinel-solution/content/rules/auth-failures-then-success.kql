@@ -1,0 +1,40 @@
+// Abstract - Repeated auth failures followed by success.
+// Reads the tables directly and calls no workspace function (Defender custom detections cannot call them).
+// Authentication events are in ASimAuthenticationEventLogs when the ASIM dataflows are on, and in the
+// Abstract table otherwise (or in both, when the one-copy option is off); one row per Abstract event id.
+// When the deployment stores a vendor's events only in that vendor's table (excludeNativeVendorsFromAsim), that table is read too.
+let lookback = 1h;
+let auth = union isfuzzy=true
+    (AbstractEventLogs_CL
+        | where TimeGenerated > ago(lookback)
+        | extend _category = tolower(tostring(event.category)), _outcome = tolower(tostring(event.outcome))
+        | where _category has "authentication" or _category has "session" or tolower(action) has_any ("login", "logon", "auth")
+        | project TimeGenerated, AbstractEventId = acs_id, SrcIpAddr = coalesce(source_ipv4, source_ipv6, source_address),
+            ActorUsername = coalesce(user_name, user_id), EventProduct = product,
+            EventResult = case(_outcome in ("success", "succeeded", "allowed", "allow"), "Success",
+                               _outcome in ("failure", "failed", "fail", "denied", "blocked", "deny"), "Failure", "NA")),
+    (ASimAuthenticationEventLogs
+        | where TimeGenerated > ago(lookback)
+        | where isnotnull(AdditionalFields.AbstractEventId)
+        | project TimeGenerated, AbstractEventId = tostring(AdditionalFields.AbstractEventId), SrcIpAddr,
+            ActorUsername = TargetUsername, EventProduct, EventResult),
+    (OktaV2_CL
+        | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'okta')
+        | where TimeGenerated > ago(lookback)
+        | where EventOriginalType has_any ("user.session.start", "user.authentication")
+        | project TimeGenerated, AbstractEventId = EventOriginalUid, SrcIpAddr, ActorUsername, EventProduct = "Okta", EventResult)
+    | extend _key = iff(isempty(AbstractEventId), strcat(tostring(TimeGenerated), SrcIpAddr, ActorUsername, EventResult), AbstractEventId)
+    | summarize arg_max(TimeGenerated, *) by _key;
+let failures = auth
+    | where EventResult == "Failure"
+    | summarize Failures = count(), FailUsers = make_set(ActorUsername, 25) by SrcIpAddr, bin(TimeGenerated, 10m)
+    | where Failures >= 10;
+let successes = auth
+    | where EventResult == "Success"
+    | project SuccessTime = TimeGenerated, SrcIpAddr, ActorUsername, AbstractInsightId = AbstractEventId, EventProduct;
+failures
+| join kind=inner successes on SrcIpAddr
+| where SuccessTime between (TimeGenerated .. (TimeGenerated + 10m))
+| where set_has_element(FailUsers, ActorUsername)
+| project SuccessTime, SrcIpAddr, ActorUsername, Failures, EventProduct, AbstractInsightId
+| sort by Failures desc

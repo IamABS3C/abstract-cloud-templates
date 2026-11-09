@@ -947,6 +947,8 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
 No plan above needs these on their own.
 
+- [Abstract Security for Microsoft Sentinel: one-deploy solution](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-destination-sentinel-solution): One deployment that builds the Sentinel destination's ingestion stack and installs the Abstract content for Sentinel together, with optional ASIM, lake and vendor-native routes. Use it instead of deploying the Sentinel destination and the content pack separately.
+- [Sentinel discovery: read-only inventory run from your own subscription](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-destination-sentinel-discovery): A read-only inventory of an existing Sentinel workspace, run from your own subscription, with a self-contained HTML report in a storage account you own. Deploy it alone, or as part of the solution with deployDiscovery.
 - [Read access to a Key Vault: one role assignment](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-access-key-vault-secrets-reader): A building block the Sentinel templates call for you. Deploy it alone only to grant one identity read access to an existing Key Vault.
 
 ## Not covered yet

@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "![Abstract Security](https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/portal-badge.png)\n\n# ABSTRACT SECURITY\n**The Security Data Pipeline Platform.** Deliver enriched, normalized security events to any destination — in real time, at scale.\n\n[abstract.security](https://abstract.security) · [Documentation](https://docs.abstractsecurity.app/docs/integrations/) · [Book a demo](https://abstract.security)\n\n---\n### Per-subscription app registrations, automated\nCreates one Entra app registration per subscription for Abstract's Microsoft Graph and Microsoft 365 collection — app + service principal, **admin consent granted and verified**, client secret straight to Key Vault, Azure RBAC on the target subscription.\n\n**Read this first — one manual step is unavoidable.** This workflow acts through a user-assigned managed identity that must already hold Microsoft Graph `Application.ReadWrite.All` and `AppRoleAssignment.ReadWrite.All`, consented by a **Global Administrator**. Nothing can automate that grant: an identity able to assign app roles can grant *itself* anything in the directory, so automating it would be a privilege-escalation hole. Run `./deploy.sh bootstrap` from this template's folder once per tenant, then come back here.\n\n**Understand what \"per subscription\" really means.** Entra app registrations and their Graph permissions are **tenant**-level objects — Graph permissions cannot be scoped to a subscription. What this actually isolates per subscription is **Azure RBAC**. One app per subscription gives you separate credentials, separate RBAC and independent revocation; it does *not* partition Graph data access.\n\n**Why a workflow and not Azure Policy.** Azure Policy cannot create Entra objects — a `DeployIfNotExists` policy deploys an ARM template, and app registrations are not ARM resources. The policy variant (the `azure-access-app-registration-management-group-policy` template) works around that by deploying a privileged container into every subscription. This path keeps the tier-0 identity in **one** place, gives you a single run history as the audit trail, and costs nothing per subscription. Prefer it unless governance mandates that everything arrive via Policy.\n\n**Verified against a live tenant (2026-08-03):** consent is confirmed by reading `appRoleAssignments` back from Graph, not by trusting the POST — so a shortfall returns HTTP 500 naming the exact count instead of silently leaving Abstract to hit 403s.",
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-access-app-registration-logic-app/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Abstract access to new subscriptions: app registrations by Logic App**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. The recommended path for per-subscription app registrations: one Logic App in one resource group, running as one pre-consented identity, calls Microsoft Graph directly when a subscription is created or tagged. Same outcome as the policy path with one identity to audit, no per-subscription compute and a single run history.\n\n### Per-subscription app registrations, automated\nCreates one Entra app registration per subscription for Abstract's Microsoft Graph and Microsoft 365 collection \u2014 app + service principal, **admin consent granted and verified**, client secret straight to Key Vault, Azure RBAC on the target subscription.\n\n**Read this first \u2014 one manual step is unavoidable.** This workflow acts through a user-assigned managed identity that must already hold Microsoft Graph `Application.ReadWrite.All` and `AppRoleAssignment.ReadWrite.All`, consented by a **Global Administrator**. Nothing can automate that grant: an identity able to assign app roles can grant *itself* anything in the directory, so automating it would be a privilege-escalation hole. Run `./deploy.sh bootstrap` from this template's folder once per tenant, then come back here.\n\n**Understand what \"per subscription\" really means.** Entra app registrations and their Graph permissions are **tenant**-level objects \u2014 Graph permissions cannot be scoped to a subscription. What this actually isolates per subscription is **Azure RBAC**. One app per subscription gives you separate credentials, separate RBAC and independent revocation; it does *not* partition Graph data access.\n\n**Why a workflow and not Azure Policy.** Azure Policy cannot create Entra objects \u2014 a `DeployIfNotExists` policy deploys an ARM template, and app registrations are not ARM resources. The policy variant (the `azure-access-app-registration-management-group-policy` template) works around that by deploying a privileged container into every subscription. This path keeps the tier-0 identity in **one** place, gives you a single run history as the audit trail, and costs nothing per subscription. Prefer it unless governance mandates that everything arrive via Policy.\n\n**Verified against a live tenant (2026-08-03):** consent is confirmed by reading `appRoleAssignments` back from Graph, not by trusting the POST \u2014 so a shortfall returns HTTP 500 naming the exact count instead of silently leaving Abstract to hit 403s.",
         "resourceGroup": {
           "constraints": {
             "validations": []
@@ -22,7 +22,7 @@
         "visible": true,
         "options": {
           "icon": "Warning",
-          "text": "PREREQUISITE — the managed identity below must already have Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All with admin consent. Without it every run fails at the first Graph call. Create and consent it with: ./deploy.sh bootstrap -g <this-resource-group>",
+          "text": "PREREQUISITE \u2014 the managed identity below must already have Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All with admin consent. Without it every run fails at the first Graph call. Create and consent it with: ./deploy.sh bootstrap -g <this-resource-group>",
           "uri": "https://learn.microsoft.com/graph/permissions-reference"
         }
       },
@@ -58,7 +58,7 @@
         "name": "keyVaultName",
         "type": "Microsoft.Common.TextBox",
         "label": "Central Key Vault name",
-        "toolTip": "Existing vault that receives every generated client secret. Deliberately central rather than one vault per subscription — scattering tier-0 secrets across the estate is worse, not better. Grant the identity Key Vault Secrets Officer on it.",
+        "toolTip": "Existing vault that receives every generated client secret. Deliberately central rather than one vault per subscription \u2014 scattering tier-0 secrets across the estate is worse, not better. Grant the identity Key Vault Secrets Officer on it.",
         "placeholder": "e.g. kv-abstract-secrets",
         "constraints": {
           "required": true,
@@ -74,6 +74,16 @@
           "icon": "Info",
           "text": "The vault must already exist and the identity needs write access to it. RBAC vault: grant Key Vault Secrets Officer. Access-policy vault: grant get/set/list on secrets. ./deploy.sh grant -g <rg> -k <vault> detects which model the vault uses and does the right one."
         }
+      },
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
       }
     ],
     "steps": [
@@ -86,7 +96,7 @@
             "type": "Microsoft.Common.TextBox",
             "label": "App display-name pattern",
             "defaultValue": "Abstract-{sub}",
-            "toolTip": "{sub} is replaced with the subscription ID. This is ALSO the idempotency key — the workflow reuses an app with a matching name rather than creating a duplicate, so re-running is safe.",
+            "toolTip": "{sub} is replaced with the subscription ID. This is ALSO the idempotency key \u2014 the workflow reuses an app with a matching name rather than creating a duplicate, so re-running is safe.",
             "constraints": {
               "required": true,
               "regex": "^.*\\{sub\\}.*$",
@@ -98,13 +108,22 @@
             "type": "Microsoft.Common.OptionsGroup",
             "label": "Graph permission set",
             "defaultValue": "Abstract standard (recommended)",
-            "toolTip": "All names are verified to exist as Graph APPLICATION permissions. Note that 'Security.Read.All' is deliberately absent from every set here — it does not exist as an application permission, nor as a delegated scope, and requesting it silently produces a gap.",
+            "toolTip": "All names are verified to exist as Graph APPLICATION permissions. Note that 'Security.Read.All' is deliberately absent from every set here \u2014 it does not exist as an application permission, nor as a delegated scope, and requesting it silently produces a gap.",
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "Abstract standard (recommended)", "value": "standard" },
-                { "label": "Identity + audit only (minimal)", "value": "minimal" },
-                { "label": "Standard + Defender TI and posture extras", "value": "extended" }
+                {
+                  "label": "Abstract standard (recommended)",
+                  "value": "standard"
+                },
+                {
+                  "label": "Identity + audit only (minimal)",
+                  "value": "minimal"
+                },
+                {
+                  "label": "Standard + Defender TI and posture extras",
+                  "value": "extended"
+                }
               ]
             }
           },
@@ -114,7 +133,7 @@
             "visible": "[equals(steps('app').permissionSet, 'standard')]",
             "options": {
               "icon": "Info",
-              "text": "Standard (12): AuditLog.Read.All · SecurityAlert.Read.All · SecurityEvents.Read.All · SecurityIncident.Read.All · Directory.Read.All · IdentityRiskEvent.Read.All · IdentityRiskyUser.Read.All · IdentityRiskyServicePrincipal.Read.All · ThreatHunting.Read.All · User.Read.All · Group.Read.All · Device.Read.All"
+              "text": "Standard (12): AuditLog.Read.All \u00b7 SecurityAlert.Read.All \u00b7 SecurityEvents.Read.All \u00b7 SecurityIncident.Read.All \u00b7 Directory.Read.All \u00b7 IdentityRiskEvent.Read.All \u00b7 IdentityRiskyUser.Read.All \u00b7 IdentityRiskyServicePrincipal.Read.All \u00b7 ThreatHunting.Read.All \u00b7 User.Read.All \u00b7 Group.Read.All \u00b7 Device.Read.All"
             }
           },
           {
@@ -123,7 +142,7 @@
             "visible": "[equals(steps('app').permissionSet, 'minimal')]",
             "options": {
               "icon": "Info",
-              "text": "Minimal (4): AuditLog.Read.All · SecurityAlert.Read.All · SecurityIncident.Read.All · Directory.Read.All. Enough for Entra sign-in/audit plus alerts and incidents. No advanced hunting, no identity-risk detail, no device or group enrichment."
+              "text": "Minimal (4): AuditLog.Read.All \u00b7 SecurityAlert.Read.All \u00b7 SecurityIncident.Read.All \u00b7 Directory.Read.All. Enough for Entra sign-in/audit plus alerts and incidents. No advanced hunting, no identity-risk detail, no device or group enrichment."
             }
           },
           {
@@ -132,7 +151,7 @@
             "visible": "[equals(steps('app').permissionSet, 'extended')]",
             "options": {
               "icon": "Info",
-              "text": "Extended (17) = the 12 standard, plus AuditLogsQuery.Read.All (unified audit via Graph) · ThreatIndicators.Read.All · ThreatIntelligence.Read.All · Policy.Read.All (Conditional Access posture) · IdentityRiskyAgent.Read.All (agent identity risk). Several need Entra ID P2 or Defender licensing; an unlicensed permission is harmless but returns no data."
+              "text": "Extended (17) = the 12 standard, plus AuditLogsQuery.Read.All (unified audit via Graph) \u00b7 ThreatIndicators.Read.All \u00b7 ThreatIntelligence.Read.All \u00b7 Policy.Read.All (Conditional Access posture) \u00b7 IdentityRiskyAgent.Read.All (agent identity risk). Several need Entra ID P2 or Defender licensing; an unlicensed permission is harmless but returns no data."
             }
           },
           {
@@ -156,14 +175,26 @@
               "Reader",
               "Azure Event Hubs Data Receiver"
             ],
-            "toolTip": "This is the ONLY real per-subscription boundary — Graph application permissions are tenant-wide and cannot be scoped to a subscription.",
+            "toolTip": "This is the ONLY real per-subscription boundary \u2014 Graph application permissions are tenant-wide and cannot be scoped to a subscription.",
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "Reader", "value": "acdd72a7-3385-48ef-bd42-f606fba81ae7" },
-                { "label": "Azure Event Hubs Data Receiver", "value": "a638d3c7-ab3a-418d-83e6-5f17a39d4fde" },
-                { "label": "Storage Blob Data Reader", "value": "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1" },
-                { "label": "Monitoring Reader", "value": "43d0d8ad-25c7-4714-9337-8ba259a9fe05" }
+                {
+                  "label": "Reader",
+                  "value": "acdd72a7-3385-48ef-bd42-f606fba81ae7"
+                },
+                {
+                  "label": "Azure Event Hubs Data Receiver",
+                  "value": "a638d3c7-ab3a-418d-83e6-5f17a39d4fde"
+                },
+                {
+                  "label": "Storage Blob Data Reader",
+                  "value": "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"
+                },
+                {
+                  "label": "Monitoring Reader",
+                  "value": "43d0d8ad-25c7-4714-9337-8ba259a9fe05"
+                }
               ]
             }
           }
@@ -237,7 +268,7 @@
             "visible": "[steps('trigger').useTagGate]",
             "options": {
               "icon": "Info",
-              "text": "The workflow reads tags from /providers/Microsoft.Resources/tags/default, NOT from the subscription GET — verified on a live tenant that the subscription GET omits the tags property entirely for a Reader-level caller, which made the gate skip everything. If a run reports skipped-not-tagged with an empty tagsFound, the identity cannot read tags and needs at least Reader on that subscription."
+              "text": "The workflow reads tags from /providers/Microsoft.Resources/tags/default, NOT from the subscription GET \u2014 verified on a live tenant that the subscription GET omits the tags property entirely for a Reader-level caller, which made the gate skip everything. If a run reports skipped-not-tagged with an empty tagsFound, the identity cannot read tags and needs at least Reader on that subscription."
             }
           },
           {
@@ -272,7 +303,7 @@
             "type": "Microsoft.Common.InfoBox",
             "options": {
               "icon": "Warning",
-              "text": "STEP 1 — Grant the identity what it needs. Key Vault Secrets Officer on the vault, and Owner (or Contributor + User Access Administrator) on each target subscription, because the workflow assigns RBAC there. Run: ./deploy.sh grant -g <rg> -k <vault> -s <subscription-id>"
+              "text": "STEP 1 \u2014 Grant the identity what it needs. Key Vault Secrets Officer on the vault, and Owner (or Contributor + User Access Administrator) on each target subscription, because the workflow assigns RBAC there. Run: ./deploy.sh grant -g <rg> -k <vault> -s <subscription-id>"
             }
           },
           {
@@ -280,7 +311,7 @@
             "type": "Microsoft.Common.InfoBox",
             "options": {
               "icon": "Info",
-              "text": "STEP 2 — Test with ONE subscription before trusting it. ./deploy.sh onboard -g <rg> -s <subscription-id>. A consent shortfall returns HTTP 500 with the exact verified/expected count and creates no secret, so nothing is left half-provisioned."
+              "text": "STEP 2 \u2014 Test with ONE subscription before trusting it. ./deploy.sh onboard -g <rg> -s <subscription-id>. A consent shortfall returns HTTP 500 with the exact verified/expected count and creates no secret, so nothing is left half-provisioned."
             }
           },
           {
@@ -288,7 +319,7 @@
             "type": "Microsoft.Common.InfoBox",
             "options": {
               "icon": "Info",
-              "text": "STEP 3 — Backfill and then automate. The same Onboard command onboards existing subscriptions; run it per subscription (or loop it). Once a manual run succeeds, redeploy with the event trigger enabled so future subscriptions onboard themselves."
+              "text": "STEP 3 \u2014 Backfill and then automate. The same Onboard command onboards existing subscriptions; run it per subscription (or loop it). Once a manual run succeeds, redeploy with the event trigger enabled so future subscriptions onboard themselves."
             }
           },
           {
@@ -296,7 +327,7 @@
             "type": "Microsoft.Common.InfoBox",
             "options": {
               "icon": "Info",
-              "text": "STEP 4 — Audit what exists. ../_modules/deploy-appreg.sh -a Status -g <rg> shows the identity, its consent, every Abstract app and every secret with its expiry. ./deploy.sh verify --app-id <id> re-checks one app and names any missing permission, so \"consent looks fine but Abstract gets 403\" is diagnosable in one command."
+              "text": "STEP 4 \u2014 Audit what exists. ../_modules/deploy-appreg.sh -a Status -g <rg> shows the identity, its consent, every Abstract app and every secret with its expiry. ./deploy.sh verify --app-id <id> re-checks one app and names any missing permission, so \"consent looks fine but Abstract gets 403\" is diagnosable in one command."
             }
           },
           {
@@ -304,7 +335,7 @@
             "type": "Microsoft.Common.InfoBox",
             "options": {
               "icon": "Info",
-              "text": "Secrets never appear in deployment outputs, workflow outputs or run history — the Key Vault write action has secureData set on both inputs and outputs. Read them from Key Vault, and give Abstract the value from there."
+              "text": "Secrets never appear in deployment outputs, workflow outputs or run history \u2014 the Key Vault write action has secureData set on both inputs and outputs. Read them from Key Vault, and give Abstract the value from there."
             }
           }
         ]

@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Provisions the Azure side of the Abstract Azure EventHub Destination: an Event Hubs namespace and one hub that Abstract delivers processed events into, with a Send-only SAS rule or an RBAC grant. Safe Mode keeps public access on so Abstract can always reach the hub during onboarding.
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group

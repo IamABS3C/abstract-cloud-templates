@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 The recommended path for per-subscription app registrations: one Logic App in one resource group, running as one pre-consented identity, calls Microsoft Graph directly when a subscription is created or tagged. Same outcome as the policy path with one identity to audit, no per-subscription compute and a single run history.
 
 **Cloud:** azure · **Role:** access · **Scope:** resource-group

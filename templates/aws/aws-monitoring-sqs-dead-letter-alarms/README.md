@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Creates a CloudWatch alarm on each of up to ten existing SQS dead-letter queues and one SNS topic they publish to, with an optional email subscription, so a message Abstract could not process is seen within minutes. It creates no queue and changes none. Deployed in a test account on 2026-10-07. A message on the dead-letter queue put the alarm in ALARM.
 
 **Cloud:** aws · **Role:** monitoring · **Scope:** account

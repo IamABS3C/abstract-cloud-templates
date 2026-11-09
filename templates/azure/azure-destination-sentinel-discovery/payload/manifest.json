@@ -1,0 +1,32 @@
+{
+ "bundles": {
+  "kit": {
+   "b64Chars": 41528,
+   "files": [
+    "Get-SentinelInventory.ps1",
+    "az"
+   ],
+   "sha256": "6fed05ec797358ab2947d55fae40902d822582128ce90c557a7c65e8ec3639c3"
+  },
+  "report": {
+   "b64Chars": 56256,
+   "files": [
+    "abstract-logo-black.svg",
+    "asim_builtin_sources.json",
+    "assess.py",
+    "build_html_report.py",
+    "table_features.json"
+   ],
+   "sha256": "f9bc6881bd859a276adb7b1eac3cde59d49bac9d355f4cf1719880621d4acd61"
+  }
+ },
+ "sources": {
+  "kit/Get-SentinelInventory.ps1": "ead7154c6a3e09d81f27454de17f7d3b91775646727c47c62c9fb0140ac4cb4c",
+  "kit/az": "c4a54123cdbfd10c02e2592e7eef17cb7d372c021a7d6c008ba9745688ba2977",
+  "report/abstract-logo-black.svg": "5cac2cff0ac62e8b4befffaa63e15c3973c8888578cf56a4760c49bf3ff75b9c",
+  "report/asim_builtin_sources.json": "48dc2f94c96cf02423b4637800b5c44986fe0cb9688fe2edaac5e3720ac2b293",
+  "report/assess.py": "d1cf0e4e61b1ef24dbf90fbcbd506fd0e909c9996548ecf5e5a250005736ddfe",
+  "report/build_html_report.py": "7493976381a4fa7f270ec11f67d6302517b92a8954f1a17173ab45d689f21a4f",
+  "report/table_features.json": "d6795ee1eda25c56c8a718021a5204ace30e5b10c9020dba9d63fd89d7f28fe1"
+ }
+}

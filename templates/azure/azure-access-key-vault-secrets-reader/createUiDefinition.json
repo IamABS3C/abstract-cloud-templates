@@ -70,13 +70,35 @@
         "constraints": {
           "required": true,
           "allowedValues": [
-            { "label": "Not specified", "value": "" },
-            { "label": "Service principal", "value": "ServicePrincipal" },
-            { "label": "User", "value": "User" },
-            { "label": "Group", "value": "Group" }
+            {
+              "label": "Not specified",
+              "value": ""
+            },
+            {
+              "label": "Service principal",
+              "value": "ServicePrincipal"
+            },
+            {
+              "label": "User",
+              "value": "User"
+            },
+            {
+              "label": "Group",
+              "value": "Group"
+            }
           ]
         },
         "visible": true
+      },
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
       }
     ],
     "steps": [],
@@ -85,6 +107,11 @@
       "principalId": "[basics('principalId')]",
       "roleDefinitionId": "[basics('roleDefinitionId')]",
       "principalType": "[basics('principalType')]"
+    },
+    "config": {
+      "basics": {
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-access-key-vault-secrets-reader/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Read access to a Key Vault: one role assignment**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. A small helper that grants one role to one principal on an existing Key Vault. The Sentinel destination templates call it as a module to give their identities Key Vault Secrets Officer or Secrets User on the vault that holds the client secret."
+      }
     }
   }
 }

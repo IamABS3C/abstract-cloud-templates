@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 For logs that are already objects in a bucket, such as a vendor export or an archive being backfilled. The bucket emits an object-created notification to Pub/Sub and Abstract fetches the object; the notification is a pointer, not the data.
 
 **Cloud:** gcp · **Role:** source · **Scope:** project

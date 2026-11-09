@@ -3,12 +3,12 @@
   "view": {
     "kind": "Form",
     "properties": {
-      "title": "Abstract Security — per-subscription app registrations via Azure Policy",
+      "title": "Abstract access to every subscription: app registrations by Policy",
       "steps": [
         {
           "name": "basics",
           "label": "Basics",
-          "description": "Assigns an Azure Policy that creates one Entra app registration per subscription for Abstract's Microsoft Graph and Microsoft 365 collection.\n\n**Read this before deploying — there is a safer path.** Azure Policy cannot create Entra objects: a `DeployIfNotExists` policy deploys an ARM template, and app registrations are not ARM resources. This policy therefore deploys a **privileged container into every target subscription** which then calls Graph. It works, but it needs Owner on each subscription, costs a container run per subscription, scatters the audit trail across N deployment histories, and cannot see the Entra app it created — so it gates on an ARM proxy that can drift.\n\nThe **event-driven path** (the `azure-access-app-registration-logic-app` template) achieves the same outcome with one central identity, one run history, and no per-subscription compute. Use this policy path only when governance mandates that every control arrive through Azure Policy.",
+          "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-access-app-registration-management-group-policy/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Abstract access to every subscription: app registrations by Policy**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Azure Policy cannot create Entra objects, so this policy deploys a deployment script that runs as a pre-consented managed identity and calls Microsoft Graph. Each in-scope subscription gets its own app, credential and subscription-scoped RBAC. The event-driven automation path is safer for most customers.\n\nAssigns an Azure Policy that creates one Entra app registration per subscription for Abstract's Microsoft Graph and Microsoft 365 collection.\n\n**Read this before deploying \u2014 there is a safer path.** Azure Policy cannot create Entra objects: a `DeployIfNotExists` policy deploys an ARM template, and app registrations are not ARM resources. This policy therefore deploys a **privileged container into every target subscription** which then calls Graph. It works, but it needs Owner on each subscription, costs a container run per subscription, scatters the audit trail across N deployment histories, and cannot see the Entra app it created \u2014 so it gates on an ARM proxy that can drift.\n\nThe **event-driven path** (the `azure-access-app-registration-logic-app` template) achieves the same outcome with one central identity, one run history, and no per-subscription compute. Use this policy path only when governance mandates that every control arrive through Azure Policy.",
           "elements": [
             {
               "name": "preferAutomation",
@@ -16,7 +16,7 @@
               "visible": true,
               "options": {
                 "icon": "Warning",
-                "text": "RECOMMENDED ALTERNATIVE — the event-driven Logic App path is live-tested, keeps the tier-0 identity in one place, and costs nothing per subscription. Only continue here if Azure Policy is a governance requirement.",
+                "text": "RECOMMENDED ALTERNATIVE \u2014 the event-driven Logic App path is live-tested, keeps the tier-0 identity in one place, and costs nothing per subscription. Only continue here if Azure Policy is a governance requirement.",
                 "uri": "https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/azure-app-registrations.md"
               }
             },
@@ -26,7 +26,7 @@
               "visible": true,
               "options": {
                 "icon": "Warning",
-                "text": "PREREQUISITE, NOT AUTOMATABLE — the managed identity below must already hold Microsoft Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All, consented by a Global Administrator. Nothing can automate that grant: an identity able to assign app roles can grant ITSELF anything in the directory. Run ./deploy.sh bootstrap -g <resource-group> from this template's folder once per tenant first.",
+                "text": "PREREQUISITE, NOT AUTOMATABLE \u2014 the managed identity below must already hold Microsoft Graph Application.ReadWrite.All + AppRoleAssignment.ReadWrite.All, consented by a Global Administrator. Nothing can automate that grant: an identity able to assign app roles can grant ITSELF anything in the directory. Run ./deploy.sh bootstrap -g <resource-group> from this template's folder once per tenant first.",
                 "uri": "https://learn.microsoft.com/graph/permissions-reference"
               }
             },
@@ -35,7 +35,7 @@
               "type": "Microsoft.Common.ResourceScope",
               "managementGroup": {
                 "label": "Target management group",
-                "toolTip": "The policy is assigned here. Every subscription in this group — today's and every one added later — is in scope."
+                "toolTip": "The policy is assigned here. Every subscription in this group \u2014 today's and every one added later \u2014 is in scope."
               },
               "location": {
                 "label": "Assignment identity region",
@@ -74,8 +74,14 @@
               "constraints": {
                 "required": true,
                 "allowedValues": [
-                  { "label": "Report only (recommended)", "value": "audit" },
-                  { "label": "Enforce — create app registrations", "value": "deploy" }
+                  {
+                    "label": "Report only (recommended)",
+                    "value": "audit"
+                  },
+                  {
+                    "label": "Enforce \u2014 create app registrations",
+                    "value": "deploy"
+                  }
                 ]
               },
               "visible": true
@@ -86,7 +92,17 @@
               "visible": "[equals(steps('basics').rolloutMode, 'deploy')]",
               "options": {
                 "icon": "Warning",
-                "text": "ENFORCE MODE — each in-scope subscription will get an Entra app registration with a client secret, created by a privileged container running in that subscription. Make sure the tag gate on the next step is set, or every subscription in the management group gets a tier-0 credential without an explicit decision."
+                "text": "ENFORCE MODE \u2014 each in-scope subscription will get an Entra app registration with a client secret, created by a privileged container running in that subscription. Make sure the tag gate on the next step is set, or every subscription in the management group gets a tier-0 credential without an explicit decision."
+              }
+            },
+            {
+              "name": "abstractSupport",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "None",
+                "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+                "uri": "https://www.abstract.security/contact-us"
               }
             }
           ]
@@ -101,7 +117,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "Managed identity resource ID",
               "placeholder": "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-abstract-appreg",
-              "toolTip": "The user-assigned identity created and consented by the Bootstrap step. Treat it as tier-0: restrict who can attach it by granting 'Managed Identity Operator' narrowly — that is the real control here.",
+              "toolTip": "The user-assigned identity created and consented by the Bootstrap step. Treat it as tier-0: restrict who can attach it by granting 'Managed Identity Operator' narrowly \u2014 that is the real control here.",
               "constraints": {
                 "required": true,
                 "regex": "^/subscriptions/[^/]+/resource[Gg]roups/[^/]+/providers/Microsoft\\.ManagedIdentity/userAssignedIdentities/[^/]+$",
@@ -114,7 +130,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "Managed identity client ID",
               "placeholder": "00000000-0000-0000-0000-000000000000",
-              "toolTip": "The same identity's client ID. The container needs it for 'az login --identity --username <clientId>' — the resource ID alone is not enough.",
+              "toolTip": "The same identity's client ID. The container needs it for 'az login --identity --username <clientId>' \u2014 the resource ID alone is not enough.",
               "constraints": {
                 "required": true,
                 "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
@@ -126,7 +142,7 @@
               "name": "centralKeyVaultName",
               "type": "Microsoft.Common.TextBox",
               "label": "Central Key Vault name",
-              "toolTip": "Every generated client secret goes here. Deliberately CENTRAL rather than one vault per subscription — scattering tier-0 secrets across the estate is worse, not better.",
+              "toolTip": "Every generated client secret goes here. Deliberately CENTRAL rather than one vault per subscription \u2014 scattering tier-0 secrets across the estate is worse, not better.",
               "constraints": {
                 "required": true,
                 "regex": "^[a-zA-Z][a-zA-Z0-9-]{1,22}[a-zA-Z0-9]$",
@@ -169,7 +185,7 @@
               "visible": true,
               "options": {
                 "icon": "Info",
-                "text": "\"Per subscription\" is narrower than it sounds. Entra app registrations and their Graph permissions are TENANT-level — a Graph application permission cannot be scoped to a subscription. What one app per subscription isolates is credentials and Azure RBAC, NOT Graph or Microsoft 365 data access. Correct this before anyone designs a compliance control on the wrong assumption."
+                "text": "\"Per subscription\" is narrower than it sounds. Entra app registrations and their Graph permissions are TENANT-level \u2014 a Graph application permission cannot be scoped to a subscription. What one app per subscription isolates is credentials and Azure RBAC, NOT Graph or Microsoft 365 data access. Correct this before anyone designs a compliance control on the wrong assumption."
               }
             },
             {
@@ -177,7 +193,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "App display-name pattern",
               "defaultValue": "Abstract-{sub}",
-              "toolTip": "{sub} is replaced with the subscription ID. This is ALSO the idempotency key — an app with a matching name is reused rather than duplicated, so policy re-evaluation is safe.",
+              "toolTip": "{sub} is replaced with the subscription ID. This is ALSO the idempotency key \u2014 an app with a matching name is reused rather than duplicated, so policy re-evaluation is safe.",
               "constraints": {
                 "required": true,
                 "regex": "^.*\\{sub\\}.*$",
@@ -206,30 +222,90 @@
                 "Group.Read.All",
                 "Device.Read.All"
               ],
-              "toolTip": "Every name here was verified to exist as a Graph APPLICATION permission against the live Graph service principal. 'Security.Read.All' is deliberately absent — it exists as neither an application permission nor a delegated scope, and requesting it silently produces a coverage gap.",
+              "toolTip": "Every name here was verified to exist as a Graph APPLICATION permission against the live Graph service principal. 'Security.Read.All' is deliberately absent \u2014 it exists as neither an application permission nor a delegated scope, and requesting it silently produces a coverage gap.",
               "constraints": {
                 "required": true,
                 "allowedValues": [
-                  { "label": "AuditLog.Read.All — Entra audit + sign-in logs", "value": "AuditLog.Read.All" },
-                  { "label": "SecurityAlert.Read.All — alerts_v2", "value": "SecurityAlert.Read.All" },
-                  { "label": "SecurityEvents.Read.All — legacy alerts, secure scores", "value": "SecurityEvents.Read.All" },
-                  { "label": "SecurityIncident.Read.All — Defender XDR incidents", "value": "SecurityIncident.Read.All" },
-                  { "label": "Directory.Read.All — directory objects for enrichment", "value": "Directory.Read.All" },
-                  { "label": "IdentityRiskEvent.Read.All — ID Protection risk detections", "value": "IdentityRiskEvent.Read.All" },
-                  { "label": "IdentityRiskyUser.Read.All — risky users", "value": "IdentityRiskyUser.Read.All" },
-                  { "label": "IdentityRiskyServicePrincipal.Read.All — risky workload identities", "value": "IdentityRiskyServicePrincipal.Read.All" },
-                  { "label": "ThreatHunting.Read.All — Defender XDR advanced hunting", "value": "ThreatHunting.Read.All" },
-                  { "label": "User.Read.All — identity model enrichment", "value": "User.Read.All" },
-                  { "label": "Group.Read.All — group membership enrichment", "value": "Group.Read.All" },
-                  { "label": "Device.Read.All — asset model enrichment", "value": "Device.Read.All" },
-                  { "label": "AuditLogsQuery.Read.All — unified audit via Graph (extra)", "value": "AuditLogsQuery.Read.All" },
-                  { "label": "ThreatIndicators.Read.All — Defender TI indicators (extra)", "value": "ThreatIndicators.Read.All" },
-                  { "label": "ThreatIntelligence.Read.All — Defender TI feed (extra)", "value": "ThreatIntelligence.Read.All" },
-                  { "label": "Policy.Read.All — Conditional Access posture (extra)", "value": "Policy.Read.All" },
-                  { "label": "IdentityRiskyAgent.Read.All — agent identity risk, 2026 (extra)", "value": "IdentityRiskyAgent.Read.All" },
-                  { "label": "SecurityIdentitiesSensors.Read.All — Defender for Identity sensor health (extra)", "value": "SecurityIdentitiesSensors.Read.All" },
-                  { "label": "RoleManagementAlert.Read.Directory — PIM alerts (extra)", "value": "RoleManagementAlert.Read.Directory" },
-                  { "label": "AttackSimulation.Read.All — phishing-training results (extra)", "value": "AttackSimulation.Read.All" }
+                  {
+                    "label": "AuditLog.Read.All \u2014 Entra audit + sign-in logs",
+                    "value": "AuditLog.Read.All"
+                  },
+                  {
+                    "label": "SecurityAlert.Read.All \u2014 alerts_v2",
+                    "value": "SecurityAlert.Read.All"
+                  },
+                  {
+                    "label": "SecurityEvents.Read.All \u2014 legacy alerts, secure scores",
+                    "value": "SecurityEvents.Read.All"
+                  },
+                  {
+                    "label": "SecurityIncident.Read.All \u2014 Defender XDR incidents",
+                    "value": "SecurityIncident.Read.All"
+                  },
+                  {
+                    "label": "Directory.Read.All \u2014 directory objects for enrichment",
+                    "value": "Directory.Read.All"
+                  },
+                  {
+                    "label": "IdentityRiskEvent.Read.All \u2014 ID Protection risk detections",
+                    "value": "IdentityRiskEvent.Read.All"
+                  },
+                  {
+                    "label": "IdentityRiskyUser.Read.All \u2014 risky users",
+                    "value": "IdentityRiskyUser.Read.All"
+                  },
+                  {
+                    "label": "IdentityRiskyServicePrincipal.Read.All \u2014 risky workload identities",
+                    "value": "IdentityRiskyServicePrincipal.Read.All"
+                  },
+                  {
+                    "label": "ThreatHunting.Read.All \u2014 Defender XDR advanced hunting",
+                    "value": "ThreatHunting.Read.All"
+                  },
+                  {
+                    "label": "User.Read.All \u2014 identity model enrichment",
+                    "value": "User.Read.All"
+                  },
+                  {
+                    "label": "Group.Read.All \u2014 group membership enrichment",
+                    "value": "Group.Read.All"
+                  },
+                  {
+                    "label": "Device.Read.All \u2014 asset model enrichment",
+                    "value": "Device.Read.All"
+                  },
+                  {
+                    "label": "AuditLogsQuery.Read.All \u2014 unified audit via Graph (extra)",
+                    "value": "AuditLogsQuery.Read.All"
+                  },
+                  {
+                    "label": "ThreatIndicators.Read.All \u2014 Defender TI indicators (extra)",
+                    "value": "ThreatIndicators.Read.All"
+                  },
+                  {
+                    "label": "ThreatIntelligence.Read.All \u2014 Defender TI feed (extra)",
+                    "value": "ThreatIntelligence.Read.All"
+                  },
+                  {
+                    "label": "Policy.Read.All \u2014 Conditional Access posture (extra)",
+                    "value": "Policy.Read.All"
+                  },
+                  {
+                    "label": "IdentityRiskyAgent.Read.All \u2014 agent identity risk, 2026 (extra)",
+                    "value": "IdentityRiskyAgent.Read.All"
+                  },
+                  {
+                    "label": "SecurityIdentitiesSensors.Read.All \u2014 Defender for Identity sensor health (extra)",
+                    "value": "SecurityIdentitiesSensors.Read.All"
+                  },
+                  {
+                    "label": "RoleManagementAlert.Read.Directory \u2014 PIM alerts (extra)",
+                    "value": "RoleManagementAlert.Read.Directory"
+                  },
+                  {
+                    "label": "AttackSimulation.Read.All \u2014 phishing-training results (extra)",
+                    "value": "AttackSimulation.Read.All"
+                  }
                 ]
               },
               "visible": true
@@ -260,10 +336,22 @@
               "constraints": {
                 "required": true,
                 "allowedValues": [
-                  { "label": "Reader", "value": "acdd72a7-3385-48ef-bd42-f606fba81ae7" },
-                  { "label": "Azure Event Hubs Data Receiver", "value": "a638d3c7-ab3a-418d-83e6-5f17a39d4fde" },
-                  { "label": "Storage Blob Data Reader", "value": "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1" },
-                  { "label": "Monitoring Reader", "value": "43d0d8ad-25c7-4714-9337-8ba259a9fe05" }
+                  {
+                    "label": "Reader",
+                    "value": "acdd72a7-3385-48ef-bd42-f606fba81ae7"
+                  },
+                  {
+                    "label": "Azure Event Hubs Data Receiver",
+                    "value": "a638d3c7-ab3a-418d-83e6-5f17a39d4fde"
+                  },
+                  {
+                    "label": "Storage Blob Data Reader",
+                    "value": "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"
+                  },
+                  {
+                    "label": "Monitoring Reader",
+                    "value": "43d0d8ad-25c7-4714-9337-8ba259a9fe05"
+                  }
                 ]
               },
               "visible": true
@@ -309,7 +397,7 @@
               "visible": "[not(steps('app').useTagGate)]",
               "options": {
                 "icon": "Warning",
-                "text": "NO TAG GATE — every subscription in the management group, now and in future, will receive an Entra app registration and a client secret. That is a large number of tier-0 credentials created with no per-subscription decision. Reconsider."
+                "text": "NO TAG GATE \u2014 every subscription in the management group, now and in future, will receive an Entra app registration and a client secret. That is a large number of tier-0 credentials created with no per-subscription decision. Reconsider."
               }
             },
             {
@@ -317,7 +405,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "Resource group for the deploymentScript",
               "defaultValue": "rg-abstract-appreg",
-              "toolTip": "Created in each target subscription to host the script and its storage account. Nothing sensitive lands here — secrets go straight to the central vault. Microsoft.ContainerInstance and Microsoft.Storage must be registered in each target subscription.",
+              "toolTip": "Created in each target subscription to host the script and its storage account. Nothing sensitive lands here \u2014 secrets go straight to the central vault. Microsoft.ContainerInstance and Microsoft.Storage must be registered in each target subscription.",
               "constraints": {
                 "required": true,
                 "regex": "^[a-zA-Z0-9._()-]{1,90}$",
@@ -338,7 +426,7 @@
               "visible": true,
               "options": {
                 "icon": "Warning",
-                "text": "STEP 1 — Grant the assignment identity Owner on the target subscriptions (it assigns RBAC there, which Contributor cannot do) and Key Vault Secrets Officer on the central vault. The Outputs tab lists the principal ID."
+                "text": "STEP 1 \u2014 Grant the assignment identity Owner on the target subscriptions (it assigns RBAC there, which Contributor cannot do) and Key Vault Secrets Officer on the central vault. The Outputs tab lists the principal ID."
               }
             },
             {
@@ -347,7 +435,7 @@
               "visible": true,
               "options": {
                 "icon": "Warning",
-                "text": "STEP 2 — Read Policy > Compliance while still in report-only. It names exactly which subscriptions would be onboarded. Only then re-deploy in Enforce mode."
+                "text": "STEP 2 \u2014 Read Policy > Compliance while still in report-only. It names exactly which subscriptions would be onboarded. Only then re-deploy in Enforce mode."
               }
             },
             {
@@ -356,7 +444,7 @@
               "visible": true,
               "options": {
                 "icon": "Warning",
-                "text": "STEP 3 — DeployIfNotExists fires only on subscription create or update. Existing subscriptions stay untouched until you run a remediation task: ./deploy.sh remediate -m <mg-id>. Watch the first remediated subscription closely — each one runs a privileged container.",
+                "text": "STEP 3 \u2014 DeployIfNotExists fires only on subscription create or update. Existing subscriptions stay untouched until you run a remediation task: ./deploy.sh remediate -m <mg-id>. Watch the first remediated subscription closely \u2014 each one runs a privileged container.",
                 "uri": "https://learn.microsoft.com/azure/governance/policy/how-to/remediate-resources"
               }
             },
@@ -366,7 +454,7 @@
               "visible": true,
               "options": {
                 "icon": "Info",
-                "text": "AUDIT — ../_modules/deploy-appreg.sh -a Status -g <resource-group> lists the identity, its consent, every Abstract app and every secret with its expiry. ./deploy.sh verify --app-id <id> re-checks one app and names any missing permission, so \"consent looks fine but Abstract gets 403\" is a one-command diagnosis."
+                "text": "AUDIT \u2014 ../_modules/deploy-appreg.sh -a Status -g <resource-group> lists the identity, its consent, every Abstract app and every secret with its expiry. ./deploy.sh verify --app-id <id> re-checks one app and names any missing permission, so \"consent looks fine but Abstract gets 403\" is a one-command diagnosis."
               }
             },
             {
@@ -375,7 +463,7 @@
               "visible": true,
               "options": {
                 "icon": "Info",
-                "text": "KNOWN GAP — nothing here rotates secrets on a schedule; it only avoids churning them. Scheduled rotation plus an Abstract-side credential update is not built yet."
+                "text": "KNOWN GAP \u2014 nothing here rotates secrets on a schedule; it only avoids churning them. Scheduled rotation plus an Abstract-side credential update is not built yet."
               }
             }
           ]

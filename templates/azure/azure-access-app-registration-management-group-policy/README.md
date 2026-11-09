@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Azure Policy cannot create Entra objects, so this policy deploys a deployment script that runs as a pre-consented managed identity and calls Microsoft Graph. Each in-scope subscription gets its own app, credential and subscription-scoped RBAC. The event-driven automation path is safer for most customers.
 
 **Cloud:** azure · **Role:** access · **Scope:** management-group

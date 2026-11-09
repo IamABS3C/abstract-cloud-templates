@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 The portal-wizard variant of the Sentinel destination: a deployment script creates the Entra app registration and, with Key Vault, its client secret, then the template builds the same ingestion stack. It runs as a tier-0 managed identity you create beforehand, so it suits portal-only teams and labs.
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group

@@ -1,0 +1,15 @@
+// Abstract Security - Finding.
+// One alert per Abstract finding that the asim-alert lane wrote to ASimAlertEventLogs, Microsoft's ASIM Alert table.
+// Reads the table directly and calls no workspace function (Defender custom detections cannot call them, and the
+// built-in ASIM Alert parser did not yet read ASimAlertEventLogs when this was tested).
+// With store-once and excludeNativeVendorsFromAsim on, findings are only in this table, so this rule is how they become
+// incidents. Without them, findings are also in AbstractEventLogs_CL and "High or Critical event" sees the high ones:
+// enable one of the two for findings, not both. The placeholder below keeps the rule's text in step with the deployment.
+let lookback = 1h;
+let deployedLanes = dynamic(__ABSTRACT_NATIVE_VENDORS__);
+ASimAlertEventLogs
+| where TimeGenerated > ago(lookback)
+| where isnotnull(AdditionalFields.AbstractEventId) and EventVendor == "Abstract Security"
+| summarize arg_max(TimeGenerated, *) by AbstractInsightId = tostring(AdditionalFields.AbstractEventId)
+| project TimeGenerated, AbstractInsightId, AlertName, AlertDescription, EventSeverity, AttackTactics, AttackTechniques,
+    Username, DvcHostname, DvcIpAddr, RuleName

@@ -4,7 +4,7 @@
   "metadata": {
     "title": "Abstract Security - High/Critical event analytics rule",
     "description": "Scheduled Microsoft Sentinel analytics rule over AbstractEventLogs_CL. Raises an incident for high/critical Abstract events and surfaces the Abstract insight id as the 'AbstractInsightId' custom detail so the Abstract-Verdict playbook can run the agentic verdict. Maps IP and Account entities.",
-    "author": "Abstract Security - Solutions Engineering"
+    "author": "Abstract Security - support@abstract.security"
   },
   "parameters": {
     "workspaceName": {

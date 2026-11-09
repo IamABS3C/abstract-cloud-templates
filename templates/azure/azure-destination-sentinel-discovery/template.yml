@@ -1,0 +1,189 @@
+id: azure-destination-sentinel-discovery
+title: 'Sentinel discovery: read-only inventory run from your own subscription'
+cloud: azure
+role: destination
+scope: resource-group
+summary: 'One Azure deployment that runs the read-only Sentinel inventory kit against one workspace from
+  inside your subscription and writes the output to a storage account you own: a zip, one CSV per area,
+  a self-contained HTML report and, optionally, the inventory workbook. Standalone, or as a module of
+  the Sentinel solution (deployDiscovery).'
+formats:
+- bicep
+- arm
+- script
+depends_on: []
+permissions:
+- role: Owner, or Contributor plus Role Based Access Control Administrator or User Access Administrator
+  where: The deployment resource group, the workspace's resource group, and its subscription if assignSubscriptionReader
+    is on
+  why: 'Deployer: create the resources and the role assignments for the discovery identity.'
+- role: Reader, Microsoft Sentinel Reader, Log Analytics Reader
+  where: The workspace's resource group
+  why: 'The discovery identity: read the workspace, its tables, rules and content.'
+- role: Reader
+  where: The workspace's subscription (assignSubscriptionReader)
+  why: 'The discovery identity: list data collection rules, endpoints, workbooks and playbooks.'
+- role: Storage Blob Data Contributor
+  where: The output container only
+  why: 'The discovery identity: write the report and data files.'
+creates:
+- A user-assigned managed identity abstract-sentinel-discovery-<id>
+- A storage account with public blob access and shared-key access off, and a container sentinel-discovery
+  for the output
+- Two deployment scripts (Azure PowerShell and Azure CLI) that run the inventory and build report.html;
+  Azure adds a temporary storage account and container instance for each and removes them on success
+- The workbook Sentinel inventory (<workspace>) attached to the workspace, when deployWorkbook is on
+never_touches:
+- Workspace settings, tables, data, retention, plans or the pricing tier
+- Analytics rules, automation rules, hunting queries, incidents, watchlists, data connectors, functions
+  or parsers
+- Data collection rules, endpoints and agents
+- Anything in Microsoft Entra ID, and any secret; key vault names are listed, never their contents
+prerequisites:
+- A Log Analytics workspace with Microsoft Sentinel. A workspace created in the same deployment has nothing
+  to read until its first complete day.
+parameters:
+- name: location
+  type: string
+  required: false
+  description: Region for the resources this template creates. The workspace can be in any region.
+- name: workspaceName
+  type: string
+  required: true
+  description: Name of the Log Analytics workspace that has Microsoft Sentinel. It is only read.
+  example: my-sentinel-workspace
+- name: workspaceResourceGroup
+  type: string
+  required: false
+  description: Resource group of the workspace. Defaults to this resource group.
+- name: workspaceSubscriptionId
+  type: string
+  required: false
+  description: Subscription of the workspace. Defaults to this subscription.
+- name: assignSubscriptionReader
+  type: bool
+  required: false
+  description: 'Grant the identity Reader on the workspace subscription. The kit needs it to list data
+    collection rules, endpoints, Sentinel workbooks and playbooks. Off: those areas are recorded as not
+    read.'
+  default: true
+- name: storageAccountName
+  type: string
+  required: false
+  description: Storage account for the output. Empty generates a name. Created with public blob access
+    and shared-key access off.
+  default: ''
+- name: grantDeployerBlobRead
+  type: bool
+  required: false
+  description: Give the person deploying this template Storage Blob Data Reader on the output container,
+    so they can open the report. Shared keys are off, so the Owner role alone cannot read the blobs.
+  default: true
+- name: days
+  type: int
+  required: false
+  description: Look-back window in days for volume, health, agents and rules.
+  default: 30
+- name: deviceDays
+  type: int
+  required: false
+  description: Window in days for the CEF and Syslog sender breakdowns. These scan the raw tables; leave
+    at 1.
+  default: 1
+- name: profileTopTables
+  type: int
+  required: false
+  description: How many of the largest Analytics-plan tables to break down by two columns. 0 turns it
+    off.
+  default: 15
+- name: skipRuleQueryText
+  type: bool
+  required: false
+  description: Leave the KQL text of analytics rules out of the output. The rule-to-table mapping is still
+    produced.
+  default: false
+- name: skipContentQueryText
+  type: bool
+  required: false
+  description: Leave the KQL text of functions, hunting queries and saved searches out of the output.
+    The content-to-table mapping is still produced.
+  default: false
+- name: deployWorkbook
+  type: bool
+  required: false
+  description: Install the Sentinel inventory workbook for this workspace. The workbook resource goes
+    in this resource group.
+  default: true
+- name: sendToAbstract
+  type: bool
+  required: false
+  description: 'Send a copy to Abstract. OFF by default. When on, exactly two files leave your tenant,
+    over HTTPS, to the SAS URL below: inventory.zip (the CSVs and summary.json: Azure resource names and
+    IDs, table volumes, computer names and IP addresses from Heartbeat, device vendor and product names,
+    and the KQL text of rules and functions unless you turned that off) and report.html (the same content
+    as a report). No log records, watchlist items or credentials are in either file. With this off, nothing
+    leaves your tenant.'
+  default: false
+- name: abstractSasUrl
+  type: securestring
+  required: false
+  description: 'Only with sendToAbstract: the HTTPS SAS URL of the container Abstract gave you. It needs
+    write permission on that container only.'
+  secret: true
+- name: scriptRetention
+  type: string
+  required: false
+  description: How long Azure keeps the deployment script resources and their logs after a run (ISO 8601).
+    Azure allows 1 to 26 hours. The output in your storage account is not affected.
+  default: P1D
+- name: rbacWaitMinutes
+  type: int
+  required: false
+  description: Minutes to wait for the role assignments to take effect before failing the deployment.
+  default: 20
+- name: forceUpdateTag
+  type: string
+  required: false
+  description: Change this value to run the discovery again. The default runs it on every deployment.
+- name: tags
+  type: object
+  required: false
+  description: Tags for the resources this template creates.
+  default: {}
+outputs:
+- identityPrincipalId
+- storageAccountName
+- containerName
+- runPrefix
+- reportBlobUrl
+- areasRead
+- readErrors
+- readsRefused
+- pricesLive
+- sentToAbstract
+- listCostPerMonthNow
+- workbookId
+verify:
+- check: The output reportBlobUrl names report.html in the container, and readErrors is 0 or the listed
+    reads are explained by read_errors.csv
+  command: az deployment group show -g RESOURCE_GROUP -n azure-destination-sentinel-discovery --query properties.outputs
+cost: Storage for the output, and two short container instances per run. Azure removes the containers
+  when the scripts succeed. The inventory reads Azure Resource Manager and Log Analytics at no query charge
+  on Analytics tables; Basic and Auxiliary tables are charged per GB scanned and only CommonSecurityLog
+  and Syslog are read there, for deviceDays.
+when_to_use: A customer who wants a read-only inventory of a Sentinel workspace, without installing anything
+  or running a script on a workstation.
+when_not_to_use: When an operator can run the kit by hand from a workstation; the discovery scripts in
+  the Sentinel Discovery Kit do the same reads.
+cleanup_note: scripts/teardown.sh RESOURCE_GROUP shows what would be removed; with --yes it removes the
+  role assignments on the workspace resource group and subscription, their deployment-history records,
+  and then the discovery resource group with every report in it.
+live_test: static
+lint_skip:
+- check: 'arm-ttk:DeploymentTemplate Must Not Contain Hardcoded Uri'
+  reason: The two remaining hits are https://api.loganalytics.io, the Log Analytics query endpoint and token audience in the
+    inventory bootstrap script. ARM's environment() has no Log Analytics endpoint; the Resource Manager and storage hosts
+    come from environment().
+- check: 'arm-ttk:Template Should Not Contain Blanks'
+  reason: The blanks are inside the workbook's serializedData string (an empty parameter value, additionalResourceOptions
+    and styleSettings), which is Azure Workbooks' own JSON and not template properties.

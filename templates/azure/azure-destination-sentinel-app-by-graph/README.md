@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Creates the Entra app registration and service principal as the person deploying, using the Microsoft Graph Bicep extension, then calls the standard destination template. No managed identity has to exist first; optional secret automation adds one that owns only this app. CLI only: needs the Microsoft Graph Bicep extension (Azure CLI or PowerShell).
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group

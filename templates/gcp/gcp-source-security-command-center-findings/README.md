@@ -5,6 +5,8 @@
 > [!NOTE]
 > Abstract keeps these findings only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser, which stores them as gcp.scc_findings, Event Threat Detection findings included. The managed parser as shipped keeps Cloud Audit Logs only and stored none of them in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers.
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Security Command Center does not flow through the Log Router; it publishes to Pub/Sub through its own notification config, so no sink will ever collect it. This deployment creates that config and a dedicated topic and subscription, reusing Abstract's existing service account.
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization

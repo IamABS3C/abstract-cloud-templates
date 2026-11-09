@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Azure Monitor cannot send diagnostic data directly to a third party, so every Azure onboarding starts here: an Event Hubs namespace with one hub per log source, a consumer group Abstract reads from, and a checkpoint storage account. Deploy it first; the Activity Log, Entra ID and policy templates consume its outputs.
 
 **Cloud:** azure · **Role:** foundation · **Scope:** resource-group

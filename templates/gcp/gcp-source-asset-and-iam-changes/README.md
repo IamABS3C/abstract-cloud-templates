@@ -5,6 +5,8 @@
 > [!NOTE]
 > Abstract keeps these records only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser, whose asset sub-parser comes from this template's parsers/cloud-asset-inventory.yml: it stores each IAM policy change as gcp.asset_inventory with action iam_policy_grant, iam_policy_revoke or iam_policy_change. The managed parser as shipped keeps Cloud Audit Logs only and stored none of them in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers.
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Cloud Asset Inventory publishes to Pub/Sub through its own feed, which no log sink can carry. It records what an IAM policy now is and what it was before, the diff a detection wants, alongside the audit log of who called which API.
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization

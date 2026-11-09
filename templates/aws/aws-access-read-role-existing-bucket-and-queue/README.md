@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Creates only the least-privilege IAM role Abstract assumes, with an External ID, to read log objects from an existing bucket and consume notifications from an existing queue. It is the role-based option the Abstract S3 + SQS integration wizards refer to as Generate IAM Role Permissions.
 
 **Cloud:** aws · **Role:** access · **Scope:** account

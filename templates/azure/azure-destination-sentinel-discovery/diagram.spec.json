@@ -1,0 +1,102 @@
+{
+ "frame": {
+  "title": "Read-only Sentinel inventory, run in your subscription",
+  "subtitle": "Two deployment scripts read the workspace with a managed identity and write a report to your storage account",
+  "cloud_label": "Your resource group",
+  "height": 520,
+  "abstract_y": 160,
+  "abstract_label": "Abstract",
+  "abstract_sublabel": "receives the report only if\nsendToAbstract is on (off by default)"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Sentinel discovery",
+   "nodes": [
+    {
+     "id": "ws",
+     "label": "Sentinel workspace",
+     "sublabel": "only read",
+     "icon": "azure:management_governance/Log_Analytics_Workspaces",
+     "x": 330,
+     "y": 40,
+     "existing": true
+    },
+    {
+     "id": "mi",
+     "label": "Managed identity",
+     "sublabel": "Reader roles on the workspace\nresource group and subscription",
+     "icon": "azure:identity/Managed_Identities",
+     "x": 60,
+     "y": 250,
+     "builds": [
+      "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "Microsoft.Authorization/roleAssignments"
+     ]
+    },
+    {
+     "id": "scripts",
+     "label": "Deployment scripts",
+     "sublabel": "inventory (PowerShell)\nreport (Azure CLI)",
+     "icon": "azure:management_governance/Automation_Accounts",
+     "x": 330,
+     "y": 250,
+     "builds": [
+      "Microsoft.Resources/deploymentScripts"
+     ]
+    },
+    {
+     "id": "sa",
+     "label": "Storage account",
+     "sublabel": "container sentinel-discovery\nreport.html, CSVs, zip",
+     "icon": "azure:storage/Storage_Accounts",
+     "x": 600,
+     "y": 250,
+     "builds": [
+      "Microsoft.Storage/storageAccounts"
+     ]
+    },
+    {
+     "id": "wb",
+     "label": "Inventory workbook",
+     "sublabel": "optional: deployWorkbook",
+     "icon": "azure:general/Workbooks",
+     "x": 60,
+     "y": 40,
+     "builds": [
+      "Microsoft.Insights/workbooks"
+     ]
+    }
+   ],
+   "edges": [
+    {
+     "from": "mi",
+     "to": "scripts",
+     "label": "runs as"
+    },
+    {
+     "from": "scripts",
+     "to": "ws",
+     "label": "reads"
+    },
+    {
+     "from": "scripts",
+     "to": "sa",
+     "label": "writes"
+    },
+    {
+     "from": "wb",
+     "to": "ws",
+     "label": "attached to"
+    },
+    {
+     "from": "sa",
+     "to": "abstract",
+     "label": "optional, off by default",
+     "tone": "muted",
+     "dashed": true
+    }
+   ]
+  }
+ ]
+}

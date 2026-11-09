@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Creates the customer managed KMS key GuardDuty's S3 export requires, a hardened findings bucket, a publishing destination on your existing GuardDuty detector, the SQS queue the bucket notifies and the role Abstract assumes to read them. Not yet deployed by Abstract; canary pending.
 
 **Cloud:** aws · **Role:** source · **Scope:** account

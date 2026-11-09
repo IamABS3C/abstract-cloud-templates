@@ -1,0 +1,4 @@
+{
+  "description": "Lane precedence for nativeVendors. A lane takes an event only when no enabled lane earlier in this list takes it, so every event lands in exactly one lane table. Order: Abstract findings first (asim-alert), because a finding about a vendor's record must reach ASimAlertEventLogs and the finding rule; then the vendor-native tables, because Microsoft's solution for that vendor reads them and Microsoft's ASIM parsers read most of them; then the ASIM event tables, which take what no vendor lane took. Every catalog lane must be listed (tools/sentinel-solution/test_solution.py checks it).",
+  "order": ["asim-alert", "okta", "crowdstrike-hosts", "aws-cloudtrail", "csl-cef", "csl-acs", "syslog", "asim-dhcp", "asim-user-management"]
+}

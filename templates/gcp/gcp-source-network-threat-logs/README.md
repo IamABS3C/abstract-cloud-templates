@@ -5,6 +5,8 @@
 > [!NOTE]
 > Abstract keeps these logs only when the GCP Pub/Sub Source configuration for this subscription runs the extended GCP Pub/Sub parser. The managed parser as shipped keeps Cloud Audit Logs only, and stored none of 9,639 network log entries pulled in a test. The extended parser is not in the managed integration yet; until it is, Abstract applies it to this configuration's parsers. It keeps firewall rule, Cloud DNS query, VPC Flow and Cloud NAT logs; load balancer (Cloud Armor) and Cloud IDS records are still discarded.
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Routes network logs to a Pub/Sub topic of their own with a second, filtered sink: firewall rule and Cloud DNS query logs, VPC Flow and Cloud NAT logs when you add them, and load balancer (Cloud Armor) and Cloud IDS threat logs. Abstract keeps the firewall, DNS, VPC Flow and Cloud NAT records once this subscription's configuration runs the extended GCP Pub/Sub parser.
 
 **Cloud:** gcp · **Role:** source · **Scope:** organization

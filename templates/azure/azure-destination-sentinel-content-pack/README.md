@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 A self-contained approximation of the Abstract Microsoft Sentinel solution that installs connector tiles, an ASIM parser function, analytics and automation rules, hunting queries, workbooks and playbooks into an existing Sentinel workspace. Sufficient for a lab or private install; not a substitute for the certified Content Hub package.
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
@@ -68,7 +70,7 @@ az group create -n RESOURCE_GROUP -l LOCATION   # skip if it exists
 - Three hunting queries: Abstract_RareProduct, Abstract_HighRiskIdentities, Abstract_DailyValueSummary
 - Two scheduled analytics rules, installed disabled
 - Three automation rules, installed disabled and scoped to this pack's two rules
-- Three workbooks
+- Two workbooks: Pipeline Overview and Value &amp; ROI
 - Three playbooks as nested deployments: enrich, verdict and tune
 
 ## Never touches

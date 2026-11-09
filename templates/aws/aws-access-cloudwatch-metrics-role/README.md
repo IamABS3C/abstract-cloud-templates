@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Creates only the read-only IAM role Abstract assumes, with an External ID, to read CloudWatch metrics and describe RDS instances for the AWS CloudWatch Metrics integration. There is no bucket and no queue. Deployed in a test account on 2026-10-07. The role was assumed with its External ID.
 
 **Cloud:** aws · **Role:** access · **Scope:** account

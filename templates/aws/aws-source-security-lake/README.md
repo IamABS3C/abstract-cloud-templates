@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Registers Abstract as a Security Lake subscriber with S3 data access and an SQS notification, so Abstract is notified of and reads the normalized OCSF objects Security Lake collects. Use it when WAF or other logs are centralised in Security Lake rather than a per-service bucket.
 
 **Cloud:** aws · **Role:** source · **Scope:** account

@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Admin Activity audit logs are always on; Data Access logs are off by default for every service except BigQuery, and until they are on a sink filter referencing data_access matches nothing for the others. This deployment enables the chosen Data Access log types in separate state from the log-export pipeline.
 
 **Cloud:** gcp · **Role:** foundation · **Scope:** organization

@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "![Abstract Security](https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/portal-badge.png)\n\n# ABSTRACT SECURITY\n**The Security Data Pipeline Platform.** Send detection-ready data straight into Microsoft Sentinel — normalized, enriched, and cost-optimized.\n\n[abstract.security](https://abstract.security) · [Documentation](https://docs.abstractsecurity.app/docs/integrations/destination-integrations/azure-sentinel-destination/) · [Book a demo](https://abstract.security)\n\n---\n### Azure Sentinel — Destination Integration\nAbstract **writes to** Microsoft Sentinel via the Azure Monitor Logs Ingestion API. This deployment provisions the **full stack**: a Log Analytics workspace, **Microsoft Sentinel**, a Data Collection Endpoint, a custom `_CL` table, a Data Collection Rule, and the RBAC the Abstract service principal needs on the DCR.\n\n✓ One-click full ingestion stack  ✓ Least-privilege DCR roles  ✓ Outputs the exact modal fields\n\n⚠️ **Before you start:** create an Entra **app registration** (with a client secret) for Abstract and have its *service principal object ID* ready — ARM cannot create app registrations. The Client ID / Client Secret / Tenant ID are entered in Abstract, not here.\n\nWhen the deployment finishes, the **Outputs** tab gives you the **Data Collection Rule ID**, **Data Collection Endpoint URL**, and **Log Stream Name** for the Abstract modal.",
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Abstract to Microsoft Sentinel: with your app registration**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Prepares Azure for the Abstract Azure Sentinel Destination: a Data Collection Endpoint, a Data Collection Rule and the custom Abstract table, in a new or existing workspace, with Monitoring Metrics Publisher on the DCR for the app you created. Recommended for production; no privileged identity is involved.\n\n### Azure Sentinel — Destination Integration\nAbstract **writes to** Microsoft Sentinel via the Azure Monitor Logs Ingestion API. This deployment provisions the **full stack**: a Log Analytics workspace, **Microsoft Sentinel**, a Data Collection Endpoint, a custom `_CL` table, a Data Collection Rule, and the RBAC the Abstract service principal needs on the DCR.\n\n✓ One-click full ingestion stack  ✓ Least-privilege DCR roles  ✓ Outputs the exact modal fields\n\n⚠️ **Before you start:** create an Entra **app registration** (with a client secret) for Abstract and have its *service principal object ID* ready — ARM cannot create app registrations. The Client ID / Client Secret / Tenant ID are entered in Abstract, not here.\n\nWhen the deployment finishes, the **Outputs** tab gives you the **Data Collection Rule ID**, **Data Collection Endpoint URL**, and **Log Stream Name** for the Abstract modal.",
         "resourceGroup": {
           "constraints": {
             "validations": []
@@ -14,7 +14,18 @@
         }
       }
     },
-    "basics": [],
+    "basics": [
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
+      }
+    ],
     "steps": [
       {
         "name": "workspace",
@@ -272,6 +283,14 @@
             "toolTip": "Also writes each event into Microsoft's ASIM tables (ASimAuthenticationEventLogs and others), mapped from the Abstract schema. Microsoft's ASIM analytics rules, hunting queries and workbooks then work on Abstract data from every vendor. Needs Microsoft Sentinel on the workspace."
           },
           {
+            "name": "excludeAsimFromAbstractTable",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Store ASIM events once (leave them out of the Abstract table)",
+            "defaultValue": false,
+            "visible": "[steps('ingestion').enableAsim]",
+            "toolTip": "Events an ASIM table takes are not also written to the Abstract table, so each is billed once. Content that reads only the Abstract table no longer sees those events."
+          },
+          {
             "name": "asimSchemas",
             "type": "Microsoft.Common.DropDown",
             "label": "ASIM schemas",
@@ -400,6 +419,7 @@
       "enableDcrErrorLogs": "[steps('ingestion').enableDcrErrorLogs]",
       "enableAsim": "[steps('ingestion').enableAsim]",
       "asimSchemas": "[coalesce(steps('ingestion').asimSchemas, parse('[]'))]",
+      "excludeAsimFromAbstractTable": "[steps('ingestion').excludeAsimFromAbstractTable]",
       "customTableRetentionDays": "[steps('ingestion').customTableRetentionDays]",
       "grantMonitoringContributor": "[steps('auth').grantMonitoringContributor]"
     }

@@ -3,12 +3,12 @@
   "view": {
     "kind": "Form",
     "properties": {
-      "title": "Abstract Security — Activity Log export (one subscription)",
+      "title": "Activity Log to Abstract: one subscription",
       "steps": [
         {
           "name": "basics",
           "label": "Basics",
-          "description": "Streams **one** subscription's Azure Activity Log to an Abstract Event Hub.\n\nThis is a **subscription-scope** deployment — there is no resource group to pick, because a subscription diagnostic setting is not a resource-group resource. That is also why this form uses the Form view (`uiFormDefinition`) model rather than `createUiDefinition`: only Form view can bind a portal deployment to a subscription, management group or tenant scope.\n\n**Onboarding a whole estate?** Use the governance pack instead — assign it once at a management group and every subscription, current and future, onboards itself. This template is for a single subscription or a quick proof.",
+          "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-source-activity-log-subscription/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Activity Log to Abstract: one subscription**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. The pilot path: streams one subscription's Activity Log, every ARM create, update and delete and every RBAC change, to the Abstract Event Hub. Use it to prove the pipeline on one subscription, then move to the management-group policy for the estate.\n\nStreams **one** subscription's Azure Activity Log to an Abstract Event Hub.\n\nThis is a **subscription-scope** deployment \u2014 there is no resource group to pick, because a subscription diagnostic setting is not a resource-group resource. That is also why this form uses the Form view (`uiFormDefinition`) model rather than `createUiDefinition`: only Form view can bind a portal deployment to a subscription, management group or tenant scope.\n\n**Onboarding a whole estate?** Use the governance pack instead \u2014 assign it once at a management group and every subscription, current and future, onboards itself. This template is for a single subscription or a quick proof.",
           "elements": [
             {
               "name": "scopeInfo",
@@ -16,7 +16,7 @@
               "visible": true,
               "options": {
                 "icon": "Info",
-                "text": "Prerequisite: the Event Hub and its namespace-level Send authorization rule must already exist. Deploy the Event Hub source template first and take the abstractDiagnosticsAuthRuleId and eventHubNames outputs from it — this template never creates hubs.",
+                "text": "Prerequisite: the Event Hub and its namespace-level Send authorization rule must already exist. Deploy the Event Hub source template first and take the abstractDiagnosticsAuthRuleId and eventHubNames outputs from it \u2014 this template never creates hubs.",
                 "uri": "https://learn.microsoft.com/azure/azure-monitor/essentials/diagnostic-settings"
               }
             },
@@ -39,13 +39,23 @@
               "type": "Microsoft.Common.TextBox",
               "label": "Diagnostic setting name",
               "defaultValue": "abstract-activity-logs",
-              "toolTip": "Azure allows a maximum of five diagnostic settings per subscription. If the customer already streams to another SIEM, this is an ADDITIONAL setting and does not displace it — but the ceiling is real.",
+              "toolTip": "Azure allows a maximum of five diagnostic settings per subscription. If the customer already streams to another SIEM, this is an ADDITIONAL setting and does not displace it \u2014 but the ceiling is real.",
               "constraints": {
                 "required": true,
                 "regex": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,258}[a-zA-Z0-9]$",
                 "validationMessage": "2-260 characters, starting and ending alphanumeric."
               },
               "visible": true
+            },
+            {
+              "name": "abstractSupport",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "None",
+                "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+                "uri": "https://www.abstract.security/contact-us"
+              }
             }
           ]
         },
@@ -60,7 +70,7 @@
               "visible": true,
               "options": {
                 "icon": "Info",
-                "text": "The region rule does NOT apply here. Azure Monitor requires an Event Hub to share a region with the monitored resource only when that resource is regional — a subscription is not. One hub therefore serves every subscription in the estate, wherever its resources live."
+                "text": "The region rule does NOT apply here. Azure Monitor requires an Event Hub to share a region with the monitored resource only when that resource is regional \u2014 a subscription is not. One hub therefore serves every subscription in the estate, wherever its resources live."
               }
             },
             {
@@ -68,7 +78,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "Event Hubs authorization rule ID",
               "placeholder": "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.EventHub/namespaces/<ns>/authorizationrules/abstract-diagnostics-send",
-              "toolTip": "Namespace-level rule with Send rights — the abstractDiagnosticsAuthRuleId output of the Event Hub source template. Send alone is sufficient when the hub already exists, despite Microsoft's docs listing Manage+Send+Listen; the wider rights only matter if Azure Monitor has to create the hub for you.",
+              "toolTip": "Namespace-level rule with Send rights \u2014 the abstractDiagnosticsAuthRuleId output of the Event Hub source template. Send alone is sufficient when the hub already exists, despite Microsoft's docs listing Manage+Send+Listen; the wider rights only matter if Azure Monitor has to create the hub for you.",
               "constraints": {
                 "required": true,
                 "regex": "^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.EventHub/namespaces/[^/]+/[Aa]uthorization[Rr]ules/[^/]+$",
@@ -81,7 +91,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "Event Hub name",
               "defaultValue": "abs-prod-activity",
-              "toolTip": "Must already exist. The source template auto-names hubs <hubPrefix>-<environment>-<source>, so its defaults produce abs-prod-activity. Check the eventHubNames output rather than trusting this default — a name that does not exist fails silently.",
+              "toolTip": "Must already exist. The source template auto-names hubs <hubPrefix>-<environment>-<source>, so its defaults produce abs-prod-activity. Check the eventHubNames output rather than trusting this default \u2014 a name that does not exist fails silently.",
               "constraints": {
                 "required": true,
                 "regex": "^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,254}[a-zA-Z0-9])?$",
@@ -117,14 +127,38 @@
               "constraints": {
                 "required": true,
                 "allowedValues": [
-                  { "label": "Administrative — create/update/delete on any resource", "value": "Administrative" },
-                  { "label": "Security — Defender for Cloud alerts surfaced in Activity Log", "value": "Security" },
-                  { "label": "ServiceHealth — Azure-side incidents affecting you", "value": "ServiceHealth" },
-                  { "label": "Alert — Azure Monitor alert activations", "value": "Alert" },
-                  { "label": "Recommendation — Advisor recommendations", "value": "Recommendation" },
-                  { "label": "Policy — Azure Policy effect actions (audit/deny/deploy)", "value": "Policy" },
-                  { "label": "Autoscale — autoscale engine actions", "value": "Autoscale" },
-                  { "label": "ResourceHealth — resource health transitions", "value": "ResourceHealth" }
+                  {
+                    "label": "Administrative \u2014 create/update/delete on any resource",
+                    "value": "Administrative"
+                  },
+                  {
+                    "label": "Security \u2014 Defender for Cloud alerts surfaced in Activity Log",
+                    "value": "Security"
+                  },
+                  {
+                    "label": "ServiceHealth \u2014 Azure-side incidents affecting you",
+                    "value": "ServiceHealth"
+                  },
+                  {
+                    "label": "Alert \u2014 Azure Monitor alert activations",
+                    "value": "Alert"
+                  },
+                  {
+                    "label": "Recommendation \u2014 Advisor recommendations",
+                    "value": "Recommendation"
+                  },
+                  {
+                    "label": "Policy \u2014 Azure Policy effect actions (audit/deny/deploy)",
+                    "value": "Policy"
+                  },
+                  {
+                    "label": "Autoscale \u2014 autoscale engine actions",
+                    "value": "Autoscale"
+                  },
+                  {
+                    "label": "ResourceHealth \u2014 resource health transitions",
+                    "value": "ResourceHealth"
+                  }
                 ]
               },
               "visible": true

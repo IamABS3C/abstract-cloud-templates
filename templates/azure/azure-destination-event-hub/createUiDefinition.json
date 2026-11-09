@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "![Abstract Security](https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/portal-badge.png)\n\n# ABSTRACT SECURITY\n**The Security Data Pipeline Platform.** Deliver enriched, normalized security events to any destination — in real time, at scale.\n\n[abstract.security](https://abstract.security) · [Documentation](https://docs.abstractsecurity.app/docs/integrations/destination-integrations/azure-eventhub-destination/) · [Book a demo](https://abstract.security)\n\n---\n### Azure EventHub — Destination Integration\nAbstract **writes to** Event Hub. This guided deployment provisions the namespace, the destination hub, and a least-privilege **Send** SAS rule (keys are never exposed in outputs), with optional Entra ID delivery and Safe Mode networking so Abstract can always reach it.\n\n✓ Standard tier minimum  ✓ Least-privilege Send  ✓ Optional Entra ID (RBAC) delivery\n\nWhen the deployment finishes, the **Outputs** tab gives you the `EventHub Name` and tells you exactly where to copy the Send connection string for the Abstract destination modal.",
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-event-hub/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Abstract to your Event Hub: namespace and hub**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Provisions the Azure side of the Abstract Azure EventHub Destination: an Event Hubs namespace and one hub that Abstract delivers processed events into, with a Send-only SAS rule or an RBAC grant. Safe Mode keeps public access on so Abstract can always reach the hub during onboarding.\n\n### Azure EventHub \u2014 Destination Integration\nAbstract **writes to** Event Hub. This guided deployment provisions the namespace, the destination hub, and a least-privilege **Send** SAS rule (keys are never exposed in outputs), with optional Entra ID delivery and Safe Mode networking so Abstract can always reach it.\n\n\u2713 Standard tier minimum  \u2713 Least-privilege Send  \u2713 Optional Entra ID (RBAC) delivery\n\nWhen the deployment finishes, the **Outputs** tab gives you the `EventHub Name` and tells you exactly where to copy the Send connection string for the Abstract destination modal.",
         "resourceGroup": {
           "constraints": {
             "validations": []
@@ -36,8 +36,14 @@
         "constraints": {
           "required": true,
           "allowedValues": [
-            { "label": "Standard (Abstract minimum)", "value": "Standard" },
-            { "label": "Premium", "value": "Premium" }
+            {
+              "label": "Standard (Abstract minimum)",
+              "value": "Standard"
+            },
+            {
+              "label": "Premium",
+              "value": "Premium"
+            }
           ]
         }
       },
@@ -69,6 +75,16 @@
         "max": 40,
         "showStepMarkers": false,
         "visible": "[and(equals(basics('sku'), 'Standard'), basics('autoInflate'))]"
+      },
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
       }
     ],
     "steps": [
@@ -172,8 +188,14 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "Azure Event Hubs Data Sender (least privilege)", "value": "Azure Event Hubs Data Sender" },
-                { "label": "Azure Event Hubs Data Owner", "value": "Azure Event Hubs Data Owner" }
+                {
+                  "label": "Azure Event Hubs Data Sender (least privilege)",
+                  "value": "Azure Event Hubs Data Sender"
+                },
+                {
+                  "label": "Azure Event Hubs Data Owner",
+                  "value": "Azure Event Hubs Data Owner"
+                }
               ]
             },
             "visible": "[steps('auth').enableRbac]"
@@ -188,15 +210,27 @@
             "name": "profile",
             "type": "Microsoft.Common.DropDown",
             "label": "Security profile",
-            "defaultValue": "Safe Mode — public access stays on (recommended for onboarding)",
+            "defaultValue": "Safe Mode \u2014 public access stays on (recommended for onboarding)",
             "toolTip": "Safe Mode guarantees Abstract can reach the namespace to deliver events. Harden later by redeploying with IP Allowlist, Private Only or Hybrid.",
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "Safe Mode — public access stays on (recommended for onboarding)", "value": "SafeMode" },
-                { "label": "IP Allowlist — public, firewall default-deny with allowed CIDRs", "value": "IpAllowlist" },
-                { "label": "Private Only — no public access, Private Endpoint required", "value": "PrivateOnly" },
-                { "label": "Hybrid — Private Endpoint + public IP allowlist", "value": "Hybrid" }
+                {
+                  "label": "Safe Mode \u2014 public access stays on (recommended for onboarding)",
+                  "value": "SafeMode"
+                },
+                {
+                  "label": "IP Allowlist \u2014 public, firewall default-deny with allowed CIDRs",
+                  "value": "IpAllowlist"
+                },
+                {
+                  "label": "Private Only \u2014 no public access, Private Endpoint required",
+                  "value": "PrivateOnly"
+                },
+                {
+                  "label": "Hybrid \u2014 Private Endpoint + public IP allowlist",
+                  "value": "Hybrid"
+                }
               ]
             }
           },
@@ -239,7 +273,7 @@
           {
             "name": "privateDnsZoneId",
             "type": "Microsoft.Common.TextBox",
-            "label": "Private DNS zone ID — privatelink.servicebus.windows.net (optional)",
+            "label": "Private DNS zone ID \u2014 privatelink.servicebus.windows.net (optional)",
             "defaultValue": "",
             "constraints": {
               "required": false,

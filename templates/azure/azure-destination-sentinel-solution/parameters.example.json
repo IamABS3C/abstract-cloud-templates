@@ -1,0 +1,120 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "createWorkspace": {
+      "value": false
+    },
+    "workspaceName": {
+      "value": "sentinel-prod"
+    },
+    "workspaceRetentionDays": {
+      "value": 180
+    },
+    "existingWorkspaceLocation": {
+      "value": "eastus2"
+    },
+    "tags": {
+      "value": {
+        "owner": "secops"
+      }
+    },
+    "principalId": {
+      "value": "<service-principal-object-id>"
+    },
+    "dataCollectionEndpointName": {
+      "value": "abstract-dce-prod"
+    },
+    "dataCollectionRuleName": {
+      "value": "abstract-dcr-prod"
+    },
+    "customTablePlan": {
+      "value": "Analytics"
+    },
+    "customTableRetentionDays": {
+      "value": 365
+    },
+    "enableDcrErrorLogs": {
+      "value": true
+    },
+    "enableAsim": {
+      "value": true
+    },
+    "asimSchemas": {
+      "value": [
+        "Authentication",
+        "NetworkSession"
+      ]
+    },
+    "excludeAsimFromAbstractTable": {
+      "value": true
+    },
+    "lakeTableName": {
+      "value": "AbstractLake_CL"
+    },
+    "lakeCategories": {
+      "value": [
+        "network"
+      ]
+    },
+    "lakeRetentionDays": {
+      "value": 730
+    },
+    "nativeVendors": {
+      "value": [
+        "okta"
+      ]
+    },
+    "oktaDomain": {
+      "value": "example.okta.com"
+    },
+    "excludeNativeVendorsFromAsim": {
+      "value": true
+    },
+    "deployDataConnectors": {
+      "value": true
+    },
+    "deployParsers": {
+      "value": true
+    },
+    "deployAnalyticsRules": {
+      "value": true
+    },
+    "deployHuntingQueries": {
+      "value": true
+    },
+    "deployWorkbooks": {
+      "value": true
+    },
+    "deployDiscovery": {
+      "value": false
+    },
+    "deployDiscoveryWorkbook": {
+      "value": true
+    },
+    "deployAutomationRules": {
+      "value": true
+    },
+    "deployPlaybooks": {
+      "value": true
+    },
+    "deployPlaybookAutomationRules": {
+      "value": true
+    },
+    "abstractBaseUrl": {
+      "value": "https://api.abstractsecurity.app"
+    },
+    "abstractVendorAccountId": {
+      "value": "<abstract-vendor-account-id>"
+    },
+    "keyVaultSecretUri": {
+      "value": "https://<vault-name>.vault.azure.net/secrets/<secret-name>"
+    },
+    "lookbackHours": {
+      "value": 72
+    }
+  }
+}

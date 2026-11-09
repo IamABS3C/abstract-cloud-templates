@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 Creates an EventBridge rule for Security Hub's finding events, a Firehose delivery stream that writes them one per line to a new hardened bucket, the SQS queue the bucket notifies and the role Abstract assumes to read them. Security Hub has no S3 export of its own. Deployed in a test account on 2026-10-07. A record put to Firehose landed in the bucket and reached the queue in about five minutes, and the role was assumed with its External ID.
 
 **Cloud:** aws · **Role:** source · **Scope:** account

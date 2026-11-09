@@ -2,10 +2,36 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "metadata": {
-    "title": "Abstract Security - Tune at source",
-    "description": "Microsoft Sentinel playbook. When an incident is classified as a False Positive / Benign Positive (attach via an automation rule on incident update), it creates a rule tuning filter in Abstract (POST /v2/rule-tuning-filters/) so the noisy pattern is down-sampled UPSTREAM at the pipeline \u2014 fewer ingested GB and fewer future incidents \u2014 then comments the result back. The differentiated closed loop only a pipeline can offer: disposition in Sentinel, tune at the source.",
-    "prerequisites": "Abstract API key + vendor account id. The originating analytics rule should map SrcIpAddr and AbstractInsightId as incident custom details for precise tuning. Prefer Key Vault for the key in production.",
-    "author": "Abstract Security - Solutions Engineering"
+    "title": "Abstract Security - Tune at Source",
+    "description": "When an incident is closed as a false positive or benign positive, creates a rule tuning filter in Abstract through the Abstract API and adds the result to the incident as a comment.",
+    "prerequisites": [
+      "An Abstract API key stored as a secret in Azure Key Vault.",
+      "The analytics rule should surface SrcIpAddr and AbstractInsightId as incident custom details."
+    ],
+    "author": {
+      "name": "Abstract Security"
+    },
+    "postDeployment": [
+      "Authorize the Microsoft Sentinel connection of this Logic App.",
+      "Grant its managed identity Key Vault Secrets User on the secret and Microsoft Sentinel Responder on the workspace."
+    ],
+    "entities": [],
+    "tags": [
+      "Response"
+    ],
+    "support": {
+      "tier": "partner"
+    },
+    "lastUpdateTime": "2026-11-08T00:00:00Z",
+    "releaseNotes": [
+      {
+        "version": "1.0",
+        "title": "Initial version",
+        "notes": [
+          "Initial version"
+        ]
+      }
+    ]
   },
   "parameters": {
     "PlaybookName": {

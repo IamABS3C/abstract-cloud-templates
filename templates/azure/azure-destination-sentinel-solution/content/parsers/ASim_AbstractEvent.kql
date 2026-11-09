@@ -1,0 +1,172 @@
+// =============================================================================
+// ASim_AbstractEvent: every Abstract event, wherever this solution's routes stored it
+// -----------------------------------------------------------------------------
+// One row per stored Abstract event, with ASIM-aligned column names, read from:
+//   - AbstractEventLogs_CL: every event no other route took (all events when the
+//     store-once option is off);
+//   - the ASim tables, only with the store-once option on (otherwise the same
+//     events are already in AbstractEventLogs_CL): Abstract rows only, recognised
+//     by AdditionalFields.AbstractEventId;
+//   - each lane table whose events are stored only there (the store-once option
+//     and excludeNativeVendorsFromAsim both on): OktaV2_CL (okta), CommonSecurityLog
+//     and Syslog rows with CollectorHostName 'Abstract' (csl-cef, csl-acs, syslog),
+//     AWSCloudTrail (aws-cloudtrail), CrowdStrikeHostsV2_CL (crowdstrike-hosts), and
+//     Abstract rows in ASimAlertEventLogs, ASimDhcpEventLogs and
+//     ASimUserManagementActivityLogs. OktaV2_CL, AWSCloudTrail and
+//     CrowdStrikeHostsV2_CL carry no Abstract marker, so rows Microsoft's own
+//     connector writes into them are read too.
+// The lake table (Auxiliary plan) is not read: the query API does not serve it.
+// The deployment fills in __ABSTRACT_READ_ASIM__ and __ABSTRACT_NATIVE_VENDORS__
+// from the routes it built, so the parser never counts one event twice.
+// AbstractSourceTable names the table each row came from. AbstractEvent is one bag per row in every case, so tiles that
+// read AbstractEvent.product, .severity or .aggregation_count work on all of them. risk_score, identity and tags are carried
+// only on rows in AbstractEventLogs_CL, so a tile that measures them counts those rows.
+// =============================================================================
+let ASim_AbstractEvent = (disabled: bool = false) {
+    let readAsim = __ABSTRACT_READ_ASIM__;
+    let nativeVendors = dynamic(__ABSTRACT_NATIVE_VENDORS__);
+    let abstractRows = AbstractEventLogs_CL
+        | extend AbstractEvent = iff(isnotnull(column_ifexists('AbstractEvent', dynamic(null))), column_ifexists('AbstractEvent', dynamic(null)), pack_all()), Message = tostring(column_ifexists('Message', ''))
+        | extend e = AbstractEvent
+        | extend
+            EventVendor      = tostring(e.vendor),
+            EventProduct     = tostring(e.product),
+            EventType        = coalesce(tostring(e.type), tostring(e.acs_type)),
+            EventResult      = tostring(e.action),
+            EventSeverity    = tostring(e.severity),
+            EventMessage     = coalesce(tostring(e.message), Message),
+            EventCount       = toreal(e.aggregation_count),
+            EventRiskScore   = toreal(e.risk_score),
+            SrcIpAddr        = coalesce(tostring(e.source_ipv4), tostring(e.source_ipv6), tostring(e.source_address)),
+            DstIpAddr        = coalesce(tostring(e.dest_ipv4), tostring(e.dest_ipv6), tostring(e.dest_address)),
+            SrcPortNumber    = toint(e.source_port),
+            DstPortNumber    = toint(e.dest_port),
+            DvcIpAddr        = coalesce(tostring(e.host_ipv4), tostring(e.host_ipv6), tostring(e.host_address)),
+            DvcHostname      = tostring(e.host_name),
+            ActorUsername    = coalesce(tostring(e.user_name), tostring(e.user_id)),
+            TargetUsername   = coalesce(tostring(e.user.target.name), tostring(e['user.target.name'])),
+            UserAgent        = tostring(e.user_agent),
+            AbstractEventId  = coalesce(tostring(e.id), tostring(e.acs_id)),
+            AbstractDataset  = tostring(e.data_stream.dataset),
+            AbstractIdentity = tostring(e.identity),
+            AbstractMatchedRules = e.matched_rules,
+            AbstractTags     = e.tags,
+            AbstractTimestamp = coalesce(todatetime(e['@timestamp']), todatetime(e.timestamp)),
+            AbstractSourceTable = 'AbstractEventLogs_CL';
+    let asimRows = union isfuzzy=true ASimAuditEventLogs, ASimAuthenticationEventLogs, ASimDnsActivityLogs,
+            ASimFileEventLogs, ASimNetworkSessionLogs, ASimProcessEventLogs, ASimRegistryEventLogs, ASimWebSessionLogs,
+            (ASimAlertEventLogs | where set_has_element(nativeVendors, 'asim-alert')),
+            (ASimDhcpEventLogs | where set_has_element(nativeVendors, 'asim-dhcp')),
+            (ASimUserManagementActivityLogs | where set_has_element(nativeVendors, 'asim-user-management')),
+            (datatable(TimeGenerated: datetime)[])
+        | extend _row = pack_all(), _af = column_ifexists('AdditionalFields', dynamic(null))
+        | where readAsim and isnotnull(_af.AbstractEventId)
+        | extend
+            EventVendor      = tostring(column_ifexists('EventVendor', '')),
+            EventProduct     = tostring(column_ifexists('EventProduct', '')),
+            EventType        = tostring(column_ifexists('EventType', '')),
+            EventResult      = tostring(column_ifexists('EventResult', '')),
+            EventSeverity    = tostring(column_ifexists('EventSeverity', '')),
+            EventMessage     = tostring(column_ifexists('EventMessage', '')),
+            EventCount       = toreal(column_ifexists('EventCount', int(null))),
+            EventRiskScore   = real(null),
+            SrcIpAddr        = tostring(column_ifexists('SrcIpAddr', '')),
+            DstIpAddr        = tostring(column_ifexists('DstIpAddr', '')),
+            SrcPortNumber    = toint(column_ifexists('SrcPortNumber', int(null))),
+            DstPortNumber    = toint(column_ifexists('DstPortNumber', int(null))),
+            DvcIpAddr        = tostring(column_ifexists('DvcIpAddr', '')),
+            DvcHostname      = tostring(column_ifexists('DvcHostname', '')),
+            ActorUsername    = coalesce(tostring(column_ifexists('ActorUsername', '')), tostring(column_ifexists('TargetUsername', '')), tostring(column_ifexists('Username', ''))),
+            TargetUsername   = tostring(column_ifexists('TargetUsername', '')),
+            UserAgent        = tostring(column_ifexists('HttpUserAgent', '')),
+            AbstractEventId  = tostring(_af.AbstractEventId),
+            AbstractDataset  = tostring(_af.AbstractDataset),
+            AbstractIdentity = '',
+            AbstractMatchedRules = _af.AbstractMatchedRules,
+            AbstractTags     = dynamic(null),
+            AbstractTimestamp = TimeGenerated,
+            AbstractSourceTable = tostring(column_ifexists('Type', ''))
+        | extend AbstractEvent = bag_merge(pack('vendor', EventVendor, 'product', EventProduct, 'severity', tolower(EventSeverity),
+            'aggregation_count', EventCount, 'matched_rules', AbstractMatchedRules), _row);
+    let oktaRows = union isfuzzy=true (OktaV2_CL | where set_has_element(nativeVendors, 'okta')), (datatable(TimeGenerated: datetime)[] | where false)
+        | extend _row = pack_all()
+        | extend
+            EventVendor      = 'Okta',
+            EventProduct     = 'Okta',
+            EventType        = tostring(column_ifexists('EventOriginalType', '')),
+            EventResult      = tostring(column_ifexists('EventResult', '')),
+            EventSeverity    = tostring(column_ifexists('EventSeverity', '')),
+            EventMessage     = tostring(column_ifexists('EventMessage', '')),
+            EventCount       = real(1),
+            EventRiskScore   = real(null),
+            SrcIpAddr        = tostring(column_ifexists('SrcIpAddr', '')),
+            DstIpAddr        = '',
+            SrcPortNumber    = int(null),
+            DstPortNumber    = int(null),
+            DvcIpAddr        = '',
+            DvcHostname      = '',
+            ActorUsername    = tostring(column_ifexists('ActorUsername', '')),
+            TargetUsername   = '',
+            UserAgent        = tostring(column_ifexists('HttpUserAgent', '')),
+            AbstractEventId  = '',
+            AbstractDataset  = '',
+            AbstractIdentity = '',
+            AbstractMatchedRules = dynamic(null),
+            AbstractTags     = dynamic(null),
+            AbstractTimestamp = TimeGenerated,
+            AbstractSourceTable = 'OktaV2_CL'
+        | extend AbstractEvent = bag_merge(pack('vendor', EventVendor, 'product', EventProduct, 'severity', tolower(EventSeverity),
+            'aggregation_count', EventCount), _row);
+    // The lanes into Microsoft's own tables. Columns are read with column_ifexists so a missing table or column is empty.
+    let laneRows = union isfuzzy=true
+            (CommonSecurityLog | where (set_has_element(nativeVendors, 'csl-cef') or set_has_element(nativeVendors, 'csl-acs')) and CollectorHostName == 'Abstract'
+                | extend _v = DeviceVendor, _p = DeviceProduct, _t = Activity, _r = DeviceAction, _s = LogSeverity, _m = Message,
+                    _src = SourceIP, _dst = DestinationIP, _sp = SourcePort, _dp = DestinationPort, _dvc = DeviceName, _u = SourceUserName, _src_t = 'CommonSecurityLog'),
+            (Syslog | where set_has_element(nativeVendors, 'syslog') and CollectorHostName == 'Abstract'
+                | extend _v = '', _p = ProcessName, _t = Facility, _r = '', _s = SeverityLevel, _m = SyslogMessage,
+                    _src = HostIP, _dst = '', _sp = int(null), _dp = int(null), _dvc = Computer, _u = '', _src_t = 'Syslog'),
+            (AWSCloudTrail | where set_has_element(nativeVendors, 'aws-cloudtrail')
+                | extend _v = 'AWS', _p = EventSource, _t = EventName, _r = iff(isempty(ErrorCode), 'Success', 'Failure'), _s = '', _m = EventName,
+                    _src = SourceIpAddress, _dst = '', _sp = int(null), _dp = int(null), _dvc = '', _u = UserIdentityArn, _src_t = 'AWSCloudTrail'),
+            (CrowdStrikeHostsV2_CL | where set_has_element(nativeVendors, 'crowdstrike-hosts')
+                | extend _v = 'CrowdStrike', _p = 'Falcon', _t = 'host', _r = '', _s = '', _m = '',
+                    _src = tostring(column_ifexists('LocalIp', '')), _dst = '', _sp = int(null), _dp = int(null), _dvc = tostring(column_ifexists('Hostname', '')), _u = '', _src_t = 'CrowdStrikeHostsV2_CL'),
+            (datatable(TimeGenerated: datetime)[] | where false)
+        | extend _row = pack_all()
+        | extend
+            EventVendor      = tostring(column_ifexists('_v', '')),
+            EventProduct     = tostring(column_ifexists('_p', '')),
+            EventType        = tostring(column_ifexists('_t', '')),
+            EventResult      = tostring(column_ifexists('_r', '')),
+            EventSeverity    = tostring(column_ifexists('_s', '')),
+            EventMessage     = tostring(column_ifexists('_m', '')),
+            EventCount       = real(1),
+            EventRiskScore   = real(null),
+            SrcIpAddr        = tostring(column_ifexists('_src', '')),
+            DstIpAddr        = tostring(column_ifexists('_dst', '')),
+            SrcPortNumber    = toint(column_ifexists('_sp', int(null))),
+            DstPortNumber    = toint(column_ifexists('_dp', int(null))),
+            DvcIpAddr        = '',
+            DvcHostname      = tostring(column_ifexists('_dvc', '')),
+            ActorUsername    = tostring(column_ifexists('_u', '')),
+            TargetUsername   = '',
+            UserAgent        = '',
+            AbstractEventId  = '',
+            AbstractDataset  = '',
+            AbstractIdentity = '',
+            AbstractMatchedRules = dynamic(null),
+            AbstractTags     = dynamic(null),
+            AbstractTimestamp = TimeGenerated,
+            AbstractSourceTable = tostring(column_ifexists('_src_t', ''))
+        | extend AbstractEvent = bag_merge(pack('vendor', EventVendor, 'product', EventProduct, 'severity', tolower(EventSeverity),
+            'aggregation_count', EventCount), _row)
+        | project-away _v, _p, _t, _r, _s, _m, _src, _dst, _sp, _dp, _dvc, _u, _src_t;
+    union isfuzzy=true abstractRows, asimRows, oktaRows, laneRows
+    | where not(disabled)
+    | project-away _af, _row
+    | project-reorder
+        TimeGenerated, EventVendor, EventProduct, EventType, EventResult, EventSeverity,
+        SrcIpAddr, DstIpAddr, SrcPortNumber, DstPortNumber, ActorUsername, EventMessage,
+        EventRiskScore, AbstractEventId, AbstractIdentity, AbstractSourceTable
+};
+ASim_AbstractEvent

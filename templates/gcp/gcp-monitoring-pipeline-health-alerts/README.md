@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 A stalled consumer, a missing IAM grant and a deleted sink all look the same from outside: everything is green and there is no data. These Cloud Monitoring alert policies catch sink export failures, an unconsumed subscription, a feed that went dark and a receiving dead-letter topic.
 
 **Cloud:** gcp · **Role:** monitoring · **Scope:** project

@@ -3,12 +3,12 @@
   "view": {
     "kind": "Form",
     "properties": {
-      "title": "Abstract Security — Microsoft Entra ID log streams",
+      "title": "Entra ID sign-in and audit logs to Abstract",
       "steps": [
         {
           "name": "basics",
           "label": "Basics",
-          "description": "Streams Microsoft Entra ID activity logs — sign-ins, directory audit, provisioning, Identity Protection risk, Microsoft Graph activity — to an Abstract Event Hub.\n\n**This is a TENANT-scope deployment.** One setting covers the entire organisation; adding a subscription later changes nothing here. That is also why **no Azure Policy can manage this**: Entra diagnostic settings are not per-subscription objects, so there is nothing for a `DeployIfNotExists` policy to evaluate. This form *is* the automation.\n\n**You need Security Administrator** on the Entra tenant (plus Attribute Log Administrator if you enable the custom-security-attribute category).",
+          "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-source-entra-id-logs-tenant/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Entra ID sign-in and audit logs to Abstract**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Entra ID activity logs are a single tenant-level diagnostic setting on the microsoft.aadiam provider, not Azure Monitor resource logs. Azure Policy cannot manage them, and a portal deployment at tenant scope is still pending proof, so for now one CLI command onboards identity telemetry for the whole organisation.\n\nStreams Microsoft Entra ID activity logs \u2014 sign-ins, directory audit, provisioning, Identity Protection risk, Microsoft Graph activity \u2014 to an Abstract Event Hub.\n\n**This is a TENANT-scope deployment.** One setting covers the entire organisation; adding a subscription later changes nothing here. That is also why **no Azure Policy can manage this**: Entra diagnostic settings are not per-subscription objects, so there is nothing for a `DeployIfNotExists` policy to evaluate. This form *is* the automation.\n\n**You need Security Administrator** on the Entra tenant (plus Attribute Log Administrator if you enable the custom-security-attribute category).",
           "elements": [
             {
               "name": "scopeWarning",
@@ -40,6 +40,16 @@
                 "validationMessage": "2-260 characters, starting and ending alphanumeric."
               },
               "visible": true
+            },
+            {
+              "name": "abstractSupport",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "None",
+                "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+                "uri": "https://www.abstract.security/contact-us"
+              }
             }
           ]
         },
@@ -62,7 +72,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "Event Hubs authorization rule ID",
               "placeholder": "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.EventHub/namespaces/<ns>/authorizationrules/abstract-diagnostics-send",
-              "toolTip": "Namespace-level rule with Send rights — the abstractDiagnosticsAuthRuleId output of the Event Hub source template.",
+              "toolTip": "Namespace-level rule with Send rights \u2014 the abstractDiagnosticsAuthRuleId output of the Event Hub source template.",
               "constraints": {
                 "required": true,
                 "regex": "^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.EventHub/namespaces/[^/]+/[Aa]uthorization[Rr]ules/[^/]+$",
@@ -88,7 +98,7 @@
         {
           "name": "categories",
           "label": "Log categories",
-          "description": "Which Entra ID streams to collect. Selecting a category your tenant does not license is harmless — it simply produces no records.",
+          "description": "Which Entra ID streams to collect. Selecting a category your tenant does not license is harmless \u2014 it simply produces no records.",
           "elements": [
             {
               "name": "entraLogCategories",
@@ -115,25 +125,82 @@
               "constraints": {
                 "required": true,
                 "allowedValues": [
-                  { "label": "AuditLogs — directory changes (users, groups, apps, licences)", "value": "AuditLogs" },
-                  { "label": "SignInLogs — interactive user sign-ins (P1/P2)", "value": "SignInLogs" },
-                  { "label": "NonInteractiveUserSignInLogs — token/client sign-ins on behalf of a user (P1/P2)", "value": "NonInteractiveUserSignInLogs" },
-                  { "label": "ServicePrincipalSignInLogs — app/SP sign-ins (P1/P2)", "value": "ServicePrincipalSignInLogs" },
-                  { "label": "ManagedIdentitySignInLogs — managed identity sign-ins (P1/P2)", "value": "ManagedIdentitySignInLogs" },
-                  { "label": "ProvisioningLogs — only if you provision via Entra (Workday, ServiceNow…)", "value": "ProvisioningLogs" },
-                  { "label": "ADFSSignInLogs — only if AD FS is in use", "value": "ADFSSignInLogs" },
-                  { "label": "RiskyUsers — Identity Protection (P2)", "value": "RiskyUsers" },
-                  { "label": "UserRiskEvents — Identity Protection risk detections (P2)", "value": "UserRiskEvents" },
-                  { "label": "RiskyServicePrincipals — workload identity risk (P2)", "value": "RiskyServicePrincipals" },
-                  { "label": "ServicePrincipalRiskEvents — workload identity risk detections (P2)", "value": "ServicePrincipalRiskEvents" },
-                  { "label": "MicrosoftGraphActivityLogs — every Graph API call (high volume, high value)", "value": "MicrosoftGraphActivityLogs" },
-                  { "label": "RiskyAgents — agent identity risk (P2, 2026)", "value": "RiskyAgents" },
-                  { "label": "AgentRiskEvents — agent risk detections (P2, 2026)", "value": "AgentRiskEvents" },
-                  { "label": "NetworkAccessTrafficLogs — Global Secure Access only", "value": "NetworkAccessTrafficLogs" },
-                  { "label": "EnrichedOffice365AuditLogs — Entra Internet Access + enriched logs enabled", "value": "EnrichedOffice365AuditLogs" },
-                  { "label": "RemoteNetworkHealthLogs — Global Secure Access only", "value": "RemoteNetworkHealthLogs" },
-                  { "label": "MicrosoftServicePrincipalSignInLogs — preview, VERY high volume, first-party service-to-service", "value": "MicrosoftServicePrincipalSignInLogs" },
-                  { "label": "B2CRequestLogs — Azure AD B2C tenants only", "value": "B2CRequestLogs" }
+                  {
+                    "label": "AuditLogs \u2014 directory changes (users, groups, apps, licences)",
+                    "value": "AuditLogs"
+                  },
+                  {
+                    "label": "SignInLogs \u2014 interactive user sign-ins (P1/P2)",
+                    "value": "SignInLogs"
+                  },
+                  {
+                    "label": "NonInteractiveUserSignInLogs \u2014 token/client sign-ins on behalf of a user (P1/P2)",
+                    "value": "NonInteractiveUserSignInLogs"
+                  },
+                  {
+                    "label": "ServicePrincipalSignInLogs \u2014 app/SP sign-ins (P1/P2)",
+                    "value": "ServicePrincipalSignInLogs"
+                  },
+                  {
+                    "label": "ManagedIdentitySignInLogs \u2014 managed identity sign-ins (P1/P2)",
+                    "value": "ManagedIdentitySignInLogs"
+                  },
+                  {
+                    "label": "ProvisioningLogs \u2014 only if you provision via Entra (Workday, ServiceNow\u2026)",
+                    "value": "ProvisioningLogs"
+                  },
+                  {
+                    "label": "ADFSSignInLogs \u2014 only if AD FS is in use",
+                    "value": "ADFSSignInLogs"
+                  },
+                  {
+                    "label": "RiskyUsers \u2014 Identity Protection (P2)",
+                    "value": "RiskyUsers"
+                  },
+                  {
+                    "label": "UserRiskEvents \u2014 Identity Protection risk detections (P2)",
+                    "value": "UserRiskEvents"
+                  },
+                  {
+                    "label": "RiskyServicePrincipals \u2014 workload identity risk (P2)",
+                    "value": "RiskyServicePrincipals"
+                  },
+                  {
+                    "label": "ServicePrincipalRiskEvents \u2014 workload identity risk detections (P2)",
+                    "value": "ServicePrincipalRiskEvents"
+                  },
+                  {
+                    "label": "MicrosoftGraphActivityLogs \u2014 every Graph API call (high volume, high value)",
+                    "value": "MicrosoftGraphActivityLogs"
+                  },
+                  {
+                    "label": "RiskyAgents \u2014 agent identity risk (P2, 2026)",
+                    "value": "RiskyAgents"
+                  },
+                  {
+                    "label": "AgentRiskEvents \u2014 agent risk detections (P2, 2026)",
+                    "value": "AgentRiskEvents"
+                  },
+                  {
+                    "label": "NetworkAccessTrafficLogs \u2014 Global Secure Access only",
+                    "value": "NetworkAccessTrafficLogs"
+                  },
+                  {
+                    "label": "EnrichedOffice365AuditLogs \u2014 Entra Internet Access + enriched logs enabled",
+                    "value": "EnrichedOffice365AuditLogs"
+                  },
+                  {
+                    "label": "RemoteNetworkHealthLogs \u2014 Global Secure Access only",
+                    "value": "RemoteNetworkHealthLogs"
+                  },
+                  {
+                    "label": "MicrosoftServicePrincipalSignInLogs \u2014 preview, VERY high volume, first-party service-to-service",
+                    "value": "MicrosoftServicePrincipalSignInLogs"
+                  },
+                  {
+                    "label": "B2CRequestLogs \u2014 Azure AD B2C tenants only",
+                    "value": "B2CRequestLogs"
+                  }
                 ]
               },
               "visible": true
@@ -144,7 +211,7 @@
               "visible": true,
               "options": {
                 "icon": "Warning",
-                "text": "Entra diagnostic settings can take UP TO THREE DAYS to deliver their first records — Microsoft documents this. Do not treat an empty hub on day one as a failure, and do not redeploy repeatedly chasing it."
+                "text": "Entra diagnostic settings can take UP TO THREE DAYS to deliver their first records \u2014 Microsoft documents this. Do not treat an empty hub on day one as a failure, and do not redeploy repeatedly chasing it."
               }
             },
             {

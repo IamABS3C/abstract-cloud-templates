@@ -1,0 +1,43 @@
+// Abstract Security - High or Critical event.
+// Reads the tables directly and calls no workspace function (Defender custom detections cannot call them).
+// The Abstract table holds what no ASIM dataflow took (findings, alerts and unmapped events); the ASim
+// tables hold the Abstract events the ASIM dataflows took, recognised by AdditionalFields.AbstractEventId.
+// When the deployment stores a lane's events only in that lane's table (excludeNativeVendorsFromAsim), that table is read
+// too: OktaV2_CL, and Abstract rows (CollectorHostName 'Abstract') in CommonSecurityLog and Syslog. Abstract findings on the
+// asim-alert lane are read by the rule "Abstract Security - Finding", not here.
+let lookback = 1h;
+union isfuzzy=true
+    (AbstractEventLogs_CL
+        | where TimeGenerated > ago(lookback)
+        | extend AbstractSeverity = tolower(coalesce(severity, tostring(event.severity)))
+        | where AbstractSeverity in ("high", "critical")
+        | project TimeGenerated, AbstractSeverity, EventProduct = product, EventMessage = message,
+            SrcIpAddr = coalesce(source_ipv4, source_ipv6, source_address), ActorUsername = coalesce(user_name, user_id),
+            AbstractInsightId = acs_id, SourceTable = "AbstractEventLogs_CL"),
+    (union isfuzzy=true ASimAuditEventLogs, ASimAuthenticationEventLogs, ASimDnsActivityLogs, ASimFileEventLogs,
+        ASimNetworkSessionLogs, ASimProcessEventLogs, ASimRegistryEventLogs, ASimWebSessionLogs
+        | where TimeGenerated > ago(lookback)
+        | where isnotnull(AdditionalFields.AbstractEventId) and EventSeverity == "High"
+        | project TimeGenerated, AbstractSeverity = "high", EventProduct, EventMessage = column_ifexists("EventMessage", ""),
+            SrcIpAddr = column_ifexists("SrcIpAddr", ""),
+            ActorUsername = coalesce(column_ifexists("ActorUsername", ""), column_ifexists("TargetUsername", "")),
+            AbstractInsightId = tostring(AdditionalFields.AbstractEventId), SourceTable = Type),
+    (OktaV2_CL
+        | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'okta')
+        | where TimeGenerated > ago(lookback)
+        | where EventSeverity == "High"
+        | project TimeGenerated, AbstractSeverity = "high", EventProduct = "Okta", EventMessage, SrcIpAddr, ActorUsername,
+            AbstractInsightId = EventOriginalUid, SourceTable = "OktaV2_CL"),
+    (CommonSecurityLog
+        | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'csl-cef') or set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'csl-acs')
+        | where TimeGenerated > ago(lookback)
+        | where CollectorHostName == "Abstract" and (toint(LogSeverity) >= 7 or LogSeverity in~ ("high", "very-high", "critical"))
+        | project TimeGenerated, AbstractSeverity = "high", EventProduct = DeviceProduct, EventMessage = Activity, SrcIpAddr = SourceIP,
+            ActorUsername = SourceUserName, AbstractInsightId = "", SourceTable = "CommonSecurityLog"),
+    (Syslog
+        | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'syslog')
+        | where TimeGenerated > ago(lookback)
+        | where CollectorHostName == "Abstract" and SeverityLevel in ("crit", "alert", "emerg")
+        | project TimeGenerated, AbstractSeverity = "high", EventProduct = ProcessName, EventMessage = SyslogMessage, SrcIpAddr = HostIP,
+            ActorUsername = "", AbstractInsightId = "", SourceTable = "Syslog")
+| project TimeGenerated, AbstractSeverity, EventProduct, EventMessage, SrcIpAddr, ActorUsername, AbstractInsightId, SourceTable

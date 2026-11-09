@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 A master stack nests the per-source child templates, so one deploy provisions any combination of CloudTrail, CloudFront, load balancer, Route 53 Resolver, S3 access, VPC Flow, WAF, CloudWatch Logs, Kinesis and Security Lake sources. The Abstract principal, External ID, encryption and alarm settings are entered once and flow down to every enabled child.
 
 **Cloud:** aws · **Role:** source · **Scope:** account

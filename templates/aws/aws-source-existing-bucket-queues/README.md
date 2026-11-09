@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 A Terraform or OpenTofu module for a security bucket that holds several log sources under different key prefixes. Because an Abstract S3 + SQS configuration is scoped by its queue alone, the module builds one SQS queue per source and one routing layer in front of them: a direct bucket notification, SNS fan-out, or EventBridge.
 
 **Cloud:** aws · **Role:** source · **Scope:** account

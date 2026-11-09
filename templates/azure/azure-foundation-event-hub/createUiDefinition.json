@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "![Abstract Security](https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/portal-badge.png)\n\n# ABSTRACT SECURITY\n**The Security Data Pipeline Platform.** Stream, reduce, enrich, and route your security telemetry on your terms — no lock-in, no waste.\n\n[abstract.security](https://abstract.security) · [Documentation](https://docs.abstractsecurity.app/docs/integrations/source-integrations/azure-event-hub/) · [Book a demo](https://abstract.security)\n\n---\n### Azure Event Hub — Source Integration\nAbstract **reads from** Event Hub. This guided deployment provisions everything the integration needs: an Event Hubs namespace, one Event Hub per log source, the `abstract` consumer group, the required checkpoint Storage Account + private blob container, and your choice of Connection String and/or Service Principal authentication — with Safe Mode networking so onboarding never breaks.\n\n✓ Production-ready  ✓ Least-privilege by default  ✓ No secrets in outputs\n\nWhen the deployment finishes, the **Outputs** tab is your field-for-field answer key for the Abstract integration modal.",
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-foundation-event-hub/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Azure first step: Event Hub that receives all logs**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Azure Monitor cannot send diagnostic data directly to a third party, so every Azure onboarding starts here: an Event Hubs namespace with one hub per log source, a consumer group Abstract reads from, and a checkpoint storage account. Deploy it first; the Activity Log, Entra ID and policy templates consume its outputs.\n\n### Azure Event Hub \u2014 Source Integration\nAbstract **reads from** Event Hub. This guided deployment provisions everything the integration needs: an Event Hubs namespace, one Event Hub per log source, the `abstract` consumer group, the required checkpoint Storage Account + private blob container, and your choice of Connection String and/or Service Principal authentication \u2014 with Safe Mode networking so onboarding never breaks.\n\n\u2713 Production-ready  \u2713 Least-privilege by default  \u2713 No secrets in outputs\n\nWhen the deployment finishes, the **Outputs** tab is your field-for-field answer key for the Abstract integration modal.",
         "resourceGroup": {
           "constraints": {
             "validations": []
@@ -36,8 +36,14 @@
         "constraints": {
           "required": true,
           "allowedValues": [
-            { "label": "Standard (Abstract minimum)", "value": "Standard" },
-            { "label": "Premium", "value": "Premium" }
+            {
+              "label": "Standard (Abstract minimum)",
+              "value": "Standard"
+            },
+            {
+              "label": "Premium",
+              "value": "Premium"
+            }
           ]
         }
       },
@@ -69,6 +75,16 @@
         "max": 40,
         "showStepMarkers": false,
         "visible": "[and(equals(basics('sku'), 'Standard'), basics('autoInflate'))]"
+      },
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
       }
     ],
     "steps": [
@@ -81,7 +97,7 @@
             "type": "Microsoft.Common.InfoBox",
             "options": {
               "icon": "Info",
-              "text": "One Event Hub is created per log source, named <prefix>-<environment>-<source> (e.g. abs-prod-entra). Each hub gets the consumer group below — enter that consumer group in the Abstract integration. Abstract docs recommend at least 4 partitions; retention should cover possible ingestion downtime."
+              "text": "One Event Hub is created per log source, named <prefix>-<environment>-<source> (e.g. abs-prod-entra). Each hub gets the consumer group below \u2014 enter that consumer group in the Abstract integration. Abstract docs recommend at least 4 partitions; retention should cover possible ingestion downtime."
             }
           },
           {
@@ -175,9 +191,18 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "Connection String (SAS)", "value": "cs" },
-                { "label": "Service Principal (RBAC)", "value": "sp" },
-                { "label": "Both", "value": "both" }
+                {
+                  "label": "Connection String (SAS)",
+                  "value": "cs"
+                },
+                {
+                  "label": "Service Principal (RBAC)",
+                  "value": "sp"
+                },
+                {
+                  "label": "Both",
+                  "value": "both"
+                }
               ]
             }
           },
@@ -212,7 +237,7 @@
             "name": "principalId",
             "type": "Microsoft.Common.TextBox",
             "label": "Service principal object ID",
-            "toolTip": "Object ID of the Enterprise Application (service principal) Abstract authenticates as — NOT the Application (client) ID. Create the app registration first (e.g. abstract-eventhub-ingestion): az ad app create, then az ad sp create, then az ad sp show --id <client-id> --query id -o tsv gives this object ID.",
+            "toolTip": "Object ID of the Enterprise Application (service principal) Abstract authenticates as \u2014 NOT the Application (client) ID. Create the app registration first (e.g. abstract-eventhub-ingestion): az ad app create, then az ad sp create, then az ad sp show --id <client-id> --query id -o tsv gives this object ID.",
             "placeholder": "00000000-0000-0000-0000-000000000000",
             "defaultValue": "",
             "constraints": {
@@ -230,8 +255,14 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "Azure Event Hubs Data Receiver (Abstract docs)", "value": "Azure Event Hubs Data Receiver" },
-                { "label": "Azure Event Hubs Data Owner", "value": "Azure Event Hubs Data Owner" }
+                {
+                  "label": "Azure Event Hubs Data Receiver (Abstract docs)",
+                  "value": "Azure Event Hubs Data Receiver"
+                },
+                {
+                  "label": "Azure Event Hubs Data Owner",
+                  "value": "Azure Event Hubs Data Owner"
+                }
               ]
             },
             "visible": "[not(equals(steps('auth').method, 'cs'))]"
@@ -244,8 +275,14 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "Storage Blob Data Contributor (Abstract docs)", "value": "Storage Blob Data Contributor" },
-                { "label": "Storage Blob Data Owner", "value": "Storage Blob Data Owner" }
+                {
+                  "label": "Storage Blob Data Contributor (Abstract docs)",
+                  "value": "Storage Blob Data Contributor"
+                },
+                {
+                  "label": "Storage Blob Data Owner",
+                  "value": "Storage Blob Data Owner"
+                }
               ]
             },
             "visible": "[not(equals(steps('auth').method, 'cs'))]"
@@ -260,15 +297,27 @@
             "name": "profile",
             "type": "Microsoft.Common.DropDown",
             "label": "Security profile",
-            "defaultValue": "Safe Mode — public access stays on (recommended for onboarding)",
+            "defaultValue": "Safe Mode \u2014 public access stays on (recommended for onboarding)",
             "toolTip": "Safe Mode guarantees the namespace and checkpoint storage stay reachable by Abstract while you onboard. Harden later by redeploying with IP Allowlist, Private Only or Hybrid.",
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "Safe Mode — public access stays on (recommended for onboarding)", "value": "SafeMode" },
-                { "label": "IP Allowlist — public, firewall default-deny with allowed CIDRs", "value": "IpAllowlist" },
-                { "label": "Private Only — no public access, Private Endpoints required", "value": "PrivateOnly" },
-                { "label": "Hybrid — Private Endpoint + public IP allowlist", "value": "Hybrid" }
+                {
+                  "label": "Safe Mode \u2014 public access stays on (recommended for onboarding)",
+                  "value": "SafeMode"
+                },
+                {
+                  "label": "IP Allowlist \u2014 public, firewall default-deny with allowed CIDRs",
+                  "value": "IpAllowlist"
+                },
+                {
+                  "label": "Private Only \u2014 no public access, Private Endpoints required",
+                  "value": "PrivateOnly"
+                },
+                {
+                  "label": "Hybrid \u2014 Private Endpoint + public IP allowlist",
+                  "value": "Hybrid"
+                }
               ]
             }
           },
@@ -285,7 +334,7 @@
             "name": "ipCsv",
             "type": "Microsoft.Common.TextBox",
             "label": "Allowed public IP ranges (comma-separated CIDRs)",
-            "toolTip": "Abstract egress IPs plus your admin ranges. The storage firewall rejects /31 and /32 — list single addresses as bare IPs.",
+            "toolTip": "Abstract egress IPs plus your admin ranges. The storage firewall rejects /31 and /32 \u2014 list single addresses as bare IPs.",
             "placeholder": "203.0.113.0/24,198.51.100.7",
             "defaultValue": "",
             "constraints": {
@@ -311,7 +360,7 @@
           {
             "name": "privateDnsZoneId",
             "type": "Microsoft.Common.TextBox",
-            "label": "Private DNS zone ID — privatelink.servicebus.windows.net (optional)",
+            "label": "Private DNS zone ID \u2014 privatelink.servicebus.windows.net (optional)",
             "defaultValue": "",
             "constraints": {
               "required": false,
@@ -323,7 +372,7 @@
           {
             "name": "storageBlobPrivateDnsZoneId",
             "type": "Microsoft.Common.TextBox",
-            "label": "Private DNS zone ID — privatelink.blob.core.windows.net (optional)",
+            "label": "Private DNS zone ID \u2014 privatelink.blob.core.windows.net (optional)",
             "defaultValue": "",
             "constraints": {
               "required": false,
@@ -375,13 +424,22 @@
             "name": "storageSkuName",
             "type": "Microsoft.Common.DropDown",
             "label": "Replication",
-            "defaultValue": "Locally-redundant (LRS) — sufficient for checkpoints",
+            "defaultValue": "Locally-redundant (LRS) \u2014 sufficient for checkpoints",
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "Locally-redundant (LRS) — sufficient for checkpoints", "value": "Standard_LRS" },
-                { "label": "Zone-redundant (ZRS)", "value": "Standard_ZRS" },
-                { "label": "Geo-redundant (GRS)", "value": "Standard_GRS" }
+                {
+                  "label": "Locally-redundant (LRS) \u2014 sufficient for checkpoints",
+                  "value": "Standard_LRS"
+                },
+                {
+                  "label": "Zone-redundant (ZRS)",
+                  "value": "Standard_ZRS"
+                },
+                {
+                  "label": "Geo-redundant (GRS)",
+                  "value": "Standard_GRS"
+                }
               ]
             },
             "visible": "[steps('storage').createStorageAccount]"

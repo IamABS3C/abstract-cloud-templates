@@ -2,6 +2,8 @@
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
+
 A wrapper around CloudFormation StackSets, service-managed for AWS Organizations, that rolls one Abstract template across every account in an organizational unit and a list of regions. With auto-deployment on, accounts added to the OU later receive the stack too.
 
 **Cloud:** aws · **Role:** source · **Scope:** organization
