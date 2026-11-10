@@ -1,0 +1,141 @@
+[
+  {
+    "action": "string",
+    "agent": {
+      "key": "value"
+    },
+    "aggregation_count": 1.5,
+    "aggregation_end": "2026-01-01T00:00:00.000Z",
+    "aggregation_start": "2026-01-01T00:00:00.000Z",
+    "cloud": {
+      "key": "value"
+    },
+    "container": {
+      "key": "value"
+    },
+    "correlated_count": 1.5,
+    "customer_id": "string",
+    "customer_name": "string",
+    "data_stream": {
+      "key": "value"
+    },
+    "dest_address": "string",
+    "dest_ipv4": "string",
+    "dest_ipv6": "string",
+    "dest_port": 1.5,
+    "destination": {
+      "key": "value"
+    },
+    "device": {
+      "key": "value"
+    },
+    "dns": {
+      "key": "value"
+    },
+    "email": {
+      "key": "value"
+    },
+    "error": {
+      "key": "value"
+    },
+    "event": {
+      "key": "value"
+    },
+    "ext": {
+      "key": "value"
+    },
+    "file": {
+      "key": "value"
+    },
+    "group": {
+      "key": "value"
+    },
+    "host": {
+      "key": "value"
+    },
+    "host_address": "string",
+    "host_ipv4": "string",
+    "host_ipv6": "string",
+    "host_name": "string",
+    "http": {
+      "key": "value"
+    },
+    "identity": "string",
+    "ingested_time": "2026-01-01T00:00:00.000Z",
+    "insertion_time": "2026-01-01T00:00:00.000Z",
+    "labels": "string",
+    "log": {
+      "key": "value"
+    },
+    "matched_rules": {
+      "key": "value"
+    },
+    "message": "string",
+    "network": {
+      "key": "value"
+    },
+    "organization": {
+      "key": "value"
+    },
+    "process": {
+      "key": "value"
+    },
+    "product": "string",
+    "registry": {
+      "key": "value"
+    },
+    "related": {
+      "key": "value"
+    },
+    "related_events": {
+      "key": "value"
+    },
+    "resource": {
+      "key": "value"
+    },
+    "risk_score": 1.5,
+    "rule": {
+      "key": "value"
+    },
+    "service": {
+      "key": "value"
+    },
+    "severity": "string",
+    "source": {
+      "key": "value"
+    },
+    "source_address": "string",
+    "source_ipv4": "string",
+    "source_ipv6": "string",
+    "source_port": 1.5,
+    "span_id": "string",
+    "tags": {
+      "key": "value"
+    },
+    "threat": {
+      "key": "value"
+    },
+    "tls": {
+      "key": "value"
+    },
+    "trace_id": "string",
+    "transaction_id": "string",
+    "acs_type": "string",
+    "url": {
+      "key": "value"
+    },
+    "user": {
+      "key": "value"
+    },
+    "user_agent": "string",
+    "user_id": "string",
+    "user_name": "string",
+    "vendor": "string",
+    "vulnerability_id": "string",
+    "timestamp": "2026-01-01T00:00:00.000Z",
+    "acs_resource_id": "string",
+    "acs_resource_name": "string",
+    "acs_resource_type": "string",
+    "resource_additional_data": "string"
+  }
+]

@@ -187,3 +187,4 @@ lint_skip:
 - check: 'arm-ttk:Template Should Not Contain Blanks'
   reason: The blanks are inside the workbook's serializedData string (an empty parameter value, additionalResourceOptions
     and styleSettings), which is Azure Workbooks' own JSON and not template properties.
+site_guide: sentinel-guide#discovery

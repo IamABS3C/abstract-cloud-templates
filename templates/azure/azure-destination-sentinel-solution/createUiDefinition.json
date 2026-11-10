@@ -1152,7 +1152,7 @@
             "type": "Microsoft.Common.TextBlock",
             "visible": true,
             "options": {
-              "text": "The deployment always registers the Abstract package and its content templates, so Content hub lists them under 'Abstract Security for Microsoft Sentinel'. Choose which items to install now. Analytics and automation rules install disabled; enable them in Microsoft Sentinel when you are ready."
+              "text": "The deployment always registers the Abstract package and its content templates, so Content hub lists them under 'Abstract Security for Microsoft Sentinel'. Choose which items to install now, and which analytics and automation rules to turn on. Choose them here: every deployment, including the ones that add a route later, sets each rule on or off from this form."
             }
           },
           {
@@ -1183,10 +1183,38 @@
           {
             "name": "deployAnalyticsRules",
             "type": "Microsoft.Common.CheckBox",
-            "label": "Analytics rules (3, installed disabled)",
+            "label": "Analytics rules (3)",
             "defaultValue": true,
-            "toolTip": "What: 'Abstract Security - High or Critical event', 'Abstract - Repeated auth failures followed by success' and 'Abstract Security - Finding' (findings from the asim-alert lane). They read AbstractEventLogs_CL and the ASim tables directly. Consequence: none until you enable them in Microsoft Sentinel > Analytics. When: keep on; enable the rules you want later.",
+            "toolTip": "What: 'Abstract Security - High or Critical event', 'Abstract - Repeated auth failures followed by success' and 'Abstract Security - Finding' (findings from the asim-alert lane). They read AbstractEventLogs_CL and the ASim tables directly. Consequence: none until you turn one on below. When: keep on. Portal: Microsoft Sentinel > Analytics.",
             "visible": true
+          },
+          {
+            "name": "enabledAnalyticsRules",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Turn these rules on",
+            "toolTip": "What: the analytics rules that run. Each runs every hour and can create incidents. When: choose Abstract finding if Abstract findings reach Sentinel (the asim-alert vendor table), and the High or critical rule only if findings do not, or the same event raises two incidents. Consequence: a rule left out is installed but off. Portal: Microsoft Sentinel > Analytics.",
+            "multiLine": true,
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "Abstract finding: one incident per Abstract finding",
+                  "value": "finding"
+                },
+                {
+                  "label": "High or critical Abstract event",
+                  "value": "high-or-critical"
+                },
+                {
+                  "label": "Repeated sign-in failures followed by a success",
+                  "value": "repeated-auth-failures"
+                }
+              ],
+              "required": false
+            },
+            "visible": "[steps('content').deployAnalyticsRules]",
+            "defaultValue": [],
+            "multiselect": true,
+            "selectAll": true
           },
           {
             "name": "deployHuntingQueries",
@@ -1223,9 +1251,17 @@
           {
             "name": "deployAutomationRules",
             "type": "Microsoft.Common.CheckBox",
-            "label": "Automation rule: tag and prioritise Abstract incidents (disabled)",
+            "label": "Automation rule: tag and prioritise Abstract incidents",
             "defaultValue": true,
-            "toolTip": "What: labels incidents raised by this solution's rules. Consequence: none until you enable it in Microsoft Sentinel > Automation. When: keep on; enable it later.",
+            "toolTip": "What: labels incidents raised by this solution's rules. Consequence: none until it is turned on below. When: keep on. Portal: Microsoft Sentinel > Automation.",
+            "visible": true
+          },
+          {
+            "name": "enableAutomationRules",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Turn the automation rules on",
+            "defaultValue": false,
+            "toolTip": "What: turns on the tag-and-prioritise rule and, when the Playbooks tab installs them, the rules that run Verdict and Tune at source. Consequence: they act on new incidents from this solution's rules. When: turn on once you have read what each rule does. Portal: Microsoft Sentinel > Automation.",
             "visible": true
           }
         ]
@@ -1430,7 +1466,7 @@
           {
             "name": "deployPlaybookAutomationRules",
             "type": "Microsoft.Common.CheckBox",
-            "label": "Automation rules that run Verdict and Tune at source (disabled)",
+            "label": "Automation rules that run Verdict and Tune at source",
             "defaultValue": false,
             "toolTip": "What: two automation rules that run the Verdict and Tune-at-source playbooks on new incidents. Consequence: the deployment FAILS unless Microsoft Sentinel's own app (Azure Security Insights) holds 'Microsoft Sentinel Automation Contributor' on this resource group, granted about 10 minutes earlier. The form checks for that role below. When: only after the role above has been granted. Portal: Microsoft Sentinel > Automation.",
             "visible": "[steps('playbooks').deployPlaybooks]"
@@ -1486,6 +1522,8 @@
       "deployDiscoveryWorkbook": "[steps('content').deployDiscoveryWorkbook]",
       "deployDiscovery": "[steps('content').deployDiscovery]",
       "deployAutomationRules": "[steps('content').deployAutomationRules]",
+      "enabledAnalyticsRules": "[if(steps('content').deployAnalyticsRules, coalesce(steps('content').enabledAnalyticsRules, parse('[]')), parse('[]'))]",
+      "enableAutomationRules": "[steps('content').enableAutomationRules]",
       "deployPlaybooks": "[steps('playbooks').deployPlaybooks]",
       "deployPlaybookAutomationRules": "[and(steps('playbooks').deployPlaybooks, steps('playbooks').deployPlaybookAutomationRules)]",
       "abstractBaseUrl": "[if(equals(steps('playbooks').baseUrlChoice, 'other'), steps('playbooks').baseUrlOther, coalesce(steps('playbooks').baseUrlChoice, 'https://api.abstractsecurity.app'))]",

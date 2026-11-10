@@ -336,13 +336,24 @@ parameters:
 - name: deployAnalyticsRules
   type: bool
   required: false
-  description: 'Install the analytics rules High or Critical event and Repeated auth failures followed by success.
-    Both are installed disabled; enable the ones you want. They read the tables directly and call no workspace function.
-    Find them: Microsoft Sentinel > Analytics. Default: true. Example: true. An enabled rule runs every hour and can
-    create incidents.'
+  description: 'Install the analytics rules Abstract Security - Finding, Abstract Security - High or Critical event and Abstract -
+    Repeated auth failures followed by success. Each is on or off as enabledAnalyticsRules says. They read the tables
+    directly and call no workspace function. Find them: Microsoft Sentinel > Analytics. Default: true. Example: true.'
   default: true
   example: true
   find_it: 'Your choice. After deployment: Microsoft Sentinel > Analytics'
+- name: enabledAnalyticsRules
+  type: array
+  required: false
+  description: 'The analytics rules to turn on: finding (one incident per Abstract finding), high-or-critical (high or critical
+    Abstract events) and repeated-auth-failures (failed sign-ins followed by a success). Every deployment sets each rule
+    on or off from this list, so choose the rules here rather than in Microsoft Sentinel > Analytics, or the next
+    deployment turns them off. An enabled rule runs every hour and can create incidents. Default: none. Example:
+    [''finding''].'
+  default: []
+  example:
+  - finding
+  find_it: 'Microsoft Sentinel > Analytics, the Abstract rules and their Status. Supported: finding, high-or-critical, repeated-auth-failures'
 - name: deployHuntingQueries
   type: bool
   required: false
@@ -380,12 +391,22 @@ parameters:
 - name: deployAutomationRules
   type: bool
   required: false
-  description: 'Install the automation rule Tag & prioritize Abstract-originated incidents, which labels incidents
-    from this solution''s rules. It is installed disabled. Find it: Microsoft Sentinel > Automation. Default: true.
-    Example: true.'
+  description: 'Install the automation rule Tag & prioritize Abstract-originated incidents, which labels incidents from this
+    solution''s rules. It is on or off as enableAutomationRules says. Find it: Microsoft Sentinel > Automation. Default:
+    true. Example: true.'
   default: true
   example: true
   find_it: 'Your choice. After deployment: Microsoft Sentinel > Automation'
+- name: enableAutomationRules
+  type: bool
+  required: false
+  description: 'Turn on the automation rules this deployment installs: Tag & prioritize Abstract-originated incidents and, with
+    deployPlaybookAutomationRules, Run ASTRO Verdict and Tune at source. Every deployment sets them on or off from this
+    value, so set it here rather than in Microsoft Sentinel > Automation, or the next deployment turns them off.
+    Default: false. Example: true.'
+  default: false
+  example: true
+  find_it: 'Microsoft Sentinel > Automation, the Abstract rules and their Status'
 - name: deployPlaybooks
   type: bool
   required: false
@@ -401,7 +422,7 @@ parameters:
   type: bool
   required: false
   description: 'Install the automation rules Run ASTRO Verdict and Tune at source, which run two of the playbooks
-    (installed disabled). Needs deployPlaybooks, and Microsoft Sentinel Automation Contributor on this resource group
+    (on or off as enableAutomationRules says). Needs deployPlaybooks, and Microsoft Sentinel Automation Contributor on this resource group
     granted to Azure Security Insights (app id 98785600-1bb7-4fb9-b9fa-19afe2c8a360) about 10 minutes before the deployment;
     without it the deployment fails with "Missing required permissions for Microsoft Sentinel on the playbook resource".
     Find the grant: Resource groups > this group > Access control (IAM) > Role assignments. Default: false. Example:
@@ -491,3 +512,4 @@ lint_skip:
   reason: The blanks are empty values inside the deployed Sentinel content, Logic App runAfter, actions and
     customParameterValues, analytics rule groupByAlertDetails, groupByCustomDetails, tactics and entities, and workbook
     serializedData, so removing them would change the deployed content.
+site_guide: sentinel-guide

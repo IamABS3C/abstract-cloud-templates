@@ -83,6 +83,11 @@
     "deployAnalyticsRules": {
       "value": true
     },
+    "enabledAnalyticsRules": {
+      "value": [
+        "finding"
+      ]
+    },
     "deployHuntingQueries": {
       "value": true
     },
@@ -96,6 +101,9 @@
       "value": true
     },
     "deployAutomationRules": {
+      "value": true
+    },
+    "enableAutomationRules": {
       "value": true
     },
     "deployPlaybooks": {

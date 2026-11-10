@@ -78,6 +78,14 @@
       "type": "bool",
       "defaultValue": false
     },
+    "enabledAnalyticsRules": {
+      "type": "array",
+      "defaultValue": []
+    },
+    "enableAutomationRules": {
+      "type": "bool",
+      "defaultValue": false
+    },
     "parserReadsAsim": {
       "type": "bool",
       "defaultValue": false
@@ -2570,7 +2578,7 @@
       "kind": "Scheduled",
       "properties": {
         "displayName": "Abstract Security - High or Critical event",
-        "enabled": false,
+        "enabled": "[contains(parameters('enabledAnalyticsRules'), 'high-or-critical')]",
         "severity": "High",
         "description": "High/critical Abstract event; surfaces AbstractInsightId for the Verdict playbook.",
         "query": "[replace(variables('ruleHighOrCritical'), '__ABSTRACT_NATIVE_VENDORS__', string(parameters('parserNativeVendors')))]",
@@ -2672,7 +2680,7 @@
       ],
       "properties": {
         "displayName": "Abstract - Repeated auth failures followed by success",
-        "enabled": false,
+        "enabled": "[contains(parameters('enabledAnalyticsRules'), 'repeated-auth-failures')]",
         "severity": "High",
         "description": "Detects a likely successful brute force / password spray: many failed authentication events followed by a success from the same source IP within a short window, using Abstract-normalized auth telemetry (ASim_AbstractEvent). Tune the EventResult terms to your products.",
         "query": "[replace(variables('ruleAuthFailures'), '__ABSTRACT_NATIVE_VENDORS__', string(parameters('parserNativeVendors')))]",
@@ -4057,7 +4065,7 @@
         "displayName": "Abstract - Tag & prioritize Abstract-originated incidents",
         "order": 1,
         "triggeringLogic": {
-          "isEnabled": false,
+          "isEnabled": "[parameters('enableAutomationRules')]",
           "triggersOn": "Incidents",
           "triggersWhen": "Created",
           "conditions": [
@@ -4144,7 +4152,7 @@
         "displayName": "Abstract - Run ASTRO Verdict on Abstract incidents",
         "order": 2,
         "triggeringLogic": {
-          "isEnabled": false,
+          "isEnabled": "[parameters('enableAutomationRules')]",
           "triggersOn": "Incidents",
           "triggersWhen": "Created",
           "conditions": [
@@ -4223,7 +4231,7 @@
         "displayName": "Abstract - Tune at source on closed Abstract incidents",
         "order": 3,
         "triggeringLogic": {
-          "isEnabled": false,
+          "isEnabled": "[parameters('enableAutomationRules')]",
           "triggersOn": "Incidents",
           "triggersWhen": "Updated",
           "conditions": [
@@ -4304,7 +4312,7 @@
       "kind": "Scheduled",
       "properties": {
         "displayName": "Abstract Security - Finding",
-        "enabled": false,
+        "enabled": "[contains(parameters('enabledAnalyticsRules'), 'finding')]",
         "severity": "Medium",
         "description": "Identifies Abstract Security findings delivered to ASimAlertEventLogs by the asim-alert lane, one alert per finding, with the finding's own name and severity. Surfaces AbstractInsightId for the Verdict playbook.",
         "query": "[replace(variables('ruleFinding'), '__ABSTRACT_NATIVE_VENDORS__', string(parameters('parserNativeVendors')))]",

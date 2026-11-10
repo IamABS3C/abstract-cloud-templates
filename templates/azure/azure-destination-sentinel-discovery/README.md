@@ -20,6 +20,8 @@ A customer who wants a read-only inventory of a Sentinel workspace, without inst
 
 Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
+**Step by step, with a screenshot of every screen:** [the setup guide for this template](https://iamabs3c.github.io/abstract-cloud-templates/sentinel-guide/#discovery).
+
 ## Deploy
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FIamABS3C%2Fabstract-cloud-templates%2Fmain%2Ftemplates%2Fazure%2Fazure-destination-sentinel-discovery%2Fazuredeploy.json)

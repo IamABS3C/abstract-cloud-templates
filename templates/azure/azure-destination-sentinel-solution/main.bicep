@@ -122,8 +122,11 @@ param deployDataConnectors bool = true
 @description('Install the workspace function ASim_AbstractEvent, which reads every Abstract event wherever the routes stored it and gives it ASIM column names. The hunting queries and the Pipeline Overview and Value & ROI workbooks read it, so turning it off breaks them. Find it after deployment: Logs > Functions > ASim_AbstractEvent. Default: true. Example: true.')
 param deployParsers bool = true
 
-@description('Install the analytics rules High or Critical event and Repeated auth failures followed by success. Both are installed disabled; enable the ones you want. They read the tables directly and call no workspace function. Find them: Microsoft Sentinel > Analytics. Default: true. Example: true. An enabled rule runs every hour and can create incidents.')
+@description('Install the analytics rules Abstract Security - Finding, Abstract Security - High or Critical event and Abstract - Repeated auth failures followed by success. Each is on or off as enabledAnalyticsRules says. They read the tables directly and call no workspace function. Find them: Microsoft Sentinel > Analytics. Default: true. Example: true.')
 param deployAnalyticsRules bool = true
+
+@description('The analytics rules to turn on: finding (one incident per Abstract finding), high-or-critical (high or critical Abstract events) and repeated-auth-failures (failed sign-ins followed by a success). Every deployment sets each rule on or off from this list, so choose the rules here rather than in Microsoft Sentinel > Analytics, or the next deployment turns them off. An enabled rule runs every hour and can create incidents. Default: none. Example: [\'finding\'].')
+param enabledAnalyticsRules array = []
 
 @description('Install the hunting queries Rare or newly-seen product activity, High cumulative-risk identities and Daily value & reduction summary. Find them: Microsoft Sentinel > Hunting > Queries. Default: true. Example: true. They run only when someone runs them.')
 param deployHuntingQueries bool = true
@@ -134,8 +137,11 @@ param deployWorkbooks bool = true
 @description('Install the Sentinel Discovery workbook, which inventories the workspace (tables, connectors, rules, cost). Find it: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true.')
 param deployDiscoveryWorkbook bool = true
 
-@description('Install the automation rule Tag & prioritize Abstract-originated incidents, which labels incidents from this solution\'s rules. It is installed disabled. Find it: Microsoft Sentinel > Automation. Default: true. Example: true.')
+@description('Install the automation rule Tag & prioritize Abstract-originated incidents, which labels incidents from this solution\'s rules. It is on or off as enableAutomationRules says. Find it: Microsoft Sentinel > Automation. Default: true. Example: true.')
 param deployAutomationRules bool = true
+
+@description('Turn on the automation rules this deployment installs: Tag & prioritize Abstract-originated incidents and, with deployPlaybookAutomationRules, Run ASTRO Verdict and Tune at source. Every deployment sets them on or off from this value, so set it here rather than in Microsoft Sentinel > Automation, or the next deployment turns them off. Default: false. Example: true.')
+param enableAutomationRules bool = false
 
 @description('Also run the Sentinel discovery inventory against this workspace (template azure-destination-sentinel-discovery as a module): a managed identity with read-only roles, a storage account for the report, and two short deployment scripts. Off by default because it adds roles and runs for 5 to 15 minutes. Turn it on to get the report as part of this deployment. Find the output: the storage account in this resource group, container sentinel-discovery. Default: false. Example: false.')
 param deployDiscovery bool = false
@@ -146,7 +152,7 @@ param deployDiscovery bool = false
 @description('Install the playbooks Abstract-Enrich-Incident, Abstract-Verdict and Abstract-Tune-At-Source (Logic Apps with a Sentinel API connection). They call the Abstract API with the key in keyVaultSecretUri. After deployment grant each playbook\'s managed identity Key Vault Secrets User on that secret and Microsoft Sentinel Responder on the workspace, or runs fail. Find them: Microsoft Sentinel > Automation > Active playbooks. Default: true. Example: true. Logic App runs are billed per action.')
 param deployPlaybooks bool = true
 
-@description('Install the automation rules Run ASTRO Verdict and Tune at source, which run two of the playbooks (installed disabled). Needs deployPlaybooks, and Microsoft Sentinel Automation Contributor on this resource group granted to Azure Security Insights (app id 98785600-1bb7-4fb9-b9fa-19afe2c8a360) about 10 minutes before the deployment; without it the deployment fails with "Missing required permissions for Microsoft Sentinel on the playbook resource". Find the grant: Resource groups > this group > Access control (IAM) > Role assignments. Default: false. Example: true.')
+@description('Install the automation rules Run ASTRO Verdict and Tune at source, which run two of the playbooks (on or off as enableAutomationRules says). Needs deployPlaybooks, and Microsoft Sentinel Automation Contributor on this resource group granted to Azure Security Insights (app id 98785600-1bb7-4fb9-b9fa-19afe2c8a360) about 10 minutes before the deployment; without it the deployment fails with "Missing required permissions for Microsoft Sentinel on the playbook resource". Find the grant: Resource groups > this group > Access control (IAM) > Role assignments. Default: false. Example: true.')
 param deployPlaybookAutomationRules bool = false
 
 @description('Abstract API base URL the playbooks call. Change it only for a non-production Abstract environment. Find it: the address of your Abstract API, as given by Abstract. Default: https://api.abstractsecurity.app. Example: https://api.abstractsecurity.app.')
@@ -187,6 +193,8 @@ var lakeFlowCount = (!empty(lakeTableName) && !empty(lakeCategories)) ? 1 : 0
 var dataFlowCount = 1 + asimFlowCount + lakeFlowCount + length(nativeFlows)
 // No @allowed on nativeVendors: the portal's parameter form marks an array with allowedValues and an empty default as
 // required ("default value which is not present in the list of allowed values"). Unknown names fail here instead.
+var unknownRules = filter(enabledAnalyticsRules, r => !contains(['finding', 'high-or-critical', 'repeated-auth-failures'], r))
+var checkedEnabledAnalyticsRules = length(unknownRules) > 0 ? fail('enabledAnalyticsRules has unsupported values ${string(unknownRules)}. Supported: finding, high-or-critical, repeated-auth-failures.') : enabledAnalyticsRules
 var unknownVendors = filter(nativeVendors, v => !contains(map(nativeCatalog, c => c.name), v))
 // What the vendor lanes take, from the catalog's selectKql: the exact selection each lane's transformKql starts with.
 var nativeSelection = (excludeNativeVendorsFromAsim && !empty(enabledNative)) ? join(map(enabledNative, vendor => '(${vendor.selectKql})'), ' or ') : ''
@@ -256,6 +264,8 @@ module content 'content/content.json' = {
     deployPlaybooks: deployPlaybooks
     deployAutomationRules: deployAutomationRules
     deployPlaybookAutomationRules: deployPlaybookAutomationRules
+    enabledAnalyticsRules: checkedEnabledAnalyticsRules
+    enableAutomationRules: enableAutomationRules
     parserReadsAsim: parserReadsAsim
     parserNativeVendors: parserNativeVendors
   }
