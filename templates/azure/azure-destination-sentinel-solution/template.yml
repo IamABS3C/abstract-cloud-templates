@@ -10,11 +10,12 @@ summary: 'One Azure deployment sets up everything Abstract needs to deliver data
   logging. On the same rule it adds the routes you choose: Microsoft''s ASim tables, a store-once option, a cheap
   Auxiliary lake table, and vendor-native tables filled with Microsoft''s own connector transformation (Okta into
   OktaV2_CL). The Content hub package Abstract Security for Microsoft Sentinel is installed with it: a data connector
-  tile, the ASim_AbstractEvent parser, two analytics rules (disabled), three hunting queries, three workbooks, three
+  tile, the ASim_AbstractEvent parser, two analytics rules (disabled), three hunting queries, five workbooks, three
   playbooks and their automation rules. Every content item has its own switch.'
 formats:
 - bicep
 - arm
+- terraform
 - portal-ui
 - script
 depends_on: []
@@ -366,7 +367,7 @@ parameters:
 - name: deployWorkbooks
   type: bool
   required: false
-  description: 'Install the workbooks Pipeline Overview and Value & ROI. Find them: Microsoft Sentinel > Workbooks
+  description: 'Install the workbooks Pipeline Overview, Value & ROI, Data Health and Cost by Table (the Sentinel Discovery workbook has its own switch). Find them: Microsoft Sentinel > Workbooks
     > My workbooks. Default: true. Example: true. They query only when opened.'
   default: true
   example: true
@@ -476,12 +477,14 @@ outputs:
 - nativeVendorTables
 - discoveryReportBlobUrl
 - contentTemplateCount
+- abstractDestination
 verify:
-- check: The outputs carry the three values the Abstract destination needs (after a portal deploy, use the name shown
+- check: The outputs carry the values the Abstract destination needs (after a portal deploy, use the name shown
     under the resource group's Deployments)
   command: az deployment group show -g <resource-group> -n azure-destination-sentinel-solution --query properties.outputs
-  healthy: dataCollectionRuleImmutableId, dataCollectionEndpointUrl and logStreamName (Custom-AbstractEventLogs_CL)
-    are present; enter them in the Abstract Azure Sentinel Destination with the app's client ID, secret and tenant ID.
+  healthy: abstractDestination holds four of them, tenant_id, data_collection_endpoint, data_collection_rule_id and
+    log_stream_name (Custom-AbstractEventLogs_CL), also present as dataCollectionEndpointUrl, dataCollectionRuleImmutableId
+    and logStreamName; enter them in the Abstract Azure Sentinel Destination with the app's client ID and secret.
 - check: Abstract events are arriving, wherever the routes stored them
   command: ASim_AbstractEvent | where TimeGenerated > ago(1h) | summarize count() by EventVendor, EventProduct
   healthy: A count that matches the event count Abstract reports for the route, less any events sent to the lake table.

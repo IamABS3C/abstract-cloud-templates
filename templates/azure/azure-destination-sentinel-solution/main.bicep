@@ -131,7 +131,7 @@ param enabledAnalyticsRules array = []
 @description('Install the hunting queries Rare or newly-seen product activity, High cumulative-risk identities and Daily value & reduction summary. Find them: Microsoft Sentinel > Hunting > Queries. Default: true. Example: true. They run only when someone runs them.')
 param deployHuntingQueries bool = true
 
-@description('Install the workbooks Pipeline Overview and Value & ROI. Find them: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true. They query only when opened.')
+@description('Install the workbooks Pipeline Overview, Value & ROI, Data Health and Cost by Table (the Sentinel Discovery workbook has its own switch). Find them: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true. They query only when opened.')
 param deployWorkbooks bool = true
 
 @description('Install the Sentinel Discovery workbook, which inventories the workspace (tables, connectors, rules, cost). Find it: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true.')
@@ -291,6 +291,14 @@ output workspaceResourceId string = dataPlane.outputs.workspaceResourceId
 output dataCollectionRuleImmutableId string = dataPlane.outputs.dataCollectionRuleImmutableId
 output dataCollectionEndpointUrl string = dataPlane.outputs.dataCollectionEndpointUrl
 output logStreamName string = dataPlane.outputs.logStreamName
+// One object with the values the Abstract destination takes, no secrets. client_id is not here because this template
+// only knows the principal's object id; the app id is looked up from it (Entra admin center or `az ad sp show`).
+output abstractDestination object = {
+  tenant_id: subscription().tenantId
+  data_collection_endpoint: dataPlane.outputs.dataCollectionEndpointUrl
+  data_collection_rule_id: dataPlane.outputs.dataCollectionRuleImmutableId
+  log_stream_name: dataPlane.outputs.logStreamName
+}
 output rbacAssigned bool = dataPlane.outputs.rbacAssigned
 output dataFlowCount int = dataPlane.outputs.dataFlowCount
 output nativeVendorTables array = map(filter(enabledNative, vendor => contains(vendor, 'table')), vendor => vendor.table.name)

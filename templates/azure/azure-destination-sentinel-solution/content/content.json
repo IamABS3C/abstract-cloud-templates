@@ -220,6 +220,16 @@
               "kind": "Workbook",
               "contentId": "d07cfab9-8d01-51ae-854f-d42da10b792f",
               "version": "4.0.0"
+            },
+            {
+              "kind": "Workbook",
+              "contentId": "400624d4-f1b0-5e7e-a198-6cb8f0424578",
+              "version": "4.0.0"
+            },
+            {
+              "kind": "Workbook",
+              "contentId": "0a74e253-54ae-5dfd-a166-39e67520ad66",
+              "version": "4.0.0"
             }
           ]
         },
@@ -2403,6 +2413,150 @@
       }
     },
     {
+      "type": "Microsoft.OperationalInsights/workspaces/providers/contentTemplates",
+      "apiVersion": "2023-04-01-preview",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/wb-400624d4-f1b0-5e7e-a198-6cb8f0424578')]",
+      "location": "[parameters('workspaceLocation')]",
+      "dependsOn": [
+        "[extensionResourceId(resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspace')), 'Microsoft.SecurityInsights/contentPackages', 'ffb59bbb-ab7c-5964-8c86-22d7b5df331b')]"
+      ],
+      "properties": {
+        "description": "Abstract Security - Data Health. Workbook for Abstract Security data in Microsoft Sentinel.",
+        "mainTemplate": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "4.0.0",
+          "parameters": {},
+          "variables": {},
+          "resources": [
+            {
+              "type": "Microsoft.Insights/workbooks",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(parameters('workspace'),'400624d4-f1b0-5e7e-a198-6cb8f0424578')]",
+              "location": "[parameters('workspaceLocation')]",
+              "kind": "shared",
+              "properties": {
+                "displayName": "Abstract Security - Data Health",
+                "serializedData": "{\"version\": \"Notebook/1.0\", \"styleSettings\": {}, \"items\": [{\"type\": 1, \"content\": {\"json\": \"<img src=\\\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-solution/abstract-logo-white.svg\\\" height=\\\"36\\\" alt=\\\"Abstract Security\\\" style=\\\"background:#060608;padding:8px 12px;border-radius:6px\\\">\\n\\n## Abstract Security - Data Health\\nRows Abstract wrote into each table, per hour, and what Azure refused. `AWSCloudTrail`, `OktaV2_CL` and `CrowdStrikeHostsV2_CL` also count rows from Microsoft's own connector for that vendor, if it is still on. The `acs_type` filter leaves out the validation record.\"}}, {\"type\": 9, \"content\": {\"version\": \"KqlParameterItem/1.0\", \"parameters\": [{\"version\": \"KqlParameterItem/1.0\", \"name\": \"TimeRange\", \"label\": \"Time range\", \"type\": 4, \"isRequired\": true, \"value\": {\"durationMs\": 86400000}, \"typeSettings\": {\"selectableValues\": [{\"durationMs\": 3600000}, {\"durationMs\": 14400000}, {\"durationMs\": 86400000}, {\"durationMs\": 259200000}, {\"durationMs\": 604800000}, {\"durationMs\": 2592000000}], \"allowCustom\": true}}], \"style\": \"pills\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true DCRLogErrors, (datatable(TimeGenerated:datetime, OperationName:string, InputStreamId:string, Message:string)[])\\n| summarize ['Refused rows'] = countif(isnotempty(OperationName))\\n| extend Status = iff(['Refused rows'] == 0, 'None refused', 'Rows refused')\", \"size\": 4, \"title\": \"Refused rows (green is none)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"tiles\", \"tileSettings\": {\"titleContent\": {\"columnMatch\": \"Status\", \"formatter\": 1}, \"leftContent\": {\"columnMatch\": \"Refused rows\", \"formatter\": 18, \"formatOptions\": {\"thresholdsOptions\": \"colors\", \"thresholdsGrid\": [{\"operator\": \"==\", \"thresholdValue\": \"0\", \"representation\": \"green\", \"text\": \"{0}{1}\"}, {\"operator\": \"Default\", \"representation\": \"redBright\", \"text\": \"{0}{1}\"}]}}, \"showBorder\": true}}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true\\n (AbstractEventLogs_CL | where isnotempty(acs_type) | summarize Rows = count() by Table = \\\"AbstractEventLogs_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (union withsource = Table ASim*Logs | where isnotempty(tostring(AdditionalFields.AbstractEventId)) | summarize Rows = count() by Table, Hour = bin(TimeGenerated, 1h)),\\n (CommonSecurityLog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"CommonSecurityLog\\\", Hour = bin(TimeGenerated, 1h)),\\n (Syslog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"Syslog\\\", Hour = bin(TimeGenerated, 1h)),\\n (AWSCloudTrail | summarize Rows = count() by Table = \\\"AWSCloudTrail\\\", Hour = bin(TimeGenerated, 1h)),\\n (OktaV2_CL | summarize Rows = count() by Table = \\\"OktaV2_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (CrowdStrikeHostsV2_CL | summarize Rows = count() by Table = \\\"CrowdStrikeHostsV2_CL\\\", Hour = bin(TimeGenerated, 1h))\\n| order by Table asc, Hour asc\", \"size\": 0, \"title\": \"Rows per table per hour\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\", \"gridSettings\": {\"filter\": true}}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true\\n (AbstractEventLogs_CL | where isnotempty(acs_type) | summarize Rows = count() by Table = \\\"AbstractEventLogs_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (union withsource = Table ASim*Logs | where isnotempty(tostring(AdditionalFields.AbstractEventId)) | summarize Rows = count() by Table, Hour = bin(TimeGenerated, 1h)),\\n (CommonSecurityLog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"CommonSecurityLog\\\", Hour = bin(TimeGenerated, 1h)),\\n (Syslog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"Syslog\\\", Hour = bin(TimeGenerated, 1h)),\\n (AWSCloudTrail | summarize Rows = count() by Table = \\\"AWSCloudTrail\\\", Hour = bin(TimeGenerated, 1h)),\\n (OktaV2_CL | summarize Rows = count() by Table = \\\"OktaV2_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (CrowdStrikeHostsV2_CL | summarize Rows = count() by Table = \\\"CrowdStrikeHostsV2_CL\\\", Hour = bin(TimeGenerated, 1h))\\n| project Hour, Table, Rows\", \"size\": 0, \"title\": \"Rows per hour, by table\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"timechart\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true\\n (AbstractEventLogs_CL | where isnotempty(acs_type) | summarize Rows = count() by Table = \\\"AbstractEventLogs_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (union withsource = Table ASim*Logs | where isnotempty(tostring(AdditionalFields.AbstractEventId)) | summarize Rows = count() by Table, Hour = bin(TimeGenerated, 1h)),\\n (CommonSecurityLog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"CommonSecurityLog\\\", Hour = bin(TimeGenerated, 1h)),\\n (Syslog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"Syslog\\\", Hour = bin(TimeGenerated, 1h)),\\n (AWSCloudTrail | summarize Rows = count() by Table = \\\"AWSCloudTrail\\\", Hour = bin(TimeGenerated, 1h)),\\n (OktaV2_CL | summarize Rows = count() by Table = \\\"OktaV2_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (CrowdStrikeHostsV2_CL | summarize Rows = count() by Table = \\\"CrowdStrikeHostsV2_CL\\\", Hour = bin(TimeGenerated, 1h))\\n| summarize Rows = sum(Rows), LastHour = max(Hour) by Table\\n| order by Rows desc\", \"size\": 1, \"title\": \"Rows per table, whole range\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true DCRLogErrors, (datatable(TimeGenerated:datetime, OperationName:string, InputStreamId:string, Message:string)[])\\n| where isnotempty(OperationName)\\n| summarize Rows = count(), Latest = max(TimeGenerated) by OperationName, InputStreamId, Message\\n| order by Rows desc\", \"size\": 1, \"title\": \"Refused by operation and stream\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\", \"noDataMessage\": \"Nothing refused in this range.\"}}, {\"type\": 1, \"content\": {\"json\": \"A table that stops growing while Abstract still sends is the first sign of a refused or mis-routed stream: check the last table above against **Refused by operation and stream**.\"}}]}",
+                "version": "1.0",
+                "category": "sentinel",
+                "sourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspace'))]"
+              }
+            },
+            {
+              "type": "Microsoft.OperationalInsights/workspaces/providers/metadata",
+              "apiVersion": "2023-04-01-preview",
+              "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/Workbook-400624d4-f1b0-5e7e-a198-6cb8f0424578')]",
+              "location": "[parameters('workspaceLocation')]",
+              "properties": {
+                "parentId": "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workspace'),'400624d4-f1b0-5e7e-a198-6cb8f0424578'))]",
+                "contentId": "400624d4-f1b0-5e7e-a198-6cb8f0424578",
+                "kind": "Workbook",
+                "version": "4.0.0",
+                "source": {
+                  "kind": "Solution",
+                  "name": "Abstract Security for Microsoft Sentinel",
+                  "sourceId": "ffb59bbb-ab7c-5964-8c86-22d7b5df331b"
+                },
+                "author": {
+                  "name": "Abstract Security",
+                  "email": "support@abstract.security"
+                },
+                "support": {
+                  "name": "Abstract Security",
+                  "email": "support@abstract.security",
+                  "tier": "Partner",
+                  "link": "https://www.abstract.security/contact-us"
+                }
+              }
+            }
+          ]
+        },
+        "packageKind": "Solution",
+        "packageVersion": "4.0.0",
+        "packageName": "Abstract Security for Microsoft Sentinel",
+        "packageId": "ffb59bbb-ab7c-5964-8c86-22d7b5df331b",
+        "contentSchemaVersion": "3.0.0",
+        "contentId": "400624d4-f1b0-5e7e-a198-6cb8f0424578",
+        "contentKind": "Workbook",
+        "displayName": "Abstract Security - Data Health",
+        "contentProductId": "[concat(take(variables('solutionId'),50),'-','wb','-', uniqueString(concat(variables('solutionId'),'-','Workbook','-','400624d4-f1b0-5e7e-a198-6cb8f0424578','-','4.0.0')))]",
+        "id": "[concat(take(variables('solutionId'),50),'-','wb','-', uniqueString(concat(variables('solutionId'),'-','Workbook','-','400624d4-f1b0-5e7e-a198-6cb8f0424578','-','4.0.0')))]",
+        "version": "4.0.0"
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/providers/contentTemplates",
+      "apiVersion": "2023-04-01-preview",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/wb-0a74e253-54ae-5dfd-a166-39e67520ad66')]",
+      "location": "[parameters('workspaceLocation')]",
+      "dependsOn": [
+        "[extensionResourceId(resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspace')), 'Microsoft.SecurityInsights/contentPackages', 'ffb59bbb-ab7c-5964-8c86-22d7b5df331b')]"
+      ],
+      "properties": {
+        "description": "Abstract Security - Cost by Table. Workbook for Abstract Security data in Microsoft Sentinel.",
+        "mainTemplate": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "4.0.0",
+          "parameters": {},
+          "variables": {},
+          "resources": [
+            {
+              "type": "Microsoft.Insights/workbooks",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(parameters('workspace'),'0a74e253-54ae-5dfd-a166-39e67520ad66')]",
+              "location": "[parameters('workspaceLocation')]",
+              "kind": "shared",
+              "properties": {
+                "displayName": "Abstract Security - Cost by Table",
+                "serializedData": "{\"version\": \"Notebook/1.0\", \"styleSettings\": {}, \"items\": [{\"type\": 1, \"content\": {\"json\": \"<img src=\\\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-solution/abstract-logo-white.svg\\\" height=\\\"36\\\" alt=\\\"Abstract Security\\\" style=\\\"background:#060608;padding:8px 12px;border-radius:6px\\\">\\n\\n## Abstract Security - Cost by Table\\nIngestion volume from the `Usage` table, priced at Azure list prices for East US (retail prices API, before any commitment tier or benefit). **Every dollar figure here is an estimate.** It covers ingestion only: retention beyond the included period is not counted, and Abstract's own price is not in it.\"}}, {\"type\": 9, \"content\": {\"version\": \"KqlParameterItem/1.0\", \"parameters\": [{\"version\": \"KqlParameterItem/1.0\", \"name\": \"TimeRange\", \"label\": \"Time range\", \"type\": 4, \"isRequired\": true, \"value\": {\"durationMs\": 86400000}, \"typeSettings\": {\"selectableValues\": [{\"durationMs\": 3600000}, {\"durationMs\": 14400000}, {\"durationMs\": 86400000}, {\"durationMs\": 259200000}, {\"durationMs\": 604800000}, {\"durationMs\": 2592000000}], \"allowCustom\": true}}, {\"version\": \"KqlParameterItem/1.0\", \"name\": \"DefaultPlan\", \"label\": \"Table plan (estimate)\", \"type\": 2, \"isRequired\": true, \"value\": \"Analytics\", \"typeSettings\": {\"additionalResourceOptions\": []}, \"jsonData\": \"[{\\\"value\\\": \\\"Analytics\\\", \\\"label\\\": \\\"Analytics\\\"}, {\\\"value\\\": \\\"Basic\\\", \\\"label\\\": \\\"Basic\\\"}, {\\\"value\\\": \\\"Auxiliary\\\", \\\"label\\\": \\\"Auxiliary\\\"}, {\\\"value\\\": \\\"Lake\\\", \\\"label\\\": \\\"Lake\\\"}]\"}], \"style\": \"pills\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\"}}, {\"type\": 1, \"content\": {\"json\": \"The workbook cannot read a table's plan, so each table is priced on the plan chosen above (Analytics unless you change it). `AbstractLake_CL` is priced as Auxiliary. Change the plan to see the estimate if you moved tables to Basic or Auxiliary. `Usage` counts every row in a shared table such as `Syslog`, not only Abstract's.\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"let prices = datatable(Plan:string, UsdPerGb:real)[\\\"Analytics\\\", 4.3, \\\"Basic\\\", 1.5, \\\"Auxiliary\\\", 0.1, \\\"Lake\\\", 0.15];\\nUsage\\n| extend Plan = iff(DataType == \\\"AbstractLake_CL\\\", \\\"Auxiliary\\\", \\\"{DefaultPlan}\\\")\\n| lookup prices on Plan\\n| extend GB = Quantity / 1024.0\\n| extend EstimatedUsd = iff(IsBillable, GB * UsdPerGb, 0.0)\\n| summarize ['Estimated USD (estimate)'] = round(sum(EstimatedUsd), 2), ['GB billable'] = round(sumif(GB, IsBillable), 2)\", \"size\": 4, \"title\": \"Estimated ingestion cost, all tables (estimate, USD)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"tiles\", \"tileSettings\": {\"titleContent\": {\"columnMatch\": \"Estimated USD (estimate)\", \"formatter\": 1}, \"leftContent\": {\"columnMatch\": \"GB billable\", \"formatter\": 12}, \"showBorder\": true}}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"let prices = datatable(Plan:string, UsdPerGb:real)[\\\"Analytics\\\", 4.3, \\\"Basic\\\", 1.5, \\\"Auxiliary\\\", 0.1, \\\"Lake\\\", 0.15];\\nUsage\\n| extend Plan = iff(DataType == \\\"AbstractLake_CL\\\", \\\"Auxiliary\\\", \\\"{DefaultPlan}\\\")\\n| lookup prices on Plan\\n| extend GB = Quantity / 1024.0\\n| extend EstimatedUsd = iff(IsBillable, GB * UsdPerGb, 0.0)\\n| summarize GB = round(sum(GB), 3), ['Estimated USD (estimate)'] = round(sum(EstimatedUsd), 2) by DataType, IsBillable, Plan, ['USD per GB (list)'] = UsdPerGb\\n| order by ['Estimated USD (estimate)'] desc, GB desc\", \"size\": 0, \"title\": \"Usage by table and billable (estimate)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\", \"gridSettings\": {\"filter\": true}}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"let prices = datatable(Plan:string, UsdPerGb:real)[\\\"Analytics\\\", 4.3, \\\"Basic\\\", 1.5, \\\"Auxiliary\\\", 0.1, \\\"Lake\\\", 0.15];\\nUsage\\n| where DataType in (dynamic([\\\"AbstractEventLogs_CL\\\",\\\"AbstractLake_CL\\\",\\\"CommonSecurityLog\\\",\\\"Syslog\\\",\\\"AWSCloudTrail\\\",\\\"OktaV2_CL\\\",\\\"CrowdStrikeHostsV2_CL\\\"])) or DataType startswith \\\"ASim\\\"\\n| extend Plan = iff(DataType == \\\"AbstractLake_CL\\\", \\\"Auxiliary\\\", \\\"{DefaultPlan}\\\")\\n| lookup prices on Plan\\n| extend GB = Quantity / 1024.0\\n| extend EstimatedUsd = iff(IsBillable, GB * UsdPerGb, 0.0)\\n| summarize GB = round(sum(GB), 3), ['Estimated USD (estimate)'] = round(sum(EstimatedUsd), 2) by DataType, IsBillable, Plan\\n| order by ['Estimated USD (estimate)'] desc\", \"size\": 0, \"title\": \"Tables Abstract writes to (estimate)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"let prices = datatable(Plan:string, UsdPerGb:real)[\\\"Analytics\\\", 4.3, \\\"Basic\\\", 1.5, \\\"Auxiliary\\\", 0.1, \\\"Lake\\\", 0.15];\\nUsage\\n| where DataType in (dynamic([\\\"AbstractEventLogs_CL\\\",\\\"AbstractLake_CL\\\",\\\"CommonSecurityLog\\\",\\\"Syslog\\\",\\\"AWSCloudTrail\\\",\\\"OktaV2_CL\\\",\\\"CrowdStrikeHostsV2_CL\\\"])) or DataType startswith \\\"ASim\\\"\\n| extend Plan = iff(DataType == \\\"AbstractLake_CL\\\", \\\"Auxiliary\\\", \\\"{DefaultPlan}\\\")\\n| lookup prices on Plan\\n| extend GB = Quantity / 1024.0\\n| extend EstimatedUsd = iff(IsBillable, GB * UsdPerGb, 0.0)\\n| summarize ['Estimated USD (estimate)'] = sum(EstimatedUsd) by Day = bin(TimeGenerated, 1d), DataType\\n| project Day, DataType, ['Estimated USD (estimate)']\", \"size\": 0, \"title\": \"Estimated cost per day, Abstract tables (estimate, USD)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"barchart\"}}, {\"type\": 1, \"content\": {\"json\": \"Prices: Azure Retail Prices API, region eastus, retrieved 2026-11-08. Estimates change with your region, commitment tier and Microsoft's price list.\"}}]}",
+                "version": "1.0",
+                "category": "sentinel",
+                "sourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspace'))]"
+              }
+            },
+            {
+              "type": "Microsoft.OperationalInsights/workspaces/providers/metadata",
+              "apiVersion": "2023-04-01-preview",
+              "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/Workbook-0a74e253-54ae-5dfd-a166-39e67520ad66')]",
+              "location": "[parameters('workspaceLocation')]",
+              "properties": {
+                "parentId": "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workspace'),'0a74e253-54ae-5dfd-a166-39e67520ad66'))]",
+                "contentId": "0a74e253-54ae-5dfd-a166-39e67520ad66",
+                "kind": "Workbook",
+                "version": "4.0.0",
+                "source": {
+                  "kind": "Solution",
+                  "name": "Abstract Security for Microsoft Sentinel",
+                  "sourceId": "ffb59bbb-ab7c-5964-8c86-22d7b5df331b"
+                },
+                "author": {
+                  "name": "Abstract Security",
+                  "email": "support@abstract.security"
+                },
+                "support": {
+                  "name": "Abstract Security",
+                  "email": "support@abstract.security",
+                  "tier": "Partner",
+                  "link": "https://www.abstract.security/contact-us"
+                }
+              }
+            }
+          ]
+        },
+        "packageKind": "Solution",
+        "packageVersion": "4.0.0",
+        "packageName": "Abstract Security for Microsoft Sentinel",
+        "packageId": "ffb59bbb-ab7c-5964-8c86-22d7b5df331b",
+        "contentSchemaVersion": "3.0.0",
+        "contentId": "0a74e253-54ae-5dfd-a166-39e67520ad66",
+        "contentKind": "Workbook",
+        "displayName": "Abstract Security - Cost by Table",
+        "contentProductId": "[concat(take(variables('solutionId'),50),'-','wb','-', uniqueString(concat(variables('solutionId'),'-','Workbook','-','0a74e253-54ae-5dfd-a166-39e67520ad66','-','4.0.0')))]",
+        "id": "[concat(take(variables('solutionId'),50),'-','wb','-', uniqueString(concat(variables('solutionId'),'-','Workbook','-','0a74e253-54ae-5dfd-a166-39e67520ad66','-','4.0.0')))]",
+        "version": "4.0.0"
+      }
+    },
+    {
       "type": "Microsoft.OperationalInsights/workspaces/providers/dataConnectorDefinitions",
       "apiVersion": "2022-09-01-preview",
       "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/AbstractSecurityConnector')]",
@@ -4459,12 +4613,104 @@
         "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workspace'),'d07cfab9-8d01-51ae-854f-d42da10b792f'))]"
       ],
       "condition": "[parameters('deployDiscoveryWorkbook')]"
+    },
+    {
+      "type": "Microsoft.Insights/workbooks",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(parameters('workspace'),'400624d4-f1b0-5e7e-a198-6cb8f0424578')]",
+      "location": "[parameters('workspaceLocation')]",
+      "kind": "shared",
+      "properties": {
+        "displayName": "Abstract Security - Data Health",
+        "serializedData": "{\"version\": \"Notebook/1.0\", \"styleSettings\": {}, \"items\": [{\"type\": 1, \"content\": {\"json\": \"<img src=\\\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-solution/abstract-logo-white.svg\\\" height=\\\"36\\\" alt=\\\"Abstract Security\\\" style=\\\"background:#060608;padding:8px 12px;border-radius:6px\\\">\\n\\n## Abstract Security - Data Health\\nRows Abstract wrote into each table, per hour, and what Azure refused. `AWSCloudTrail`, `OktaV2_CL` and `CrowdStrikeHostsV2_CL` also count rows from Microsoft's own connector for that vendor, if it is still on. The `acs_type` filter leaves out the validation record.\"}}, {\"type\": 9, \"content\": {\"version\": \"KqlParameterItem/1.0\", \"parameters\": [{\"version\": \"KqlParameterItem/1.0\", \"name\": \"TimeRange\", \"label\": \"Time range\", \"type\": 4, \"isRequired\": true, \"value\": {\"durationMs\": 86400000}, \"typeSettings\": {\"selectableValues\": [{\"durationMs\": 3600000}, {\"durationMs\": 14400000}, {\"durationMs\": 86400000}, {\"durationMs\": 259200000}, {\"durationMs\": 604800000}, {\"durationMs\": 2592000000}], \"allowCustom\": true}}], \"style\": \"pills\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true DCRLogErrors, (datatable(TimeGenerated:datetime, OperationName:string, InputStreamId:string, Message:string)[])\\n| summarize ['Refused rows'] = countif(isnotempty(OperationName))\\n| extend Status = iff(['Refused rows'] == 0, 'None refused', 'Rows refused')\", \"size\": 4, \"title\": \"Refused rows (green is none)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"tiles\", \"tileSettings\": {\"titleContent\": {\"columnMatch\": \"Status\", \"formatter\": 1}, \"leftContent\": {\"columnMatch\": \"Refused rows\", \"formatter\": 18, \"formatOptions\": {\"thresholdsOptions\": \"colors\", \"thresholdsGrid\": [{\"operator\": \"==\", \"thresholdValue\": \"0\", \"representation\": \"green\", \"text\": \"{0}{1}\"}, {\"operator\": \"Default\", \"representation\": \"redBright\", \"text\": \"{0}{1}\"}]}}, \"showBorder\": true}}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true\\n (AbstractEventLogs_CL | where isnotempty(acs_type) | summarize Rows = count() by Table = \\\"AbstractEventLogs_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (union withsource = Table ASim*Logs | where isnotempty(tostring(AdditionalFields.AbstractEventId)) | summarize Rows = count() by Table, Hour = bin(TimeGenerated, 1h)),\\n (CommonSecurityLog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"CommonSecurityLog\\\", Hour = bin(TimeGenerated, 1h)),\\n (Syslog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"Syslog\\\", Hour = bin(TimeGenerated, 1h)),\\n (AWSCloudTrail | summarize Rows = count() by Table = \\\"AWSCloudTrail\\\", Hour = bin(TimeGenerated, 1h)),\\n (OktaV2_CL | summarize Rows = count() by Table = \\\"OktaV2_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (CrowdStrikeHostsV2_CL | summarize Rows = count() by Table = \\\"CrowdStrikeHostsV2_CL\\\", Hour = bin(TimeGenerated, 1h))\\n| order by Table asc, Hour asc\", \"size\": 0, \"title\": \"Rows per table per hour\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\", \"gridSettings\": {\"filter\": true}}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true\\n (AbstractEventLogs_CL | where isnotempty(acs_type) | summarize Rows = count() by Table = \\\"AbstractEventLogs_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (union withsource = Table ASim*Logs | where isnotempty(tostring(AdditionalFields.AbstractEventId)) | summarize Rows = count() by Table, Hour = bin(TimeGenerated, 1h)),\\n (CommonSecurityLog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"CommonSecurityLog\\\", Hour = bin(TimeGenerated, 1h)),\\n (Syslog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"Syslog\\\", Hour = bin(TimeGenerated, 1h)),\\n (AWSCloudTrail | summarize Rows = count() by Table = \\\"AWSCloudTrail\\\", Hour = bin(TimeGenerated, 1h)),\\n (OktaV2_CL | summarize Rows = count() by Table = \\\"OktaV2_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (CrowdStrikeHostsV2_CL | summarize Rows = count() by Table = \\\"CrowdStrikeHostsV2_CL\\\", Hour = bin(TimeGenerated, 1h))\\n| project Hour, Table, Rows\", \"size\": 0, \"title\": \"Rows per hour, by table\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"timechart\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true\\n (AbstractEventLogs_CL | where isnotempty(acs_type) | summarize Rows = count() by Table = \\\"AbstractEventLogs_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (union withsource = Table ASim*Logs | where isnotempty(tostring(AdditionalFields.AbstractEventId)) | summarize Rows = count() by Table, Hour = bin(TimeGenerated, 1h)),\\n (CommonSecurityLog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"CommonSecurityLog\\\", Hour = bin(TimeGenerated, 1h)),\\n (Syslog | where CollectorHostName == \\\"Abstract\\\" | summarize Rows = count() by Table = \\\"Syslog\\\", Hour = bin(TimeGenerated, 1h)),\\n (AWSCloudTrail | summarize Rows = count() by Table = \\\"AWSCloudTrail\\\", Hour = bin(TimeGenerated, 1h)),\\n (OktaV2_CL | summarize Rows = count() by Table = \\\"OktaV2_CL\\\", Hour = bin(TimeGenerated, 1h)),\\n (CrowdStrikeHostsV2_CL | summarize Rows = count() by Table = \\\"CrowdStrikeHostsV2_CL\\\", Hour = bin(TimeGenerated, 1h))\\n| summarize Rows = sum(Rows), LastHour = max(Hour) by Table\\n| order by Rows desc\", \"size\": 1, \"title\": \"Rows per table, whole range\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"union isfuzzy=true DCRLogErrors, (datatable(TimeGenerated:datetime, OperationName:string, InputStreamId:string, Message:string)[])\\n| where isnotempty(OperationName)\\n| summarize Rows = count(), Latest = max(TimeGenerated) by OperationName, InputStreamId, Message\\n| order by Rows desc\", \"size\": 1, \"title\": \"Refused by operation and stream\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\", \"noDataMessage\": \"Nothing refused in this range.\"}}, {\"type\": 1, \"content\": {\"json\": \"A table that stops growing while Abstract still sends is the first sign of a refused or mis-routed stream: check the last table above against **Refused by operation and stream**.\"}}]}",
+        "version": "1.0",
+        "category": "sentinel",
+        "sourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspace'))]"
+      },
+      "condition": "[parameters('deployWorkbooks')]"
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/providers/metadata",
+      "apiVersion": "2023-04-01-preview",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/Workbook-400624d4-f1b0-5e7e-a198-6cb8f0424578')]",
+      "location": "[parameters('workspaceLocation')]",
+      "properties": {
+        "parentId": "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workspace'),'400624d4-f1b0-5e7e-a198-6cb8f0424578'))]",
+        "contentId": "400624d4-f1b0-5e7e-a198-6cb8f0424578",
+        "kind": "Workbook",
+        "version": "4.0.0",
+        "source": {
+          "kind": "Solution",
+          "name": "Abstract Security for Microsoft Sentinel",
+          "sourceId": "ffb59bbb-ab7c-5964-8c86-22d7b5df331b"
+        },
+        "author": {
+          "name": "Abstract Security",
+          "email": "support@abstract.security"
+        },
+        "support": {
+          "name": "Abstract Security",
+          "email": "support@abstract.security",
+          "tier": "Partner",
+          "link": "https://www.abstract.security/contact-us"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workspace'),'400624d4-f1b0-5e7e-a198-6cb8f0424578'))]"
+      ],
+      "condition": "[parameters('deployWorkbooks')]"
+    },
+    {
+      "type": "Microsoft.Insights/workbooks",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(parameters('workspace'),'0a74e253-54ae-5dfd-a166-39e67520ad66')]",
+      "location": "[parameters('workspaceLocation')]",
+      "kind": "shared",
+      "properties": {
+        "displayName": "Abstract Security - Cost by Table",
+        "serializedData": "{\"version\": \"Notebook/1.0\", \"styleSettings\": {}, \"items\": [{\"type\": 1, \"content\": {\"json\": \"<img src=\\\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-solution/abstract-logo-white.svg\\\" height=\\\"36\\\" alt=\\\"Abstract Security\\\" style=\\\"background:#060608;padding:8px 12px;border-radius:6px\\\">\\n\\n## Abstract Security - Cost by Table\\nIngestion volume from the `Usage` table, priced at Azure list prices for East US (retail prices API, before any commitment tier or benefit). **Every dollar figure here is an estimate.** It covers ingestion only: retention beyond the included period is not counted, and Abstract's own price is not in it.\"}}, {\"type\": 9, \"content\": {\"version\": \"KqlParameterItem/1.0\", \"parameters\": [{\"version\": \"KqlParameterItem/1.0\", \"name\": \"TimeRange\", \"label\": \"Time range\", \"type\": 4, \"isRequired\": true, \"value\": {\"durationMs\": 86400000}, \"typeSettings\": {\"selectableValues\": [{\"durationMs\": 3600000}, {\"durationMs\": 14400000}, {\"durationMs\": 86400000}, {\"durationMs\": 259200000}, {\"durationMs\": 604800000}, {\"durationMs\": 2592000000}], \"allowCustom\": true}}, {\"version\": \"KqlParameterItem/1.0\", \"name\": \"DefaultPlan\", \"label\": \"Table plan (estimate)\", \"type\": 2, \"isRequired\": true, \"value\": \"Analytics\", \"typeSettings\": {\"additionalResourceOptions\": []}, \"jsonData\": \"[{\\\"value\\\": \\\"Analytics\\\", \\\"label\\\": \\\"Analytics\\\"}, {\\\"value\\\": \\\"Basic\\\", \\\"label\\\": \\\"Basic\\\"}, {\\\"value\\\": \\\"Auxiliary\\\", \\\"label\\\": \\\"Auxiliary\\\"}, {\\\"value\\\": \\\"Lake\\\", \\\"label\\\": \\\"Lake\\\"}]\"}], \"style\": \"pills\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\"}}, {\"type\": 1, \"content\": {\"json\": \"The workbook cannot read a table's plan, so each table is priced on the plan chosen above (Analytics unless you change it). `AbstractLake_CL` is priced as Auxiliary. Change the plan to see the estimate if you moved tables to Basic or Auxiliary. `Usage` counts every row in a shared table such as `Syslog`, not only Abstract's.\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"let prices = datatable(Plan:string, UsdPerGb:real)[\\\"Analytics\\\", 4.3, \\\"Basic\\\", 1.5, \\\"Auxiliary\\\", 0.1, \\\"Lake\\\", 0.15];\\nUsage\\n| extend Plan = iff(DataType == \\\"AbstractLake_CL\\\", \\\"Auxiliary\\\", \\\"{DefaultPlan}\\\")\\n| lookup prices on Plan\\n| extend GB = Quantity / 1024.0\\n| extend EstimatedUsd = iff(IsBillable, GB * UsdPerGb, 0.0)\\n| summarize ['Estimated USD (estimate)'] = round(sum(EstimatedUsd), 2), ['GB billable'] = round(sumif(GB, IsBillable), 2)\", \"size\": 4, \"title\": \"Estimated ingestion cost, all tables (estimate, USD)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"tiles\", \"tileSettings\": {\"titleContent\": {\"columnMatch\": \"Estimated USD (estimate)\", \"formatter\": 1}, \"leftContent\": {\"columnMatch\": \"GB billable\", \"formatter\": 12}, \"showBorder\": true}}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"let prices = datatable(Plan:string, UsdPerGb:real)[\\\"Analytics\\\", 4.3, \\\"Basic\\\", 1.5, \\\"Auxiliary\\\", 0.1, \\\"Lake\\\", 0.15];\\nUsage\\n| extend Plan = iff(DataType == \\\"AbstractLake_CL\\\", \\\"Auxiliary\\\", \\\"{DefaultPlan}\\\")\\n| lookup prices on Plan\\n| extend GB = Quantity / 1024.0\\n| extend EstimatedUsd = iff(IsBillable, GB * UsdPerGb, 0.0)\\n| summarize GB = round(sum(GB), 3), ['Estimated USD (estimate)'] = round(sum(EstimatedUsd), 2) by DataType, IsBillable, Plan, ['USD per GB (list)'] = UsdPerGb\\n| order by ['Estimated USD (estimate)'] desc, GB desc\", \"size\": 0, \"title\": \"Usage by table and billable (estimate)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\", \"gridSettings\": {\"filter\": true}}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"let prices = datatable(Plan:string, UsdPerGb:real)[\\\"Analytics\\\", 4.3, \\\"Basic\\\", 1.5, \\\"Auxiliary\\\", 0.1, \\\"Lake\\\", 0.15];\\nUsage\\n| where DataType in (dynamic([\\\"AbstractEventLogs_CL\\\",\\\"AbstractLake_CL\\\",\\\"CommonSecurityLog\\\",\\\"Syslog\\\",\\\"AWSCloudTrail\\\",\\\"OktaV2_CL\\\",\\\"CrowdStrikeHostsV2_CL\\\"])) or DataType startswith \\\"ASim\\\"\\n| extend Plan = iff(DataType == \\\"AbstractLake_CL\\\", \\\"Auxiliary\\\", \\\"{DefaultPlan}\\\")\\n| lookup prices on Plan\\n| extend GB = Quantity / 1024.0\\n| extend EstimatedUsd = iff(IsBillable, GB * UsdPerGb, 0.0)\\n| summarize GB = round(sum(GB), 3), ['Estimated USD (estimate)'] = round(sum(EstimatedUsd), 2) by DataType, IsBillable, Plan\\n| order by ['Estimated USD (estimate)'] desc\", \"size\": 0, \"title\": \"Tables Abstract writes to (estimate)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"table\"}}, {\"type\": 3, \"content\": {\"version\": \"KqlItem/1.0\", \"query\": \"let prices = datatable(Plan:string, UsdPerGb:real)[\\\"Analytics\\\", 4.3, \\\"Basic\\\", 1.5, \\\"Auxiliary\\\", 0.1, \\\"Lake\\\", 0.15];\\nUsage\\n| where DataType in (dynamic([\\\"AbstractEventLogs_CL\\\",\\\"AbstractLake_CL\\\",\\\"CommonSecurityLog\\\",\\\"Syslog\\\",\\\"AWSCloudTrail\\\",\\\"OktaV2_CL\\\",\\\"CrowdStrikeHostsV2_CL\\\"])) or DataType startswith \\\"ASim\\\"\\n| extend Plan = iff(DataType == \\\"AbstractLake_CL\\\", \\\"Auxiliary\\\", \\\"{DefaultPlan}\\\")\\n| lookup prices on Plan\\n| extend GB = Quantity / 1024.0\\n| extend EstimatedUsd = iff(IsBillable, GB * UsdPerGb, 0.0)\\n| summarize ['Estimated USD (estimate)'] = sum(EstimatedUsd) by Day = bin(TimeGenerated, 1d), DataType\\n| project Day, DataType, ['Estimated USD (estimate)']\", \"size\": 0, \"title\": \"Estimated cost per day, Abstract tables (estimate, USD)\", \"timeContext\": {\"durationMs\": 86400000}, \"timeContextFromParameter\": \"TimeRange\", \"queryType\": 0, \"resourceType\": \"microsoft.operationalinsights/workspaces\", \"visualization\": \"barchart\"}}, {\"type\": 1, \"content\": {\"json\": \"Prices: Azure Retail Prices API, region eastus, retrieved 2026-11-08. Estimates change with your region, commitment tier and Microsoft's price list.\"}}]}",
+        "version": "1.0",
+        "category": "sentinel",
+        "sourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspace'))]"
+      },
+      "condition": "[parameters('deployWorkbooks')]"
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/providers/metadata",
+      "apiVersion": "2023-04-01-preview",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/Workbook-0a74e253-54ae-5dfd-a166-39e67520ad66')]",
+      "location": "[parameters('workspaceLocation')]",
+      "properties": {
+        "parentId": "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workspace'),'0a74e253-54ae-5dfd-a166-39e67520ad66'))]",
+        "contentId": "0a74e253-54ae-5dfd-a166-39e67520ad66",
+        "kind": "Workbook",
+        "version": "4.0.0",
+        "source": {
+          "kind": "Solution",
+          "name": "Abstract Security for Microsoft Sentinel",
+          "sourceId": "ffb59bbb-ab7c-5964-8c86-22d7b5df331b"
+        },
+        "author": {
+          "name": "Abstract Security",
+          "email": "support@abstract.security"
+        },
+        "support": {
+          "name": "Abstract Security",
+          "email": "support@abstract.security",
+          "tier": "Partner",
+          "link": "https://www.abstract.security/contact-us"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/workbooks', guid(parameters('workspace'),'0a74e253-54ae-5dfd-a166-39e67520ad66'))]"
+      ],
+      "condition": "[parameters('deployWorkbooks')]"
     }
   ],
   "outputs": {
     "contentTemplateCount": {
       "type": "int",
-      "value": 14
+      "value": 16
     },
     "packageId": {
       "type": "string",
