@@ -203,7 +203,7 @@ variable "enableAutomationRules" {
 variable "deployPlaybooks" {
   type        = bool
   default     = true
-  description = "Install the playbooks Abstract-Enrich-Incident, Abstract-Verdict and Abstract-Tune-At-Source (Logic Apps with a Sentinel API connection). They call the Abstract API with the key in keyVaultSecretUri. After deployment grant each playbook's managed identity Key Vault Secrets User on that secret and Microsoft Sentinel Responder on the workspace, or runs fail. Find them: Microsoft Sentinel > Automation > Active playbooks. Default: true. Example: true. Logic App runs are billed per action."
+  description = "Install the playbooks Abstract-Enrich-Incident, Abstract-Verdict and Abstract-Tune-At-Source (Logic Apps with a Sentinel API connection). They call the Abstract API with the key in the secret keyVaultMode stores, or in keyVaultSecretUri. Each playbook's managed identity needs Key Vault Secrets User on that secret and Microsoft Sentinel Responder on the workspace, or runs fail: the deployment grants both when it stores the key (keyVaultMode Create or Existing, grantPlaybookRoles); otherwise grant them after deployment. Find them: Microsoft Sentinel > Automation > Active playbooks. Default: true. Example: true. Logic App runs are billed per action."
 }
 
 variable "deployPlaybookAutomationRules" {
@@ -227,11 +227,155 @@ variable "abstractVendorAccountId" {
 variable "keyVaultSecretUri" {
   type        = string
   default     = ""
-  description = "URI of the Key Vault secret holding the Abstract API key. The playbooks read it at run time, so the key is never stored in the deployment or its history. Find it: Key vaults > the vault > Secrets > the secret > Secret Identifier. Default: empty, to set later; until then the playbooks' Abstract calls fail. Example: https://myvault.vault.azure.net/secrets/abstract-api-key."
+  description = "URI of the Key Vault secret holding the Abstract API key, with ?api-version, as the playbooks GET it at run time. Used only when keyVaultMode is None, the default; with Create or Existing the deployment points the playbooks at the secret it stored. Find it: Key vaults > the vault > Secrets > the secret > Secret Identifier, then add ?api-version=7.4. Default: empty, to set later; until then the playbooks' Abstract calls fail. Example: https://myvault.vault.azure.net/secrets/abstract-api-key?api-version=7.4."
 }
 
 variable "lookbackHours" {
   type        = number
   default     = 24
   description = "How many hours of Abstract data the Abstract-Enrich-Incident playbook reads around an incident. Raise it for slow-moving investigations; a longer window makes each run slower. Default: 24. Example: 72."
+}
+
+variable "keyVaultMode" {
+  type        = string
+  default     = "None"
+  description = "Where this deployment stores the Abstract API key the playbooks call Abstract with. None, the default, stores nothing: the playbooks read the secret keyVaultSecretUri names, and you grant their roles yourself. Create makes a Key Vault in this resource group (RBAC authorization, soft delete with 7-day retention, purge protection on, public network access enabled, no network rules) and writes abstractApiKey into it. A rerun with Create applies those settings to the vault again, so a vault you locked down afterwards (firewall, private endpoint) is opened again: once the vault exists, rerun with Existing. Existing writes abstractApiKey into the vault keyVaultName names, which must be in this resource group and use RBAC authorization for the role grants to apply. With Create or Existing, keyVaultSecretUri is ignored. Find existing vaults: Azure portal > Key vaults, filtered to this resource group. Default: None. Example: Create."
+
+  validation {
+    condition     = contains(["None", "Create", "Existing"], var.keyVaultMode)
+    error_message = "keyVaultMode must be None, Create or Existing."
+  }
+}
+
+variable "abstractApiKey" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "The Abstract API key, written as a Key Vault secret when keyVaultMode is Create or Existing, and required then. A secure parameter: it never appears in the deployment's inputs, outputs or history. A rerun with Create or Existing needs the key again and writes it as a new version of the secret. Find it: the API key Abstract issued for your tenant, or ask Abstract. Default: empty. Terraform marks it sensitive, which hides it in plan output, but it is still written in plain text to the Terraform state through the deployment's parameters_content. From Terraform, prefer the existing-secret path: create the secret in Key Vault yourself and use keyVaultMode None with keyVaultSecretUri, so the key never enters Terraform; otherwise keep the state encrypted and access-controlled."
+}
+
+variable "keyVaultName" {
+  type        = string
+  default     = ""
+  description = "Name of the Key Vault. Create: 3 to 24 letters, digits and hyphens, unique in Azure; empty generates abskvs-<hash> from this resource group and keyVaultNameSuffix. Existing: the exact name of a vault in this resource group. Used only when keyVaultMode is Create or Existing. Purge protection keeps a deleted vault's name reserved for its 7-day retention. Find it: Azure portal > Key vaults > Name. Default: empty. Example: abstract-sentinel-kv."
+}
+
+variable "keyVaultNameSuffix" {
+  type        = string
+  default     = ""
+  description = "Text mixed into the generated Key Vault name (keyVaultMode Create with keyVaultName empty), so a redeploy gets a new name. Set it after you deleted the resource group or the vault: purge protection keeps the deleted vault, and its name, for 7 days, and the same generated name then fails with VaultAlreadyExists. Empty, the default, keeps the name earlier runs generated. Find deleted vaults: Azure portal > Key vaults > Manage deleted vaults. Default: empty. Example: 2."
+
+  validation {
+    condition     = length(var.keyVaultNameSuffix) <= 24
+    error_message = "keyVaultNameSuffix is at most 24 characters."
+  }
+}
+
+variable "keyVaultSecretName" {
+  type        = string
+  default     = "abstract-api-key"
+  description = "Name of the secret that holds the Abstract API key, 1 to 127 letters, digits and hyphens. Used only when keyVaultMode is Create or Existing; a secret of that name already in the vault gets a new version. Find it: Key vaults > the vault > Objects > Secrets. Default: abstract-api-key. Example: abstract-api-key."
+}
+
+variable "grantPlaybookRoles" {
+  type        = bool
+  default     = true
+  description = "Grant each playbook's managed identity Key Vault Secrets User on the stored secret (the secret only, not the vault) and Microsoft Sentinel Responder on the workspace, the two roles the playbooks need to run. Applies only when this deployment stores the key (keyVaultMode Create or Existing) and installs the playbooks; with keyVaultMode None nothing is granted. Needs Owner, or User Access Administrator, on this resource group. Find the grants: Key vaults > the vault > Objects > Secrets > the secret > Access control (IAM), and the workspace > Access control (IAM). It is the master switch: grantPlaybookResponder and grantPlaybookSecretsUser leave out one role each, for playbooks that already hold it. Default: true. Example: true."
+}
+
+variable "grantPlaybookResponder" {
+  type        = bool
+  default     = true
+  description = "With grantPlaybookRoles, grant Microsoft Sentinel Responder on the workspace to each playbook. Turn it off when the playbooks already hold that role from an assignment made outside this deployment: Azure refuses a second assignment of the same role to the same identity on the same scope (RoleAssignmentExists), which fails the deployment. It applies to all three playbooks, so if only some hold the role, grant it to the others yourself and turn this off. Find the grants: the workspace > Access control (IAM) > Role assignments. Default: true. Example: false."
+}
+
+variable "grantPlaybookSecretsUser" {
+  type        = bool
+  default     = true
+  description = "With grantPlaybookRoles, grant Key Vault Secrets User on the stored secret to each playbook. Turn it off when the playbooks already hold that role on the secret from an assignment made outside this deployment, which would otherwise fail with RoleAssignmentExists. It applies to all three playbooks, so if only some hold the role, grant it to the others yourself and turn this off. Find the grants: Key vaults > the vault > Objects > Secrets > the secret > Access control (IAM). Default: true. Example: false."
+}
+
+variable "deployDataPlane" {
+  type        = bool
+  default     = true
+  description = "Deploy the data plane: the workspace (new or existing), Microsoft Sentinel on a new workspace, the Data Collection Endpoint, the AbstractEventLogs_CL table, the Data Collection Rule and its role for the Abstract app. Turn it off only to install content or run discovery against a workspace that already has it, for example a second run after the data plane was deployed once. Off needs createWorkspace false and workspaceName set to that workspace in this resource group, or the deployment fails. Find what exists: Azure portal > Monitor > Data Collection Rules. Default: true. Example: false."
+}
+
+variable "deployContent" {
+  type        = bool
+  default     = true
+  description = "Install the Microsoft Sentinel content: the data connector page, the ASim_AbstractEvent parser, analytics rules, hunting queries, workbooks, automation rules and playbooks, each behind its own switch. Turn it off for a data-plane-only or discovery-only deployment. The analytics rules query AbstractEventLogs_CL, so content needs the data plane in the same workspace, from this deployment or an earlier one. Find it after deployment: Microsoft Sentinel > Content hub > Installed. Default: true. Example: false."
+}
+
+variable "discoveryDays" {
+  type        = number
+  default     = 30
+  description = "Discovery: look-back window in days for table volume, ingestion health, agents and rule activity, 1 to 90. A longer window evens out weekly patterns and makes the run slower. Used only when deployDiscovery is true. Default: 30. Example: 14."
+}
+
+variable "discoveryDeviceDays" {
+  type        = number
+  default     = 1
+  description = "Discovery: window in days for the CEF and Syslog sender breakdowns, 1 to 7. These scan the raw tables, so each extra day adds query time and cost on a busy workspace; leave it at 1 unless the senders vary by day. Used only when deployDiscovery is true. Default: 1. Example: 1."
+}
+
+variable "discoveryProfileTopTables" {
+  type        = number
+  default     = 15
+  description = "Discovery: how many of the largest Analytics-plan tables to break down by two columns, 0 to 50. 0 turns the breakdown off. Used only when deployDiscovery is true. Default: 15. Example: 25."
+}
+
+variable "discoverySkipRuleQueryText" {
+  type        = bool
+  default     = false
+  description = "Discovery: leave the KQL text of analytics rules out of the output; the rule-to-table mapping is still produced. Turn it on when rule logic must not leave the workspace, even into your own storage account. Used only when deployDiscovery is true. Default: false. Example: true."
+}
+
+variable "discoverySkipContentQueryText" {
+  type        = bool
+  default     = false
+  description = "Discovery: leave the KQL text of functions, hunting queries and saved searches out of the output; the content-to-table mapping is still produced. Used only when deployDiscovery is true. Default: false. Example: true."
+}
+
+variable "discoveryDeployWorkbook" {
+  type        = bool
+  default     = true
+  description = "Discovery: also install the discovery template's own inventory workbook, Sentinel inventory (<workspace>). On by default, so this deployment and the standalone discovery template install the same resources. The content installs its own Sentinel Discovery workbook (deployDiscoveryWorkbook) as well, so both are installed by default; turn this off to keep only the content's workbook. Used only when deployDiscovery is true. Find it: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: false."
+}
+
+variable "discoverySendToAbstract" {
+  type        = bool
+  default     = false
+  description = "Discovery: send a copy of the output to Abstract. When on, exactly two files leave your tenant over HTTPS to discoveryAbstractSasUrl: inventory.zip and report.html. Off keeps everything in your storage account. Used only when deployDiscovery is true. Default: false. Example: false."
+}
+
+variable "discoveryAbstractSasUrl" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Discovery: the HTTPS SAS URL of the container Abstract gave you, with write permission on that container only. Used only when deployDiscovery and discoverySendToAbstract are true. Find it: from Abstract, with the request to send a copy. Default: empty."
+}
+
+variable "discoveryStorageAccountName" {
+  type        = string
+  default     = ""
+  description = "Discovery: name of the storage account the report is written to, 3 to 24 lowercase letters and digits, unique in Azure. Empty generates one. Created with public blob access and shared-key access off. Used only when deployDiscovery is true. Find it after the run: Storage accounts > the account > Containers > sentinel-discovery. Default: empty. Example: abstractdiscovery01."
+}
+
+variable "discoveryAssignSubscriptionReader" {
+  type        = bool
+  default     = true
+  description = "Discovery: grant the discovery identity Reader on the workspace subscription, so it can list data collection rules, endpoints, Sentinel workbooks and playbooks. Off: those areas are recorded as not read. Used only when deployDiscovery is true. Default: true. Example: true."
+}
+
+variable "discoveryGrantDeployerBlobRead" {
+  type        = bool
+  default     = true
+  description = "Discovery: give the person deploying Storage Blob Data Reader on the report container. Shared keys are off, so without it even an Owner cannot open the report. Used only when deployDiscovery is true. Default: true. Example: true."
+}
+
+variable "discoveryRbacWaitMinutes" {
+  type        = number
+  default     = 20
+  description = "Discovery: minutes to wait for the new role assignments to take effect before failing, 1 to 45. Raise it when a run fails with an authorization error right after the roles were granted. Used only when deployDiscovery is true. Default: 20. Example: 30."
 }

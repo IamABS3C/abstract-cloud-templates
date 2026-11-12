@@ -119,10 +119,64 @@
       "value": "<abstract-vendor-account-id>"
     },
     "keyVaultSecretUri": {
-      "value": "https://<vault-name>.vault.azure.net/secrets/<secret-name>"
+      "value": "https://<vault-name>.vault.azure.net/secrets/<secret-name>?api-version=7.4"
     },
     "lookbackHours": {
       "value": 72
+    },
+    "keyVaultNameSuffix": {
+      "value": "2"
+    },
+    "keyVaultSecretName": {
+      "value": "abstract-api-key"
+    },
+    "grantPlaybookRoles": {
+      "value": true
+    },
+    "grantPlaybookResponder": {
+      "value": false
+    },
+    "grantPlaybookSecretsUser": {
+      "value": false
+    },
+    "deployDataPlane": {
+      "value": false
+    },
+    "deployContent": {
+      "value": false
+    },
+    "discoveryDays": {
+      "value": 14
+    },
+    "discoveryDeviceDays": {
+      "value": 1
+    },
+    "discoveryProfileTopTables": {
+      "value": 25
+    },
+    "discoverySkipRuleQueryText": {
+      "value": true
+    },
+    "discoverySkipContentQueryText": {
+      "value": true
+    },
+    "discoveryDeployWorkbook": {
+      "value": false
+    },
+    "discoverySendToAbstract": {
+      "value": false
+    },
+    "discoveryStorageAccountName": {
+      "value": "abstractdiscovery01"
+    },
+    "discoveryAssignSubscriptionReader": {
+      "value": true
+    },
+    "discoveryGrantDeployerBlobRead": {
+      "value": true
+    },
+    "discoveryRbacWaitMinutes": {
+      "value": 30
     }
   }
 }

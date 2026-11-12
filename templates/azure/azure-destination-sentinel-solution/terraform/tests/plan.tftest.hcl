@@ -97,3 +97,31 @@ run "extra_parameters_must_be_an_object" {
 
   expect_failures = [var.extra_parameters]
 }
+
+run "api_key_is_sent_only_when_given" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(jsondecode(azurerm_resource_group_template_deployment.solution.parameters_content)), "abstractApiKey")
+    error_message = "an empty abstractApiKey must not be sent, so the template keeps its own default"
+  }
+
+  assert {
+    condition     = jsondecode(azurerm_resource_group_template_deployment.solution.parameters_content).keyVaultMode.value == "None"
+    error_message = "keyVaultMode must default to None, which stores nothing"
+  }
+}
+
+run "api_key_is_passed_with_create" {
+  command = plan
+
+  variables {
+    keyVaultMode   = "Create"
+    abstractApiKey = "test-key-not-real"
+  }
+
+  assert {
+    condition     = jsondecode(nonsensitive(azurerm_resource_group_template_deployment.solution.parameters_content)).abstractApiKey.value == "test-key-not-real"
+    error_message = "abstractApiKey must reach the template with keyVaultMode Create"
+  }
+}

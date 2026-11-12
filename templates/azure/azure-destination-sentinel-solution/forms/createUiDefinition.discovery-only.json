@@ -1,0 +1,401 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-solution/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Abstract Security for Microsoft Sentinel: one-deploy solution**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. One Azure deployment that creates the Data Collection Endpoint, Data Collection Rule and tables that Abstract Security sends events to through the Logs Ingestion API, and installs Microsoft Sentinel content for that data.\n\n**Abstract Security for Microsoft Sentinel** sets up, in one deployment, everything Abstract needs to deliver data into Microsoft Sentinel. Choose the resource group that holds your Sentinel workspace, or a new one. Every field below explains what it sets, when to change it and what follows.",
+        "subscription": {
+          "resourceProviders": [
+            "Microsoft.OperationalInsights",
+            "Microsoft.Insights",
+            "Microsoft.SecurityInsights",
+            "Microsoft.OperationsManagement",
+            "Microsoft.Logic",
+            "Microsoft.Web",
+            "Microsoft.KeyVault"
+          ]
+        },
+        "resourceGroup": {
+          "allowExisting": true
+        },
+        "location": {
+          "label": "Region",
+          "toolTip": "What: the region of a new workspace and of the Data Collection Endpoint and Rule. With an existing workspace, the endpoint and rule follow the workspace's region whatever is chosen here.",
+          "resourceTypes": [
+            "Microsoft.OperationalInsights/workspaces"
+          ]
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "intro",
+        "type": "Microsoft.Common.TextBlock",
+        "visible": true,
+        "options": {
+          "text": "Pick what to set up below, and the form shows only the tabs and fields that choice needs. The full set is the Log Analytics workspace (new or yours), the Data Collection Endpoint and Rule Abstract sends to, the AbstractEventLogs_CL table, optional routes into the Microsoft ASIM tables, a data-lake table and vendor tables, the Abstract content (data connector page, parser, analytics rules, hunting queries, workbooks, playbooks and automation rules) and the read-only discovery inventory. Have ready: Contributor and User Access Administrator (or Owner) on the resource group, and the Abstract app registration if Abstract has already given you one."
+        }
+      },
+      {
+        "name": "choiceInfo",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "Info",
+          "text": "This wizard sets up: Discovery only. Runs the read-only Sentinel discovery inventory against a workspace in this resource group and writes the report to a storage account you own. It creates a managed identity with read-only roles, a storage account and two short deployment scripts, and changes nothing in the workspace. It takes 5 to 15 minutes."
+        }
+      },
+      {
+        "name": "depth",
+        "type": "Microsoft.Common.OptionsGroup",
+        "label": "How much to show",
+        "defaultValue": "Recommended settings",
+        "toolTip": "What: 'Recommended settings' shows only what a first install needs and uses Abstract's defaults for the rest; 'Show every setting' shows every option (retention, table plans, individual content switches, discovery tuning). When: keep the recommended view unless you have a reason to tune. Consequence: a hidden setting always sends its default, so switching back never deploys a value you set by mistake. Portal: every setting is also described in the template's README.",
+        "constraints": {
+          "allowedValues": [
+            {
+              "label": "Recommended settings",
+              "value": "recommended"
+            },
+            {
+              "label": "Show every setting",
+              "value": "all"
+            }
+          ],
+          "required": true
+        },
+        "visible": true
+      },
+      {
+        "name": "wsApi",
+        "type": "Microsoft.Solutions.ArmApiControl",
+        "request": {
+          "method": "POST",
+          "path": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+          "body": {
+            "subscriptions": [
+              "[subscription().subscriptionId]"
+            ],
+            "query": "[concat('resources | where subscriptionId =~ \"', subscription().subscriptionId, '\" and type =~ \"microsoft.operationalinsights/workspaces\" and resourceGroup =~ \"', resourceGroup().name, '\" | project name, location, id = tolower(id), retention = toint(properties.retentionInDays), sku = tostring(properties.sku.name) | join kind=leftouter (resources | where type =~ \"microsoft.operationsmanagement/solutions\" and name startswith \"SecurityInsights(\" | project id = tolower(tostring(properties.workspaceResourceId)), hasSentinel = 1) on id | extend sentinel = iff(isnotnull(hasSentinel), \"yes\", \"no\") | project name, location, retention, sku, sentinel | order by name asc')]",
+            "options": {
+              "resultFormat": "objectArray"
+            }
+          }
+        }
+      },
+      {
+        "name": "workspaceMode",
+        "type": "Microsoft.Common.OptionsGroup",
+        "label": "Log Analytics workspace",
+        "defaultValue": "Create new",
+        "toolTip": "What: the Microsoft Sentinel workspace Abstract writes to. When: choose 'Create new' for a fresh workspace with Microsoft Sentinel switched on; choose 'Use existing' to add Abstract to a workspace that already runs Microsoft Sentinel. Consequence: an existing workspace is never modified (its retention, pricing tier and other tables are left alone). It must be in the resource group chosen above. Find yours: Azure portal > Microsoft Sentinel > the workspace > Overview > Resource group.",
+        "constraints": {
+          "allowedValues": [
+            {
+              "label": "Create new",
+              "value": "new"
+            },
+            {
+              "label": "Use existing",
+              "value": "existing"
+            }
+          ],
+          "required": true
+        },
+        "visible": "[or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false')))]"
+      },
+      {
+        "name": "workspaceNameNew",
+        "type": "Microsoft.Common.TextBox",
+        "label": "New workspace name",
+        "toolTip": "What: the name of the new Log Analytics workspace. When: leave empty and the deployment names it abstract-sentinel-<unique suffix>. Consequence: the name cannot be changed later. 4 to 63 letters, digits and hyphens. The form checks it against the workspaces already in this resource group.",
+        "constraints": {
+          "required": false,
+          "validations": [
+            {
+              "regex": "^$|^[A-Za-z0-9][A-Za-z0-9-]{2,61}[A-Za-z0-9]$",
+              "message": "4 to 63 letters, digits and hyphens, starting and ending with a letter or digit."
+            },
+            {
+              "isValid": "[or(empty(basics('workspaceNameNew')), empty(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(toLower(w.name), toLower(basics('workspaceNameNew'))))))]",
+              "message": "A workspace with this name is already in this resource group. Choose 'Use existing' instead, or pick another name: creating it again would update that workspace."
+            }
+          ]
+        },
+        "visible": "[and(or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))]",
+        "placeholder": "Leave empty to generate abstract-sentinel-<suffix>"
+      },
+      {
+        "name": "workspaceRetentionDays",
+        "type": "Microsoft.Common.Slider",
+        "label": "Retention of the new workspace",
+        "subLabel": "days",
+        "min": 7,
+        "max": 730,
+        "defaultValue": 90,
+        "showStepMarkers": false,
+        "toolTip": "What: how long the new workspace keeps data in its interactive (Analytics) tier. When: 90 days is included in the Microsoft Sentinel price; longer costs per GB per month. Consequence: applies to the new workspace only; change it later in Log Analytics workspace > Usage and estimated costs > Data retention.",
+        "visible": "[and(and(or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), equals(basics('depth'), 'all'))]"
+      },
+      {
+        "name": "workspaceExisting",
+        "type": "Microsoft.Common.DropDown",
+        "label": "Existing Microsoft Sentinel workspace",
+        "toolTip": "What: the workspaces in this resource group that run Microsoft Sentinel, read live from Azure Resource Graph (a workspace counts when its SecurityInsights solution exists). When: pick the workspace your SOC uses. Consequence: the Data Collection Endpoint and Rule are created in this workspace's region, and Abstract's tables and content are added to it. Nothing else in it changes. Not listed? It is in another resource group (start again and choose that group) or Microsoft Sentinel is not on (Microsoft Sentinel > Create > the workspace > Add).",
+        "multiLine": true,
+        "constraints": {
+          "allowedValues": "[if(empty(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(w.sentinel, 'yes'))), parse('[{\"label\":\"No workspace in this resource group runs Microsoft Sentinel\",\"value\":\"\"}]'), map(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => parse(concat('{\"label\":\"', w.name, '\",\"description\":\"', w.location, ', retention ', string(w.retention), ' days, ', w.sku, ' pricing, Microsoft Sentinel on\",\"value\":\"', w.name, '\"}'))))]",
+          "required": true
+        },
+        "visible": "[not(and(or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+        "filter": true,
+        "filterPlaceholder": "Filter by name"
+      },
+      {
+        "name": "noSentinel",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": "[and(not(and(or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))), empty(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(w.sentinel, 'yes'))))]",
+        "options": {
+          "icon": "Warning",
+          "text": "[concat('No workspace in resource group ', resourceGroup().name, ' runs Microsoft Sentinel. Choose Create new, or start again with the resource group that holds your Sentinel workspace. ', string(length(coalesce(basics('wsApi').data, parse('[]')))), ' workspace(s) without Microsoft Sentinel were found here and are not offered.')]"
+        }
+      },
+      {
+        "name": "noWorkspaceBlock",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Workspace required",
+        "toolTip": "No workspace in this resource group runs Microsoft Sentinel. Choose Create new, or start again with the resource group that holds it.",
+        "placeholder": "Nothing to select in this resource group. Choose Create new, or start again with another resource group.",
+        "constraints": {
+          "required": true,
+          "validations": [
+            {
+              "isValid": "[equals(1, 2)]",
+              "message": "No workspace in this resource group runs Microsoft Sentinel. Choose Create new, or start again with the resource group that holds it."
+            }
+          ]
+        },
+        "visible": "[and(not(and(or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))), empty(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(w.sentinel, 'yes'))))]"
+      },
+      {
+        "name": "existingRegion",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": "[and(not(and(or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))), not(empty(basics('workspaceExisting'))))]",
+        "options": {
+          "icon": "Info",
+          "text": "[concat('Region of ', coalesce(basics('workspaceExisting'), ''), ': ', coalesce(coalesce(first(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(toLower(w.name), toLower(coalesce(basics('workspaceExisting'), ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).location, 'unknown'), '. The Data Collection Endpoint and Rule are created in this region (Azure requires them to match the workspace), whatever region is selected above.')]"
+        }
+      },
+      {
+        "name": "tags",
+        "type": "Microsoft.Common.TagsByResource",
+        "resources": [
+          "Microsoft.Insights/dataCollectionRules"
+        ],
+        "toolTip": "What: tags (name and value) put on every resource this deployment creates that supports tags: the new workspace, the Data Collection Endpoint and Rule, the tables' parent resources, the playbooks and their API connections. When: add the tags your cost or ownership policy requires. Consequence: an existing workspace keeps its own tags. Portal: each created resource > Tags.",
+        "visible": "[equals(basics('depth'), 'all')]"
+      },
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "discovery",
+        "label": "Discovery",
+        "elements": [
+          {
+            "name": "on_discovery",
+            "type": "Microsoft.Common.Section",
+            "label": "Discovery",
+            "elements": [
+              {
+                "name": "discoveryInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "Discovery is read-only. It reads the workspace's tables, ingestion volume, connectors, data collection rules, analytics rules, hunting queries, workbooks and playbooks, and writes a zip, one CSV per area and a self-contained HTML report to a storage account in this resource group. It creates a user-assigned managed identity with read-only roles (Log Analytics Reader on the workspace, Reader on the subscription unless you turn that off), the storage account and two short deployment scripts, and runs for 5 to 15 minutes. Nothing in the workspace changes. Find the report afterwards: Storage accounts > the account > Containers > sentinel-discovery."
+                }
+              },
+              {
+                "name": "discoveryDays",
+                "type": "Microsoft.Common.Slider",
+                "label": "Look-back window",
+                "subLabel": "days",
+                "min": 1,
+                "max": 90,
+                "defaultValue": 30,
+                "showStepMarkers": false,
+                "toolTip": "What: how many days back discovery reads table volume, ingestion health, agents and rule activity, 1 to 90. When: 30 days evens out weekly patterns; use 7 to 14 on a very busy workspace. Consequence: a longer window makes the queries slower and scans more data. Portal: the report's header states the window it used.",
+                "visible": true
+              },
+              {
+                "name": "discoveryDeviceDays",
+                "type": "Microsoft.Common.Slider",
+                "label": "Sender breakdown window",
+                "subLabel": "days",
+                "min": 1,
+                "max": 7,
+                "defaultValue": 1,
+                "showStepMarkers": false,
+                "toolTip": "What: the window for the CEF and Syslog sender breakdowns, 1 to 7 days. When: leave at 1 unless senders vary by weekday. Consequence: these scan the raw CommonSecurityLog and Syslog tables, so each extra day adds query time and cost on a busy workspace. Portal: Log Analytics workspace > Tables shows those tables' size.",
+                "visible": "[equals(basics('depth'), 'all')]"
+              },
+              {
+                "name": "discoveryProfileTopTables",
+                "type": "Microsoft.Common.Slider",
+                "label": "Largest tables to profile",
+                "subLabel": "tables",
+                "min": 0,
+                "max": 50,
+                "defaultValue": 15,
+                "showStepMarkers": false,
+                "toolTip": "What: how many of the largest Analytics-plan tables discovery breaks down by two columns, 0 to 50. When: raise it to profile more of a long tail of tables; 0 turns the breakdown off. Consequence: each table adds one query. Portal: Log Analytics workspace > Tables, sorted by size.",
+                "visible": "[equals(basics('depth'), 'all')]"
+              },
+              {
+                "name": "discoverySkipRuleQueryText",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Leave analytics rule KQL out of the output",
+                "defaultValue": false,
+                "toolTip": "What: leaves the KQL text of analytics rules out of the output; which rule reads which table is still recorded. When: your policy does not allow detection logic in a file, even in your own storage account. Consequence: the report cannot show rule logic. Portal: Microsoft Sentinel > Analytics lists the rules.",
+                "visible": "[equals(basics('depth'), 'all')]"
+              },
+              {
+                "name": "discoverySkipContentQueryText",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Leave function, hunting and saved-search KQL out of the output",
+                "defaultValue": false,
+                "toolTip": "What: leaves the KQL text of functions, hunting queries and saved searches out of the output; which content reads which table is still recorded. When: the same policy as for rule text. Consequence: the report cannot show that logic. Portal: Microsoft Sentinel > Hunting, and Logs > Functions.",
+                "visible": "[equals(basics('depth'), 'all')]"
+              },
+              {
+                "name": "discoveryDeployWorkbook",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Also install the discovery template's inventory workbook",
+                "defaultValue": true,
+                "toolTip": "What: installs the discovery template's own inventory workbook, Sentinel inventory (<workspace>), as the standalone discovery template does. When: on by default; clear it to keep only the Sentinel Discovery workbook the Content tab installs. Consequence: on, both workbooks are installed and show much the same inventory. Portal: Microsoft Sentinel > Workbooks > My workbooks.",
+                "visible": "[equals(basics('depth'), 'all')]"
+              },
+              {
+                "name": "discoveryAssignSubscriptionReader",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Grant the discovery identity Reader on this subscription",
+                "defaultValue": true,
+                "toolTip": "What: gives the discovery identity Reader on this subscription, so it can list data collection rules, endpoints, Sentinel workbooks and playbooks. When: keep on unless policy forbids subscription-wide Reader. Consequence: off, those areas are recorded as not read and the report has gaps. Portal: Subscriptions > the subscription > Access control (IAM).",
+                "visible": "[equals(basics('depth'), 'all')]"
+              },
+              {
+                "name": "discoveryGrantDeployerBlobRead",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Let me open the report (Storage Blob Data Reader for the deployer)",
+                "defaultValue": true,
+                "toolTip": "What: gives you, the person deploying, Storage Blob Data Reader on the report container. When: keep on. Consequence: shared keys are off on the storage account, so without it even an Owner cannot open the report until someone grants a data role. Portal: Storage accounts > the account > Access control (IAM).",
+                "visible": "[equals(basics('depth'), 'all')]"
+              },
+              {
+                "name": "discoveryStorageAccountName",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Report storage account name",
+                "toolTip": "What: the storage account the report is written to, 3 to 24 lowercase letters and digits, unique in Azure. When: set it to follow a naming standard; empty generates one. Consequence: the account is created with public blob access and shared-key access off. Portal: Storage accounts > the account > Containers > sentinel-discovery. Example: abstractdiscovery01.",
+                "constraints": {
+                  "required": false,
+                  "validations": [
+                    {
+                      "regex": "^$|^[a-z0-9]{3,24}$",
+                      "message": "3 to 24 lowercase letters and digits, or empty."
+                    }
+                  ]
+                },
+                "visible": "[equals(basics('depth'), 'all')]",
+                "placeholder": "Leave empty to generate a name"
+              },
+              {
+                "name": "discoveryRbacWaitMinutes",
+                "type": "Microsoft.Common.Slider",
+                "label": "Wait for new roles",
+                "subLabel": "minutes",
+                "min": 1,
+                "max": 45,
+                "defaultValue": 20,
+                "showStepMarkers": false,
+                "toolTip": "What: how long discovery waits for its new role assignments to take effect before failing, 1 to 45 minutes. When: raise it if a run failed with an authorization error right after the roles were granted. Consequence: the wait only lasts until the roles work. Portal: Resource groups > this group > Deployments shows the run.",
+                "visible": "[equals(basics('depth'), 'all')]"
+              },
+              {
+                "name": "discoverySendToAbstract",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Send a copy of the output to Abstract",
+                "defaultValue": false,
+                "toolTip": "What: sends a copy of the output to Abstract. Exactly two files leave your tenant over HTTPS: inventory.zip and report.html. When: only when Abstract asked for it and gave you a SAS URL. Consequence: off keeps everything in your storage account. Portal: the copy goes to the container the SAS URL names.",
+                "visible": true
+              },
+              {
+                "name": "discoveryAbstractSasUrl",
+                "type": "Microsoft.Common.PasswordBox",
+                "label": {
+                  "password": "SAS URL from Abstract",
+                  "confirmPassword": "Confirm the SAS URL"
+                },
+                "toolTip": "What: the HTTPS SAS URL of the container Abstract gave you, with write permission on that container only. When: only with the copy to Abstract turned on. Consequence: a wrong or expired URL fails the upload at the end of the run; the report in your account is still written. Portal: none; Abstract sends it to you. It is a secret: anyone holding it can write to that container until it expires.",
+                "constraints": {
+                  "required": true,
+                  "regex": "^https://",
+                  "validationMessage": "An https:// SAS URL, as Abstract gave it."
+                },
+                "options": {
+                  "hideConfirmation": false
+                },
+                "visible": "[steps('discovery').on_discovery.discoverySendToAbstract]"
+              }
+            ],
+            "visible": "[or(or(equals('discovery-only', 'discovery-only'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false')))]"
+          },
+          {
+            "name": "off_discovery",
+            "type": "Microsoft.Common.TextBlock",
+            "visible": "[not(or(or(equals('discovery-only', 'discovery-only'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))))]",
+            "options": {
+              "text": "Not used by what you chose on Basics, so nothing on this tab is deployed. Go to Review + create, or go back to Basics and change the choice."
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "createWorkspace": "[and(or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))]",
+      "workspaceName": "[coalesce(if(and(or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), basics('workspaceNameNew'), basics('workspaceExisting')), '')]",
+      "workspaceRetentionDays": "[if(equals(basics('depth'), 'all'), coalesce(basics('workspaceRetentionDays'), 90), 90)]",
+      "existingWorkspaceLocation": "[if(and(or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '', coalesce(coalesce(first(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(toLower(w.name), toLower(coalesce(basics('workspaceExisting'), ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).location, ''))]",
+      "tags": "[if(equals(basics('depth'), 'all'), parse(if(contains(coalesce(basics('tags'), parse('{\"_\":\"\"}')), 'Microsoft.Insights/dataCollectionRules'), substring(string(coalesce(basics('tags'), parse('{\"_\":\"\"}'))), 42, sub(length(string(coalesce(basics('tags'), parse('{\"_\":\"\"}')))), 43)), '{}')), parse('{}'))]",
+      "keyVaultNameSuffix": "",
+      "deployDataPlane": "[or(or(equals('discovery-only', 'dataplane'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false')))]",
+      "deployContent": "[or(or(equals('discovery-only', 'content'), equals('discovery-only', 'dataplane-content'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false')))]",
+      "deployDiscovery": "[or(or(equals('discovery-only', 'discovery-only'), equals('discovery-only', 'everything')), and(equals('discovery-only', 'custom'), bool('false')))]",
+      "discoveryDays": "[steps('discovery').on_discovery.discoveryDays]",
+      "discoveryDeviceDays": "[if(equals(basics('depth'), 'all'), steps('discovery').on_discovery.discoveryDeviceDays, 1)]",
+      "discoveryProfileTopTables": "[if(equals(basics('depth'), 'all'), steps('discovery').on_discovery.discoveryProfileTopTables, 15)]",
+      "discoverySkipRuleQueryText": "[if(equals(basics('depth'), 'all'), steps('discovery').on_discovery.discoverySkipRuleQueryText, bool('false'))]",
+      "discoverySkipContentQueryText": "[if(equals(basics('depth'), 'all'), steps('discovery').on_discovery.discoverySkipContentQueryText, bool('false'))]",
+      "discoveryDeployWorkbook": "[if(equals(basics('depth'), 'all'), steps('discovery').on_discovery.discoveryDeployWorkbook, bool('true'))]",
+      "discoveryAssignSubscriptionReader": "[if(equals(basics('depth'), 'all'), steps('discovery').on_discovery.discoveryAssignSubscriptionReader, bool('true'))]",
+      "discoveryGrantDeployerBlobRead": "[if(equals(basics('depth'), 'all'), steps('discovery').on_discovery.discoveryGrantDeployerBlobRead, bool('true'))]",
+      "discoveryRbacWaitMinutes": "[if(equals(basics('depth'), 'all'), steps('discovery').on_discovery.discoveryRbacWaitMinutes, 20)]",
+      "discoverySendToAbstract": "[steps('discovery').on_discovery.discoverySendToAbstract]",
+      "discoveryStorageAccountName": "[if(equals(basics('depth'), 'all'), coalesce(steps('discovery').on_discovery.discoveryStorageAccountName, ''), '')]",
+      "discoveryAbstractSasUrl": "[if(steps('discovery').on_discovery.discoverySendToAbstract, steps('discovery').on_discovery.discoveryAbstractSasUrl, '')]"
+    }
+  }
+}

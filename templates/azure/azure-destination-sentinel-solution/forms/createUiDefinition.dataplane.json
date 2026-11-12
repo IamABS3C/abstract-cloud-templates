@@ -1,0 +1,1286 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-solution/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Abstract Security for Microsoft Sentinel: one-deploy solution**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. One Azure deployment that creates the Data Collection Endpoint, Data Collection Rule and tables that Abstract Security sends events to through the Logs Ingestion API, and installs Microsoft Sentinel content for that data.\n\n**Abstract Security for Microsoft Sentinel** sets up, in one deployment, everything Abstract needs to deliver data into Microsoft Sentinel. Choose the resource group that holds your Sentinel workspace, or a new one. Every field below explains what it sets, when to change it and what follows.",
+        "subscription": {
+          "resourceProviders": [
+            "Microsoft.OperationalInsights",
+            "Microsoft.Insights",
+            "Microsoft.SecurityInsights",
+            "Microsoft.OperationsManagement",
+            "Microsoft.Logic",
+            "Microsoft.Web",
+            "Microsoft.KeyVault"
+          ]
+        },
+        "resourceGroup": {
+          "allowExisting": true
+        },
+        "location": {
+          "label": "Region",
+          "toolTip": "What: the region of a new workspace and of the Data Collection Endpoint and Rule. With an existing workspace, the endpoint and rule follow the workspace's region whatever is chosen here.",
+          "resourceTypes": [
+            "Microsoft.OperationalInsights/workspaces"
+          ]
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "intro",
+        "type": "Microsoft.Common.TextBlock",
+        "visible": true,
+        "options": {
+          "text": "Pick what to set up below, and the form shows only the tabs and fields that choice needs. The full set is the Log Analytics workspace (new or yours), the Data Collection Endpoint and Rule Abstract sends to, the AbstractEventLogs_CL table, optional routes into the Microsoft ASIM tables, a data-lake table and vendor tables, the Abstract content (data connector page, parser, analytics rules, hunting queries, workbooks, playbooks and automation rules) and the read-only discovery inventory. Have ready: Contributor and User Access Administrator (or Owner) on the resource group, and the Abstract app registration if Abstract has already given you one."
+        }
+      },
+      {
+        "name": "choiceInfo",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "Info",
+          "text": "This wizard sets up: Data plane only. Creates the ingestion path Abstract sends to: the workspace (new or yours), the Data Collection Endpoint, the AbstractEventLogs_CL table, the Data Collection Rule, and Monitoring Metrics Publisher for the Abstract app on that rule only. Optional routes into the Microsoft ASIM tables, a data-lake table and vendor tables."
+        }
+      },
+      {
+        "name": "depth",
+        "type": "Microsoft.Common.OptionsGroup",
+        "label": "How much to show",
+        "defaultValue": "Recommended settings",
+        "toolTip": "What: 'Recommended settings' shows only what a first install needs and uses Abstract's defaults for the rest; 'Show every setting' shows every option (retention, table plans, individual content switches, discovery tuning). When: keep the recommended view unless you have a reason to tune. Consequence: a hidden setting always sends its default, so switching back never deploys a value you set by mistake. Portal: every setting is also described in the template's README.",
+        "constraints": {
+          "allowedValues": [
+            {
+              "label": "Recommended settings",
+              "value": "recommended"
+            },
+            {
+              "label": "Show every setting",
+              "value": "all"
+            }
+          ],
+          "required": true
+        },
+        "visible": true
+      },
+      {
+        "name": "wsApi",
+        "type": "Microsoft.Solutions.ArmApiControl",
+        "request": {
+          "method": "POST",
+          "path": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+          "body": {
+            "subscriptions": [
+              "[subscription().subscriptionId]"
+            ],
+            "query": "[concat('resources | where subscriptionId =~ \"', subscription().subscriptionId, '\" and type =~ \"microsoft.operationalinsights/workspaces\" and resourceGroup =~ \"', resourceGroup().name, '\" | project name, location, id = tolower(id), retention = toint(properties.retentionInDays), sku = tostring(properties.sku.name) | join kind=leftouter (resources | where type =~ \"microsoft.operationsmanagement/solutions\" and name startswith \"SecurityInsights(\" | project id = tolower(tostring(properties.workspaceResourceId)), hasSentinel = 1) on id | extend sentinel = iff(isnotnull(hasSentinel), \"yes\", \"no\") | project name, location, retention, sku, sentinel | order by name asc')]",
+            "options": {
+              "resultFormat": "objectArray"
+            }
+          }
+        }
+      },
+      {
+        "name": "workspaceMode",
+        "type": "Microsoft.Common.OptionsGroup",
+        "label": "Log Analytics workspace",
+        "defaultValue": "Create new",
+        "toolTip": "What: the Microsoft Sentinel workspace Abstract writes to. When: choose 'Create new' for a fresh workspace with Microsoft Sentinel switched on; choose 'Use existing' to add Abstract to a workspace that already runs Microsoft Sentinel. Consequence: an existing workspace is never modified (its retention, pricing tier and other tables are left alone). It must be in the resource group chosen above. Find yours: Azure portal > Microsoft Sentinel > the workspace > Overview > Resource group.",
+        "constraints": {
+          "allowedValues": [
+            {
+              "label": "Create new",
+              "value": "new"
+            },
+            {
+              "label": "Use existing",
+              "value": "existing"
+            }
+          ],
+          "required": true
+        },
+        "visible": "[or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]"
+      },
+      {
+        "name": "workspaceNameNew",
+        "type": "Microsoft.Common.TextBox",
+        "label": "New workspace name",
+        "toolTip": "What: the name of the new Log Analytics workspace. When: leave empty and the deployment names it abstract-sentinel-<unique suffix>. Consequence: the name cannot be changed later. 4 to 63 letters, digits and hyphens. The form checks it against the workspaces already in this resource group.",
+        "constraints": {
+          "required": false,
+          "validations": [
+            {
+              "regex": "^$|^[A-Za-z0-9][A-Za-z0-9-]{2,61}[A-Za-z0-9]$",
+              "message": "4 to 63 letters, digits and hyphens, starting and ending with a letter or digit."
+            },
+            {
+              "isValid": "[or(empty(basics('workspaceNameNew')), empty(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(toLower(w.name), toLower(basics('workspaceNameNew'))))))]",
+              "message": "A workspace with this name is already in this resource group. Choose 'Use existing' instead, or pick another name: creating it again would update that workspace."
+            }
+          ]
+        },
+        "visible": "[and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))]",
+        "placeholder": "Leave empty to generate abstract-sentinel-<suffix>"
+      },
+      {
+        "name": "workspaceRetentionDays",
+        "type": "Microsoft.Common.Slider",
+        "label": "Retention of the new workspace",
+        "subLabel": "days",
+        "min": 7,
+        "max": 730,
+        "defaultValue": 90,
+        "showStepMarkers": false,
+        "toolTip": "What: how long the new workspace keeps data in its interactive (Analytics) tier. When: 90 days is included in the Microsoft Sentinel price; longer costs per GB per month. Consequence: applies to the new workspace only; change it later in Log Analytics workspace > Usage and estimated costs > Data retention.",
+        "visible": "[and(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), equals(basics('depth'), 'all'))]"
+      },
+      {
+        "name": "workspaceExisting",
+        "type": "Microsoft.Common.DropDown",
+        "label": "Existing Microsoft Sentinel workspace",
+        "toolTip": "What: the workspaces in this resource group that run Microsoft Sentinel, read live from Azure Resource Graph (a workspace counts when its SecurityInsights solution exists). When: pick the workspace your SOC uses. Consequence: the Data Collection Endpoint and Rule are created in this workspace's region, and Abstract's tables and content are added to it. Nothing else in it changes. Not listed? It is in another resource group (start again and choose that group) or Microsoft Sentinel is not on (Microsoft Sentinel > Create > the workspace > Add).",
+        "multiLine": true,
+        "constraints": {
+          "allowedValues": "[if(empty(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(w.sentinel, 'yes'))), parse('[{\"label\":\"No workspace in this resource group runs Microsoft Sentinel\",\"value\":\"\"}]'), map(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => parse(concat('{\"label\":\"', w.name, '\",\"description\":\"', w.location, ', retention ', string(w.retention), ' days, ', w.sku, ' pricing, Microsoft Sentinel on\",\"value\":\"', w.name, '\"}'))))]",
+          "required": true
+        },
+        "visible": "[not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+        "filter": true,
+        "filterPlaceholder": "Filter by name"
+      },
+      {
+        "name": "noSentinel",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": "[and(not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))), empty(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(w.sentinel, 'yes'))))]",
+        "options": {
+          "icon": "Warning",
+          "text": "[concat('No workspace in resource group ', resourceGroup().name, ' runs Microsoft Sentinel. Choose Create new, or start again with the resource group that holds your Sentinel workspace. ', string(length(coalesce(basics('wsApi').data, parse('[]')))), ' workspace(s) without Microsoft Sentinel were found here and are not offered.')]"
+        }
+      },
+      {
+        "name": "noWorkspaceBlock",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Workspace required",
+        "toolTip": "No workspace in this resource group runs Microsoft Sentinel. Choose Create new, or start again with the resource group that holds it.",
+        "placeholder": "Nothing to select in this resource group. Choose Create new, or start again with another resource group.",
+        "constraints": {
+          "required": true,
+          "validations": [
+            {
+              "isValid": "[equals(1, 2)]",
+              "message": "No workspace in this resource group runs Microsoft Sentinel. Choose Create new, or start again with the resource group that holds it."
+            }
+          ]
+        },
+        "visible": "[and(not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))), empty(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(w.sentinel, 'yes'))))]"
+      },
+      {
+        "name": "existingRegion",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": "[and(not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))), not(empty(basics('workspaceExisting'))))]",
+        "options": {
+          "icon": "Info",
+          "text": "[concat('Region of ', coalesce(basics('workspaceExisting'), ''), ': ', coalesce(coalesce(first(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(toLower(w.name), toLower(coalesce(basics('workspaceExisting'), ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).location, 'unknown'), '. The Data Collection Endpoint and Rule are created in this region (Azure requires them to match the workspace), whatever region is selected above.')]"
+        }
+      },
+      {
+        "name": "tags",
+        "type": "Microsoft.Common.TagsByResource",
+        "resources": [
+          "Microsoft.Insights/dataCollectionRules"
+        ],
+        "toolTip": "What: tags (name and value) put on every resource this deployment creates that supports tags: the new workspace, the Data Collection Endpoint and Rule, the tables' parent resources, the playbooks and their API connections. When: add the tags your cost or ownership policy requires. Consequence: an existing workspace keeps its own tags. Portal: each created resource > Tags.",
+        "visible": "[equals(basics('depth'), 'all')]"
+      },
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "app",
+        "label": "Abstract app",
+        "elements": [
+          {
+            "name": "on_app",
+            "type": "Microsoft.Common.Section",
+            "label": "Abstract app",
+            "elements": [
+              {
+                "name": "appInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "Abstract sends data as a Microsoft Entra ID app registration through the Logs Ingestion API. The deployment gives that app's service principal one role, Monitoring Metrics Publisher, on the Data Collection Rule only: nothing on the workspace, the subscription or any other resource. Afterwards, enter the app's Application (client) ID, a client secret and your tenant ID in the Abstract Azure Sentinel Destination."
+                }
+              },
+              {
+                "name": "appMode",
+                "type": "Microsoft.Common.OptionsGroup",
+                "label": "How to identify the Abstract app",
+                "defaultValue": "Pick or register",
+                "toolTip": "What: how the form finds the app that will be allowed to send data. When: 'Pick or register' searches your app registrations (or registers a new one); 'Enter the Object ID' is for an app you cannot search for, such as a multitenant app Abstract provides; 'Skip' leaves the grant for later. Consequence: 'Skip' deploys everything except the role assignment, and no data arrives until someone grants Monitoring Metrics Publisher on the Data Collection Rule to the app. Portal: Microsoft Entra ID > Enterprise applications.",
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "Pick or register",
+                      "value": "picker"
+                    },
+                    {
+                      "label": "Enter the Object ID",
+                      "value": "manual"
+                    },
+                    {
+                      "label": "Skip: grant the role later",
+                      "value": "skip"
+                    }
+                  ],
+                  "required": true
+                },
+                "visible": true
+              },
+              {
+                "name": "sp",
+                "type": "Microsoft.Common.ServicePrincipalSelector",
+                "label": {
+                  "password": "Client secret (not used by this deployment)",
+                  "certificateThumbprint": "Certificate thumbprint (not used)",
+                  "authenticationType": "Authentication type",
+                  "sectionHeader": "Abstract app registration"
+                },
+                "toolTip": {
+                  "password": "The selector always asks for a credential. This template does not read it and does not store it. Create the app's client secret in Microsoft Entra ID > App registrations > the app > Certificates & secrets, and enter it in Abstract, not here.",
+                  "certificateThumbprint": "Not used by this template.",
+                  "authenticationType": "Not used by this template; leave Password."
+                },
+                "defaultValue": {
+                  "principalId": "<default guid>",
+                  "name": "(no app selected)"
+                },
+                "constraints": {
+                  "required": false
+                },
+                "options": {
+                  "hideCertificate": true
+                },
+                "visible": "[equals(steps('app').on_app.appMode, 'picker')]"
+              },
+              {
+                "name": "spNone",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(equals(steps('app').on_app.appMode, 'picker'), not(equals(steps('app').on_app.sp.newOrExisting, 'existing')))]",
+                "options": {
+                  "icon": "Warning",
+                  "text": "No app is selected yet. Select 'Change selection' to search your app registrations or register a new one. If you continue without one, the deployment skips the role grant."
+                }
+              },
+              {
+                "name": "spChosen",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(equals(steps('app').on_app.appMode, 'picker'), equals(steps('app').on_app.sp.newOrExisting, 'existing'))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('Selected app: Application (client) ID ', coalesce(steps('app').on_app.sp.appId, ''), ', service principal Object ID ', coalesce(first(steps('app').on_app.sp.objectId), ''), '. The deployment grants Monitoring Metrics Publisher on the Data Collection Rule to this Object ID. Enter the Application (client) ID in Abstract.')]"
+                }
+              },
+              {
+                "name": "principalIdManual",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Service principal Object ID",
+                "toolTip": "What: the Object ID of the app's service principal (its enterprise application), not the Application (client) ID. Find it: Microsoft Entra ID > Enterprise applications > the Abstract app > Overview > Object ID, or in Cloud Shell: az ad sp show --id <application-client-id> --query id -o tsv. Consequence: a wrong ID either fails the deployment (no such principal) or grants the role to the wrong identity. When: the app cannot be found with the picker, or Abstract gave you an Object ID.",
+                "constraints": {
+                  "required": true,
+                  "validations": [
+                    {
+                      "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                      "message": "A GUID such as 00000000-0000-0000-0000-000000000000."
+                    }
+                  ]
+                },
+                "visible": "[equals(steps('app').on_app.appMode, 'manual')]",
+                "placeholder": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "visible": "[or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]"
+          },
+          {
+            "name": "off_app",
+            "type": "Microsoft.Common.TextBlock",
+            "visible": "[not(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))))]",
+            "options": {
+              "text": "Not used by what you chose on Basics, so nothing on this tab is deployed. Go to Review + create, or go back to Basics and change the choice."
+            }
+          }
+        ]
+      },
+      {
+        "name": "collection",
+        "label": "Data collection",
+        "elements": [
+          {
+            "name": "on_collection",
+            "type": "Microsoft.Common.Section",
+            "label": "Data collection",
+            "elements": [
+              {
+                "name": "dcApi",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "POST",
+                  "path": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+                  "body": {
+                    "subscriptions": [
+                      "[subscription().subscriptionId]"
+                    ],
+                    "query": "[concat('resources | where subscriptionId =~ \"', subscription().subscriptionId, '\" and resourceGroup =~ \"', resourceGroup().name, '\" and type in~ (\"microsoft.insights/datacollectionendpoints\", \"microsoft.insights/datacollectionrules\") | project name, location, dcKind = iff(type =~ \"microsoft.insights/datacollectionendpoints\", \"dce\", \"dcr\"), isAbstract = iff(isnotnull(properties.streamDeclarations[\"Custom-AbstractEventLogs_CL\"]), \"yes\", \"no\"), flows = coalesce(array_length(properties.dataFlows), 0) | order by name asc')]",
+                    "options": {
+                      "resultFormat": "objectArray"
+                    }
+                  }
+                }
+              },
+              {
+                "name": "dcInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "Abstract sends every event to one Data Collection Rule (DCR) through one Data Collection Endpoint (DCE). The rule's transformation decides which table each event lands in. Both are created in the workspace's region. Their names are listed live from this resource group, so a clash is caught here and not at deployment time."
+                }
+              },
+              {
+                "name": "dceMode",
+                "type": "Microsoft.Common.OptionsGroup",
+                "label": "Data Collection Endpoint",
+                "defaultValue": "Create new",
+                "toolTip": "What: the HTTPS endpoint Abstract posts events to. When: 'Create new' for a first install; 'Use existing' to re-run over the endpoint an earlier run created. Consequence: choosing an existing endpoint re-applies this template's settings to it (public network access Enabled, these tags); other rules that use it keep working. Portal: Monitor > Settings > Data Collection Endpoints.",
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "Create new",
+                      "value": "new"
+                    },
+                    {
+                      "label": "Use existing",
+                      "value": "existing"
+                    }
+                  ],
+                  "required": true
+                },
+                "visible": "[or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]"
+              },
+              {
+                "name": "dceNameNew",
+                "type": "Microsoft.Common.TextBox",
+                "label": "New endpoint name",
+                "toolTip": "What: the name of the new Data Collection Endpoint. Consequence: the endpoint's URL, which you enter in Abstract, is derived from it. 3 to 44 letters, digits and hyphens. When: a first install. Portal: Monitor > Settings > Data Collection Endpoints.",
+                "constraints": {
+                  "required": true,
+                  "validations": [
+                    {
+                      "regex": "^[A-Za-z0-9][A-Za-z0-9-]{1,42}[A-Za-z0-9]$",
+                      "message": "3 to 44 letters, digits and hyphens."
+                    },
+                    {
+                      "isValid": "[empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dce')), (r) => equals(toLower(r.name), toLower(steps('collection').on_collection.dceNameNew))))]",
+                      "message": "An endpoint with this name is already in this resource group, so deploying would overwrite its settings. Choose 'Use existing' to do that on purpose, or pick another name."
+                    }
+                  ]
+                },
+                "visible": "[equals(steps('collection').on_collection.dceMode, 'new')]",
+                "defaultValue": "abstract-dce"
+              },
+              {
+                "name": "dceExisting",
+                "type": "Microsoft.Common.DropDown",
+                "label": "Existing endpoint",
+                "toolTip": "What: the Data Collection Endpoints in this resource group, read live. Consequence: the deployment re-applies its settings and keeps its URL. It must be in the workspace's region. When: re-running over an endpoint an earlier run created. Portal: Monitor > Settings > Data Collection Endpoints.",
+                "multiLine": true,
+                "constraints": {
+                  "allowedValues": "[if(empty(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dce'))), parse('[{\"label\":\"No Data Collection Endpoint in this resource group\",\"value\":\"\"}]'), map(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dce')), (r) => parse(concat('{\"label\":\"', r.name, '\",\"description\":\"', r.location, ', ', if(equals(r.location, if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), location(), coalesce(coalesce(first(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(toLower(w.name), toLower(coalesce(basics('workspaceExisting'), ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).location, location()))), 'same region as the workspace', 'DIFFERENT region from the workspace: cannot be used'), '\",\"value\":\"', r.name, '\"}'))))]",
+                  "required": true
+                },
+                "visible": "[not(equals(steps('collection').on_collection.dceMode, 'new'))]"
+              },
+              {
+                "name": "noDceBlock",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Endpoint required",
+                "toolTip": "There is no Data Collection Endpoint in this resource group. Choose Create new.",
+                "placeholder": "Nothing to select in this resource group. Choose Create new, or start again with another resource group.",
+                "constraints": {
+                  "required": true,
+                  "validations": [
+                    {
+                      "isValid": "[equals(1, 2)]",
+                      "message": "There is no Data Collection Endpoint in this resource group. Choose Create new."
+                    }
+                  ]
+                },
+                "visible": "[and(not(equals(steps('collection').on_collection.dceMode, 'new')), empty(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dce'))))]"
+              },
+              {
+                "name": "dceRegionBad",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(not(equals(steps('collection').on_collection.dceMode, 'new')), not(empty(steps('collection').on_collection.dceExisting)), not(equals(coalesce(coalesce(first(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dce')), (r) => equals(toLower(r.name), toLower(coalesce(steps('collection').on_collection.dceExisting, ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).location, ''), if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), location(), coalesce(coalesce(first(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(toLower(w.name), toLower(coalesce(basics('workspaceExisting'), ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).location, location())))))]",
+                "options": {
+                  "icon": "Error",
+                  "text": "This endpoint is not in the workspace's region. Azure refuses a Data Collection Rule whose endpoint is in another region. Pick another endpoint or create a new one."
+                }
+              },
+              {
+                "name": "dcrMode",
+                "type": "Microsoft.Common.OptionsGroup",
+                "label": "Data Collection Rule",
+                "defaultValue": "Create new",
+                "toolTip": "What: the rule that receives Abstract's stream (Custom-AbstractEventLogs_CL) and routes each event to its table. When: 'Create new' for a first install; 'Use existing' only for a rule an earlier run of this solution created. Consequence: deploying REPLACES the rule's stream declarations, destinations and dataflows with this solution's, and keeps its immutable ID, so Abstract keeps sending without a change. Portal: Monitor > Settings > Data Collection Rules.",
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "Create new",
+                      "value": "new"
+                    },
+                    {
+                      "label": "Use existing",
+                      "value": "existing"
+                    }
+                  ],
+                  "required": true
+                },
+                "visible": "[or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]"
+              },
+              {
+                "name": "dcrNameNew",
+                "type": "Microsoft.Common.TextBox",
+                "label": "New rule name",
+                "toolTip": "What: the name of the new Data Collection Rule. Consequence: its immutable ID (an output of the deployment) is what you enter in Abstract as Data Collection Rule ID. 3 to 64 characters. When: a first install. Portal: Monitor > Settings > Data Collection Rules.",
+                "constraints": {
+                  "required": true,
+                  "validations": [
+                    {
+                      "regex": "^[A-Za-z0-9][A-Za-z0-9._-]{1,62}[A-Za-z0-9_]$",
+                      "message": "3 to 64 letters, digits, periods, underscores and hyphens."
+                    },
+                    {
+                      "isValid": "[empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => equals(toLower(r.name), toLower(steps('collection').on_collection.dcrNameNew))))]",
+                      "message": "A rule with this name is already in this resource group, and deploying would replace its streams, destinations and dataflows. Choose 'Use existing' to do that on purpose, or pick another name."
+                    }
+                  ]
+                },
+                "visible": "[equals(steps('collection').on_collection.dcrMode, 'new')]",
+                "defaultValue": "abstract-dcr"
+              },
+              {
+                "name": "dcrExisting",
+                "type": "Microsoft.Common.DropDown",
+                "label": "Existing rule",
+                "toolTip": "What: the Data Collection Rules in this resource group, read live, each marked as an Abstract rule (it declares Custom-AbstractEventLogs_CL) or not. Consequence: the deployment replaces the rule's definition and keeps its immutable ID. When: re-running over a rule an earlier run created. Portal: Monitor > Settings > Data Collection Rules.",
+                "multiLine": true,
+                "constraints": {
+                  "allowedValues": "[if(empty(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr'))), parse('[{\"label\":\"No Data Collection Rule in this resource group\",\"value\":\"\"}]'), map(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => parse(concat('{\"label\":\"', r.name, '\",\"description\":\"', r.location, ', ', string(r.flows), ' dataflow(s), ', if(equals(r.isAbstract, 'yes'), 'an Abstract rule from an earlier run', 'NOT an Abstract rule: its streams, destinations and dataflows would be replaced'), '\",\"value\":\"', r.name, '\"}'))))]",
+                  "required": true
+                },
+                "visible": "[not(equals(steps('collection').on_collection.dcrMode, 'new'))]"
+              },
+              {
+                "name": "noDcrBlock",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Rule required",
+                "toolTip": "There is no Data Collection Rule in this resource group. Choose Create new.",
+                "placeholder": "Nothing to select in this resource group. Choose Create new, or start again with another resource group.",
+                "constraints": {
+                  "required": true,
+                  "validations": [
+                    {
+                      "isValid": "[equals(1, 2)]",
+                      "message": "There is no Data Collection Rule in this resource group. Choose Create new."
+                    }
+                  ]
+                },
+                "visible": "[and(not(equals(steps('collection').on_collection.dcrMode, 'new')), empty(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr'))))]"
+              },
+              {
+                "name": "dcrForeign",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(not(equals(steps('collection').on_collection.dcrMode, 'new')), not(empty(steps('collection').on_collection.dcrExisting)), not(equals(coalesce(coalesce(first(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => equals(toLower(r.name), toLower(coalesce(steps('collection').on_collection.dcrExisting, ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).isAbstract, 'no'), 'yes')))]",
+                "options": {
+                  "icon": "Error",
+                  "text": "This rule was not created by this solution. Deploying replaces ALL of its streams, destinations and dataflows, and whatever it collects today stops. Choose Create new unless you mean to take it over."
+                }
+              },
+              {
+                "name": "dcrRegionBad",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(not(equals(steps('collection').on_collection.dcrMode, 'new')), not(empty(steps('collection').on_collection.dcrExisting)), not(equals(coalesce(coalesce(first(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => equals(toLower(r.name), toLower(coalesce(steps('collection').on_collection.dcrExisting, ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).location, ''), if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), location(), coalesce(coalesce(first(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(toLower(w.name), toLower(coalesce(basics('workspaceExisting'), ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).location, location())))))]",
+                "options": {
+                  "icon": "Error",
+                  "text": "This rule is not in the workspace's region. A Data Collection Rule must be in its workspace's region; deploying would fail. Pick another rule or create a new one."
+                }
+              },
+              {
+                "name": "tableApi",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/AbstractEventLogs_CL?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "tableNow",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(empty(coalesce(coalesce(steps('collection').on_collection.tableApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).plan, '')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('AbstractEventLogs_CL already exists in this workspace: ', coalesce(coalesce(steps('collection').on_collection.tableApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).plan, ''), ' plan, ', string(coalesce(coalesce(steps('collection').on_collection.tableApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).retentionInDays, 0)), ' days interactive, ', string(coalesce(coalesce(steps('collection').on_collection.tableApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).totalRetentionInDays, 0)), ' days total retention.')]"
+                }
+              },
+              {
+                "name": "customTablePlan",
+                "type": "Microsoft.Common.DropDown",
+                "label": "Plan of AbstractEventLogs_CL",
+                "toolTip": "What: the Log Analytics table plan for the table that receives every Abstract event not routed elsewhere. When: keep Analytics if analytics rules or workbooks read it; Basic or Auxiliary only for search-only data. Consequence: Basic and Auxiliary stop this solution's analytics rules working on the table. 'Keep' never changes an existing table. Portal: Log Analytics workspace > Tables > AbstractEventLogs_CL > Manage table.",
+                "multiLine": true,
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "Keep (a new table starts on Analytics)",
+                      "value": "Keep",
+                      "description": "Never changes an existing table's plan. Safe default for a re-run."
+                    },
+                    {
+                      "label": "Analytics",
+                      "value": "Analytics",
+                      "description": "Full KQL, analytics rules, workbooks and hunting. Highest ingestion price."
+                    },
+                    {
+                      "label": "Basic",
+                      "value": "Basic",
+                      "description": "Cheaper ingestion, limited KQL, no analytics rules. 30-day interactive retention."
+                    },
+                    {
+                      "label": "Auxiliary (data lake)",
+                      "value": "Auxiliary",
+                      "description": "Lowest price, searchable in the lake, no analytics rules or workbooks."
+                    }
+                  ],
+                  "required": true
+                },
+                "visible": "[equals(basics('depth'), 'all')]",
+                "defaultValue": "Keep (a new table starts on Analytics)"
+              },
+              {
+                "name": "customTableRetentionDays",
+                "type": "Microsoft.Common.DropDown",
+                "label": "Total retention of AbstractEventLogs_CL",
+                "toolTip": "What: how long AbstractEventLogs_CL keeps data, interactive and long-term together. When: leave 'Leave unchanged' to inherit the workspace default (or keep what an earlier run set). Consequence: longer retention is billed per GB per month after the included period. Portal: Log Analytics workspace > Tables > AbstractEventLogs_CL > Manage table.",
+                "multiLine": true,
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "Leave unchanged",
+                      "description": "The table keeps the retention it has now.",
+                      "value": 0
+                    },
+                    {
+                      "label": "30 days",
+                      "value": 30
+                    },
+                    {
+                      "label": "90 days",
+                      "value": 90
+                    },
+                    {
+                      "label": "180 days",
+                      "value": 180
+                    },
+                    {
+                      "label": "365 days (1 year)",
+                      "value": 365
+                    },
+                    {
+                      "label": "730 days (2 years)",
+                      "value": 730
+                    },
+                    {
+                      "label": "1095 days (3 years)",
+                      "value": 1095
+                    },
+                    {
+                      "label": "1825 days (5 years)",
+                      "value": 1825
+                    },
+                    {
+                      "label": "2555 days (7 years)",
+                      "value": 2555
+                    },
+                    {
+                      "label": "4383 days",
+                      "value": 4383
+                    }
+                  ],
+                  "required": true
+                },
+                "visible": "[equals(basics('depth'), 'all')]",
+                "defaultValue": "Leave unchanged"
+              },
+              {
+                "name": "enableDcrErrorLogs",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Record ingestion errors in DCRLogErrors",
+                "defaultValue": true,
+                "toolTip": "What: a diagnostic setting on the rule that writes transformation and ingestion errors to the DCRLogErrors table. When: keep it on; it is how you see an event the rule could not store. Consequence: a few rows per error, billed like any other Analytics data. Portal: the rule > Monitoring > Diagnostic settings.",
+                "visible": "[equals(basics('depth'), 'all')]"
+              }
+            ],
+            "visible": "[or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]"
+          },
+          {
+            "name": "off_collection",
+            "type": "Microsoft.Common.TextBlock",
+            "visible": "[not(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))))]",
+            "options": {
+              "text": "Not used by what you chose on Basics, so nothing on this tab is deployed. Go to Review + create, or go back to Basics and change the choice."
+            }
+          }
+        ]
+      },
+      {
+        "name": "asim",
+        "label": "ASIM",
+        "elements": [
+          {
+            "name": "on_asim",
+            "type": "Microsoft.Common.Section",
+            "label": "ASIM",
+            "elements": [
+              {
+                "name": "asimInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "ASIM (the Advanced Security Information Model) is Microsoft's common schema. Writing Abstract events into Microsoft's ASim tables means the ASIM analytics rules, hunting queries and workbooks already in the workspace see Abstract data with no change. Each schema adds one dataflow to the rule."
+                }
+              },
+              {
+                "name": "enableAsim",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Write mapped events into Microsoft's ASIM tables",
+                "defaultValue": false,
+                "toolTip": "What: an extra route per chosen schema that maps matching events into that schema's ASim table. When: turn on if your SOC uses ASIM content or Microsoft solutions built on it. Consequence: expect new alerts from ASIM rules, and duplicates where a Microsoft connector already collects the same vendor. Portal: Log Analytics workspace > Tables, the ASim tables.",
+                "visible": true
+              },
+              {
+                "name": "asimSchemas",
+                "type": "Microsoft.Common.DropDown",
+                "label": "ASIM schemas",
+                "toolTip": "What: the schemas to write, one ASim table each. Consequence: one dataflow per schema (Azure allows 20 per rule). When: keep all eight unless a Microsoft connector already fills a schema. Portal: Log Analytics workspace > Tables.",
+                "multiLine": true,
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "AuditEvent (ASimAuditEventLogs)",
+                      "description": "Configuration changes, admin actions and audit trails from any product Abstract normalises.",
+                      "value": "AuditEvent"
+                    },
+                    {
+                      "label": "Authentication (ASimAuthenticationEventLogs)",
+                      "description": "Sign-ins, logons, MFA prompts and their failures. Feeds the identity analytics most SOCs rely on.",
+                      "value": "Authentication"
+                    },
+                    {
+                      "label": "Dns (ASimDnsActivityLogs)",
+                      "description": "DNS queries and responses from resolvers, firewalls and secure-web gateways.",
+                      "value": "Dns"
+                    },
+                    {
+                      "label": "FileEvent (ASimFileEventLogs)",
+                      "description": "File create, modify, rename, delete and read events from EDR and file-integrity sources.",
+                      "value": "FileEvent"
+                    },
+                    {
+                      "label": "NetworkSession (ASimNetworkSessionLogs)",
+                      "description": "Firewall, flow and connection events. Usually the largest schema by volume.",
+                      "value": "NetworkSession"
+                    },
+                    {
+                      "label": "ProcessEvent (ASimProcessEventLogs)",
+                      "description": "Process creation and termination from EDR and OS audit sources.",
+                      "value": "ProcessEvent"
+                    },
+                    {
+                      "label": "RegistryEvent (ASimRegistryEventLogs)",
+                      "description": "Windows registry key and value changes from EDR sources.",
+                      "value": "RegistryEvent"
+                    },
+                    {
+                      "label": "WebSession (ASimWebSessionLogs)",
+                      "description": "HTTP requests seen by proxies, WAFs and secure-web gateways.",
+                      "value": "WebSession"
+                    }
+                  ],
+                  "required": "[steps('asim').on_asim.enableAsim]"
+                },
+                "visible": "[steps('asim').on_asim.enableAsim]",
+                "defaultValue": [
+                  {
+                    "value": "AuditEvent"
+                  },
+                  {
+                    "value": "Authentication"
+                  },
+                  {
+                    "value": "Dns"
+                  },
+                  {
+                    "value": "FileEvent"
+                  },
+                  {
+                    "value": "NetworkSession"
+                  },
+                  {
+                    "value": "ProcessEvent"
+                  },
+                  {
+                    "value": "RegistryEvent"
+                  },
+                  {
+                    "value": "WebSession"
+                  }
+                ],
+                "multiselect": true,
+                "selectAll": true
+              },
+              {
+                "name": "excludeAsimFromAbstractTable",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "One copy: keep ASIM-mapped events out of AbstractEventLogs_CL",
+                "defaultValue": false,
+                "toolTip": "What: an event an ASIM route takes is stored once, in its ASim table, instead of twice. When: turn on to halve the ingestion of mapped events. Consequence: your own queries that read only AbstractEventLogs_CL stop seeing those events; this solution's analytics rules read both. Portal: Log Analytics workspace > Logs, query AbstractEventLogs_CL.",
+                "visible": "[steps('asim').on_asim.enableAsim]"
+              },
+              {
+                "name": "asimNewWs",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(steps('asim').on_asim.enableAsim, and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Warning",
+                  "text": "New workspace with ASIM: Microsoft Sentinel creates the ASim tables about two minutes after it is switched on. If the rule is created first, Azure refuses it with InvalidOutputTable. Open the failed deployment and select Redeploy with the same values; nothing that already succeeded changes."
+                }
+              }
+            ],
+            "visible": "[or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]"
+          },
+          {
+            "name": "off_asim",
+            "type": "Microsoft.Common.TextBlock",
+            "visible": "[not(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))))]",
+            "options": {
+              "text": "Not used by what you chose on Basics, so nothing on this tab is deployed. Go to Review + create, or go back to Basics and change the choice."
+            }
+          }
+        ]
+      },
+      {
+        "name": "lake",
+        "label": "Data lake",
+        "elements": [
+          {
+            "name": "on_lake",
+            "type": "Microsoft.Common.Section",
+            "label": "Data lake",
+            "elements": [
+              {
+                "name": "lakeInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "The lake route sends events of the categories you choose to a table on the Auxiliary (data lake) plan instead of AbstractEventLogs_CL. Auxiliary is the cheapest plan: searchable with KQL, but analytics rules and workbooks do not run on it. Events an ASIM route takes never go to the lake."
+                }
+              },
+              {
+                "name": "enableLake",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Send chosen categories to a data-lake table",
+                "defaultValue": false,
+                "toolTip": "What: one extra route to an Auxiliary-plan table. When: turn on for high-volume, low-alert data such as network flows. Consequence: those events leave AbstractEventLogs_CL, so analytics rules no longer see them. Portal: Log Analytics workspace > Tables.",
+                "visible": true
+              },
+              {
+                "name": "lakeTableName",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Lake table name",
+                "toolTip": "What: the Auxiliary-plan table that receives the chosen categories. Consequence: created if missing; an existing table must already be on the Auxiliary plan, because a table's plan cannot be switched to Auxiliary. Must end in _CL. Portal: Log Analytics workspace > Tables. When: change the name only if your naming standard needs it.",
+                "constraints": {
+                  "required": "[steps('lake').on_lake.enableLake]",
+                  "validations": [
+                    {
+                      "regex": "^[A-Za-z][A-Za-z0-9_]{0,40}_CL$",
+                      "message": "A table name ending in _CL, such as AbstractLake_CL."
+                    }
+                  ]
+                },
+                "visible": "[steps('lake').on_lake.enableLake]",
+                "defaultValue": "AbstractLake_CL"
+              },
+              {
+                "name": "lakeApi",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(or(not(steps('lake').on_lake.enableLake), and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/', coalesce(steps('lake').on_lake.lakeTableName, 'none'), '?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "lakeExists",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(steps('lake').on_lake.enableLake, equals(coalesce(coalesce(steps('lake').on_lake.lakeApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).plan, ''), 'Auxiliary'))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat(steps('lake').on_lake.lakeTableName, ' already exists in this workspace on the ', coalesce(coalesce(steps('lake').on_lake.lakeApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).plan, ''), ' plan, ', string(coalesce(coalesce(steps('lake').on_lake.lakeApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).totalRetentionInDays, 0)), ' days total retention. The route will write to it.')]"
+                }
+              },
+              {
+                "name": "lakeWrongPlan",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(steps('lake').on_lake.enableLake, not(empty(coalesce(coalesce(steps('lake').on_lake.lakeApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).plan, ''))), not(equals(coalesce(coalesce(steps('lake').on_lake.lakeApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).plan, ''), 'Auxiliary')))]",
+                "options": {
+                  "icon": "Error",
+                  "text": "[concat(steps('lake').on_lake.lakeTableName, ' already exists on the ', coalesce(coalesce(steps('lake').on_lake.lakeApi.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).plan, ''), ' plan. A lake table must be on the Auxiliary plan and an existing table cannot be moved to it. Choose another name.')]"
+                }
+              },
+              {
+                "name": "lakeCategories",
+                "type": "Microsoft.Common.DropDown",
+                "label": "Event categories for the lake",
+                "toolTip": "What: the Abstract event categories (event.category) sent to the lake. Matching contains the word, so 'network' also takes 'network_traffic'. Consequence: an event of a chosen category that an ASIM route also takes goes to the ASim table, not the lake. When: pick categories no analytics rule reads. Portal: Log Analytics workspace > Tables > the lake table.",
+                "multiLine": true,
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "network",
+                      "description": "Firewall, flow and connection events. The usual lake candidate: high volume, rarely alerted on.",
+                      "value": "network"
+                    },
+                    {
+                      "label": "web",
+                      "description": "Proxy and web-gateway traffic.",
+                      "value": "web"
+                    },
+                    {
+                      "label": "file",
+                      "description": "File activity.",
+                      "value": "file"
+                    },
+                    {
+                      "label": "process",
+                      "description": "Process activity.",
+                      "value": "process"
+                    },
+                    {
+                      "label": "authentication",
+                      "description": "Sign-ins and logons. Usually kept in Analytics for detections, not sent to the lake.",
+                      "value": "authentication"
+                    },
+                    {
+                      "label": "configuration",
+                      "description": "Configuration and change events.",
+                      "value": "configuration"
+                    },
+                    {
+                      "label": "iam",
+                      "description": "Identity and access management changes.",
+                      "value": "iam"
+                    },
+                    {
+                      "label": "session",
+                      "description": "Session start and end events.",
+                      "value": "session"
+                    }
+                  ],
+                  "required": false
+                },
+                "visible": "[steps('lake').on_lake.enableLake]",
+                "defaultValue": [
+                  {
+                    "value": "network"
+                  }
+                ],
+                "multiselect": true,
+                "selectAll": true
+              },
+              {
+                "name": "lakeCategoriesOther",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Other categories",
+                "toolTip": "What: further categories, comma-separated, for values not in the list. When: leave empty unless your Abstract pipelines set their own event.category values. Consequence: a category nothing sets matches no events. Portal: your Abstract pipeline, field event.category.",
+                "constraints": {
+                  "required": false,
+                  "validations": [
+                    {
+                      "regex": "^$|^[A-Za-z_]+( *, *[A-Za-z_]+)*$",
+                      "message": "Category names separated by commas."
+                    }
+                  ]
+                },
+                "visible": "[steps('lake').on_lake.enableLake]",
+                "placeholder": "dns, endpoint"
+              },
+              {
+                "name": "lakeRetentionDays",
+                "type": "Microsoft.Common.DropDown",
+                "label": "Total retention of the lake table",
+                "toolTip": "What: how long the lake table keeps data. Consequence: lake storage is billed per GB per month; this sets the table's total retention. Portal: Log Analytics workspace > Tables > the table > Manage table. When: set it to your retention policy.",
+                "multiLine": true,
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "30 days",
+                      "value": 30
+                    },
+                    {
+                      "label": "90 days",
+                      "value": 90
+                    },
+                    {
+                      "label": "180 days",
+                      "value": 180
+                    },
+                    {
+                      "label": "365 days (1 year)",
+                      "value": 365
+                    },
+                    {
+                      "label": "730 days (2 years)",
+                      "value": 730
+                    },
+                    {
+                      "label": "1095 days (3 years)",
+                      "value": 1095
+                    },
+                    {
+                      "label": "1825 days (5 years)",
+                      "value": 1825
+                    },
+                    {
+                      "label": "2555 days (7 years)",
+                      "value": 2555
+                    },
+                    {
+                      "label": "3650 days (10 years)",
+                      "value": 3650
+                    },
+                    {
+                      "label": "4383 days",
+                      "value": 4383
+                    }
+                  ],
+                  "required": true
+                },
+                "visible": "[and(steps('lake').on_lake.enableLake, equals(basics('depth'), 'all'))]",
+                "defaultValue": "365 days (1 year)"
+              }
+            ],
+            "visible": "[or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]"
+          },
+          {
+            "name": "off_lake",
+            "type": "Microsoft.Common.TextBlock",
+            "visible": "[not(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))))]",
+            "options": {
+              "text": "Not used by what you chose on Basics, so nothing on this tab is deployed. Go to Review + create, or go back to Basics and change the choice."
+            }
+          }
+        ]
+      },
+      {
+        "name": "vendors",
+        "label": "Vendor tables",
+        "elements": [
+          {
+            "name": "on_vendors",
+            "type": "Microsoft.Common.Section",
+            "label": "Vendor tables",
+            "elements": [
+              {
+                "name": "vendorInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "For each entry selected, the rule also writes the matching Abstract events into a Microsoft table: the vendor's own table (Okta and CrowdStrike with the transformation Microsoft publishes for that connector), CommonSecurityLog, Syslog, AWSCloudTrail, or an ASIM table. Install the vendor's solution from Content hub and its parsers, analytics rules and workbooks read Abstract-delivered data. The status of each vendor in the chosen workspace is read live below."
+                }
+              },
+              {
+                "name": "pkgApi",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/providers/Microsoft.SecurityInsights/contentPackages?api-version=2024-09-01'))]"
+                }
+              },
+              {
+                "name": "tbl_okta",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/OktaV2_CL?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "status_okta",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('Okta: table OktaV2_CL ', if(empty(coalesce(coalesce(steps('vendors').on_vendors.tbl_okta.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).plan, '')), 'is not in this workspace yet (the deployment creates it)', 'already exists'), '. Microsoft solution Okta Single Sign-On: ', if(empty(coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-okta'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version), 'not installed. Install it from Microsoft Sentinel > Content hub to get its parsers, rules and workbooks.', concat('installed, version ', coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-okta'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version, '.')))]"
+                }
+              },
+              {
+                "name": "tbl_csl-cef",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/CommonSecurityLog?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "status_csl-cef",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('CEF sources: table CommonSecurityLog ', if(empty(coalesce(steps('vendors').on_vendors.tbl_csl-cef.properties.plan, '')), 'is not in this workspace yet (the deployment creates it)', 'already exists'), '. Microsoft solution Common Event Format: ', if(empty(coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-commoneventformat'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version), 'not installed. Install it from Microsoft Sentinel > Content hub to get its parsers, rules and workbooks.', concat('installed, version ', coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-commoneventformat'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version, '.')))]"
+                }
+              },
+              {
+                "name": "tbl_csl-acs",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/CommonSecurityLog?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "status_csl-acs",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('Cisco ASA, FortiGate and F5 ASM: table CommonSecurityLog ', if(empty(coalesce(steps('vendors').on_vendors.tbl_csl-acs.properties.plan, '')), 'is not in this workspace yet (the deployment creates it)', 'already exists'), '. Microsoft solution Common Event Format: ', if(empty(coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-commoneventformat'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version), 'not installed. Install it from Microsoft Sentinel > Content hub to get its parsers, rules and workbooks.', concat('installed, version ', coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-commoneventformat'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version, '.')))]"
+                }
+              },
+              {
+                "name": "tbl_syslog",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/Syslog?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "status_syslog",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('Syslog (Linux, Nutanix, Infoblox): table Syslog ', if(empty(coalesce(coalesce(steps('vendors').on_vendors.tbl_syslog.properties, parse('{\"plan\":\"\",\"retentionInDays\":0,\"totalRetentionInDays\":0}')).plan, '')), 'is not in this workspace yet (the deployment creates it)', 'already exists'), '. Microsoft solution Syslog: ', if(empty(coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-syslog'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version), 'not installed. Install it from Microsoft Sentinel > Content hub to get its parsers, rules and workbooks.', concat('installed, version ', coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-syslog'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version, '.')))]"
+                }
+              },
+              {
+                "name": "tbl_aws-cloudtrail",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/AWSCloudTrail?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "status_aws-cloudtrail",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('AWS CloudTrail: table AWSCloudTrail ', if(empty(coalesce(steps('vendors').on_vendors.tbl_aws-cloudtrail.properties.plan, '')), 'is not in this workspace yet (the deployment creates it)', 'already exists'), '. Microsoft solution Amazon Web Services: ', if(empty(coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-amazonwebservices'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version), 'not installed. Install it from Microsoft Sentinel > Content hub to get its parsers, rules and workbooks.', concat('installed, version ', coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-amazonwebservices'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version, '.')))]"
+                }
+              },
+              {
+                "name": "tbl_crowdstrike-hosts",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/CrowdStrikeHostsV2_CL?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "status_crowdstrike-hosts",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('CrowdStrike Falcon hosts: table CrowdStrikeHostsV2_CL ', if(empty(coalesce(steps('vendors').on_vendors.tbl_crowdstrike-hosts.properties.plan, '')), 'is not in this workspace yet (the deployment creates it)', 'already exists'), '. Microsoft solution CrowdStrike Falcon Endpoint Protection: ', if(empty(coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-crowdstrikefalconep'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version), 'not installed. Install it from Microsoft Sentinel > Content hub to get its parsers, rules and workbooks.', concat('installed, version ', coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-crowdstrikefalconep'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version, '.')))]"
+                }
+              },
+              {
+                "name": "vendorsNewWs",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "A new workspace has no vendor tables or solutions yet. The deployment creates each selected vendor's table; install the vendor's solution from Content hub afterwards."
+                }
+              },
+              {
+                "name": "nativeVendors",
+                "type": "Microsoft.Common.DropDown",
+                "label": "Vendor tables",
+                "toolTip": "What: the vendors whose own Sentinel table this rule also fills. When: pick a vendor whose Microsoft solution you use, or plan to. Consequence: one dataflow per vendor, and each event lands in exactly one vendor table: when several selected vendors match it, the first in this order takes it: asim-alert, okta, crowdstrike-hosts, aws-cloudtrail, csl-cef, csl-acs, syslog, asim-dhcp, asim-user-management. With store-once on (One copy, and Store each vendor event once), AbstractEventLogs_CL keeps only the events no vendor table, ASIM route or lake table takes; with it off, it also keeps every vendor event. Portal: Microsoft Sentinel > Content hub, the vendor's solution.",
+                "multiLine": true,
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "Okta: OktaV2_CL",
+                      "value": "okta",
+                      "description": "Fills OktaV2_CL, the table Microsoft's Okta Single Sign-On solution reads, with Microsoft's own connector transformation."
+                    },
+                    {
+                      "label": "CEF sources: CommonSecurityLog",
+                      "value": "csl-cef",
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads."
+                    },
+                    {
+                      "label": "Cisco ASA, FortiGate and F5 ASM: CommonSecurityLog",
+                      "value": "csl-acs",
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads."
+                    },
+                    {
+                      "label": "Syslog (Linux, Nutanix, Infoblox): Syslog",
+                      "value": "syslog",
+                      "description": "Fills Syslog, the table Microsoft's Syslog solution reads."
+                    },
+                    {
+                      "label": "AWS CloudTrail: AWSCloudTrail",
+                      "value": "aws-cloudtrail",
+                      "description": "Fills AWSCloudTrail, the table Microsoft's Amazon Web Services solution reads."
+                    },
+                    {
+                      "label": "CrowdStrike Falcon hosts: CrowdStrikeHostsV2_CL",
+                      "value": "crowdstrike-hosts",
+                      "description": "Fills CrowdStrikeHostsV2_CL, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads."
+                    },
+                    {
+                      "label": "ASIM Alert (Abstract findings): ASimAlertEventLogs",
+                      "value": "asim-alert",
+                      "description": "Writes ASimAlertEventLogs, read by Microsoft's built-in ASIM parser."
+                    },
+                    {
+                      "label": "ASIM DHCP: ASimDhcpEventLogs",
+                      "value": "asim-dhcp",
+                      "description": "Writes ASimDhcpEventLogs, read by Microsoft's built-in ASIM parser."
+                    },
+                    {
+                      "label": "ASIM User Management: ASimUserManagementActivityLogs",
+                      "value": "asim-user-management",
+                      "description": "Writes ASimUserManagementActivityLogs, read by Microsoft's built-in ASIM parser."
+                    }
+                  ],
+                  "required": false
+                },
+                "visible": true,
+                "defaultValue": [],
+                "multiselect": true,
+                "selectAll": true
+              },
+              {
+                "name": "oktaDomain",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Okta domain",
+                "toolTip": "What: your Okta org domain, written to the DomainName column of OktaV2_CL as Microsoft's own Okta connector does. When: set it when Okta is selected; empty leaves the column empty. Consequence: Microsoft's Okta content does not filter on it. Portal: the address you sign in to Okta with, without https://.",
+                "constraints": {
+                  "required": false,
+                  "validations": [
+                    {
+                      "regex": "^$|^[A-Za-z0-9.-]+$",
+                      "message": "A domain name such as example.okta.com: letters, digits, dots and hyphens."
+                    }
+                  ]
+                },
+                "visible": "[contains(string(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]'))), '\"okta\"')]",
+                "defaultValue": "",
+                "placeholder": "example.okta.com"
+              },
+              {
+                "name": "excludeNativeVendorsFromAsim",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Store each vendor event once",
+                "defaultValue": true,
+                "toolTip": "What: an event a vendor table takes is not also written to the ASim tables or the lake, and, with store-once on, not to AbstractEventLogs_CL. When: keep on, unless a report needs a second copy. Consequence: turned off, the same event is stored and billed in both tables and every search that unions them counts it twice. Portal: Log Analytics workspace > Tables.",
+                "visible": "[equals(basics('depth'), 'all')]"
+              },
+              {
+                "name": "budget",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('This configuration gives the Data Collection Rule ', string(add(add(add(1, if(steps('asim').on_asim.enableAsim, length(coalesce(steps('asim').on_asim.asimSchemas, parse('[]'))), 0)), if(and(steps('lake').on_lake.enableLake, not(empty(parse(if(empty(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), if(empty(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), replace(concat(string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c))))), '][', ','))))))), 1, 0)), length(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]'))))), ' of the 20 dataflows Azure allows: 1 for AbstractEventLogs_CL, one per ASIM schema, one for the lake and one per vendor.')]"
+                }
+              }
+            ],
+            "visible": "[or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]"
+          },
+          {
+            "name": "off_vendors",
+            "type": "Microsoft.Common.TextBlock",
+            "visible": "[not(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))))]",
+            "options": {
+              "text": "Not used by what you chose on Basics, so nothing on this tab is deployed. Go to Review + create, or go back to Basics and change the choice."
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "createWorkspace": "[and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))]",
+      "workspaceName": "[coalesce(if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), basics('workspaceNameNew'), basics('workspaceExisting')), '')]",
+      "workspaceRetentionDays": "[if(equals(basics('depth'), 'all'), coalesce(basics('workspaceRetentionDays'), 90), 90)]",
+      "existingWorkspaceLocation": "[if(and(or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '', coalesce(coalesce(first(filter(coalesce(basics('wsApi').data, parse('[]')), (w) => equals(toLower(w.name), toLower(coalesce(basics('workspaceExisting'), ''))))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).location, ''))]",
+      "tags": "[if(equals(basics('depth'), 'all'), parse(if(contains(coalesce(basics('tags'), parse('{\"_\":\"\"}')), 'Microsoft.Insights/dataCollectionRules'), substring(string(coalesce(basics('tags'), parse('{\"_\":\"\"}'))), 42, sub(length(string(coalesce(basics('tags'), parse('{\"_\":\"\"}')))), 43)), '{}')), parse('{}'))]",
+      "principalId": "[if(equals(steps('app').on_app.appMode, 'manual'), steps('app').on_app.principalIdManual, if(and(equals(steps('app').on_app.appMode, 'picker'), equals(steps('app').on_app.sp.newOrExisting, 'existing')), coalesce(first(steps('app').on_app.sp.objectId), ''), ''))]",
+      "dataCollectionEndpointName": "[if(equals(steps('collection').on_collection.dceMode, 'new'), steps('collection').on_collection.dceNameNew, steps('collection').on_collection.dceExisting)]",
+      "dataCollectionRuleName": "[if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)]",
+      "customTablePlan": "[if(equals(basics('depth'), 'all'), steps('collection').on_collection.customTablePlan, 'Keep')]",
+      "customTableRetentionDays": "[if(equals(basics('depth'), 'all'), steps('collection').on_collection.customTableRetentionDays, 0)]",
+      "enableDcrErrorLogs": "[if(equals(basics('depth'), 'all'), steps('collection').on_collection.enableDcrErrorLogs, bool('true'))]",
+      "enableAsim": "[steps('asim').on_asim.enableAsim]",
+      "excludeAsimFromAbstractTable": "[and(steps('asim').on_asim.enableAsim, steps('asim').on_asim.excludeAsimFromAbstractTable)]",
+      "nativeVendors": "[coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]'))]",
+      "excludeNativeVendorsFromAsim": "[if(equals(basics('depth'), 'all'), steps('vendors').on_vendors.excludeNativeVendorsFromAsim, bool('true'))]",
+      "asimSchemas": "[if(steps('asim').on_asim.enableAsim, steps('asim').on_asim.asimSchemas, parse('[\"*\"]'))]",
+      "lakeTableName": "[if(steps('lake').on_lake.enableLake, steps('lake').on_lake.lakeTableName, '')]",
+      "lakeCategories": "[if(steps('lake').on_lake.enableLake, parse(if(empty(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), if(empty(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), replace(concat(string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c))))), '][', ',')))), parse('[]'))]",
+      "lakeRetentionDays": "[if(equals(basics('depth'), 'all'), coalesce(steps('lake').on_lake.lakeRetentionDays, 365), 365)]",
+      "oktaDomain": "[coalesce(steps('vendors').on_vendors.oktaDomain, '')]",
+      "keyVaultNameSuffix": "",
+      "deployDataPlane": "[or(or(equals('dataplane', 'dataplane'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]",
+      "deployContent": "[or(or(equals('dataplane', 'content'), equals('dataplane', 'dataplane-content'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]",
+      "deployDiscovery": "[or(or(equals('dataplane', 'discovery-only'), equals('dataplane', 'everything')), and(equals('dataplane', 'custom'), bool('false')))]"
+    }
+  }
+}

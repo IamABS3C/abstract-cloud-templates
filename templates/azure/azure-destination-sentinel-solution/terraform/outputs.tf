@@ -57,3 +57,8 @@ output "abstractDestination" {
   description = "Four of the values Abstract's Azure Sentinel Destination needs: tenant ID, Data Collection Endpoint, Data Collection Rule ID and Log Stream Name. The app's client ID and secret come from Entra ID."
   value       = local.outputs["abstractDestination"]
 }
+
+output "abstractApiKeySecretUri" {
+  description = "The Key Vault secret the playbooks read the Abstract API key from, with ?api-version, as they GET it. Not the key. Later content that calls the Abstract API can reuse it."
+  value       = local.outputs["abstractApiKeySecretUri"]
+}

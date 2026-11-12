@@ -1,0 +1,554 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-discovery/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Sentinel discovery: read-only inventory run from your own subscription**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. One Azure deployment that runs the read-only Sentinel inventory kit against one workspace from inside your subscription and writes the output to a storage account you own: a zip, one CSV per area, a self-contained HTML report and, optionally, the inventory workbook.\n\nA read-only inventory of any workspace in the subscription, written to a storage account you own.",
+        "location": {
+          "label": "Region",
+          "toolTip": "The region of the resources this template creates: the identity, the storage account and the deployment scripts. The workspace it reads can be in any region. Find it: Azure portal > Resource groups > your group > Overview > Location. Example: eastus. Default: the resource group's region."
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "pitch",
+        "type": "Microsoft.Common.TextBlock",
+        "visible": true,
+        "options": {
+          "text": "A read-only inventory of any workspace in the subscription, written to a storage account you own."
+        }
+      },
+      {
+        "name": "readOnly",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "Info",
+          "text": "Discovery is read-only. It changes no setting, table, rule or data in the workspace. It creates a managed identity with read-only roles, a storage account for the report and two deployment scripts, and the run takes 5 to 15 minutes. With Send a copy to Abstract off, nothing leaves your tenant."
+        }
+      },
+      {
+        "name": "depth",
+        "type": "Microsoft.Common.OptionsGroup",
+        "label": "Setup depth",
+        "toolTip": "Recommended settings shows only what most deployments set and keeps every other setting at its default. Show every setting adds a More settings section to each tab. Hidden settings are sent with their defaults, so either choice deploys.",
+        "defaultValue": "Recommended settings",
+        "visible": true,
+        "constraints": {
+          "required": true,
+          "allowedValues": [
+            {
+              "label": "Recommended settings",
+              "value": "recommended"
+            },
+            {
+              "label": "Show every setting",
+              "value": "all"
+            }
+          ]
+        }
+      },
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "workspace",
+        "label": "Workspace",
+        "elements": [
+          {
+            "name": "wsApi",
+            "type": "Microsoft.Solutions.ArmApiControl",
+            "request": {
+              "method": "POST",
+              "path": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+              "body": {
+                "subscriptions": [
+                  "[subscription().subscriptionId]"
+                ],
+                "query": "[concat('resources | where subscriptionId =~ \"', subscription().subscriptionId, '\" and type =~ \"microsoft.operationalinsights/workspaces\" | project name, location, resourceGroup, subscriptionId, id = tolower(id) | join kind=leftouter (resources | where type =~ \"microsoft.operationsmanagement/solutions\" and name startswith \"SecurityInsights(\" | project id = tolower(tostring(properties.workspaceResourceId)), hasSentinel = 1) on id | extend sentinel = iff(isnotnull(hasSentinel), \"yes\", \"no\") | project name, location, resourceGroup, subscriptionId, id, sentinel | order by name asc')]",
+                "options": {
+                  "resultFormat": "objectArray"
+                }
+              }
+            }
+          },
+          {
+            "name": "subsApi",
+            "type": "Microsoft.Solutions.ArmApiControl",
+            "request": {
+              "method": "GET",
+              "path": "[if(equals(steps('workspace').workspaceMode, 'pick'), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', '/subscriptions?api-version=2022-12-01')]"
+            }
+          },
+          {
+            "name": "rgApi",
+            "type": "Microsoft.Solutions.ArmApiControl",
+            "request": {
+              "method": "GET",
+              "path": "[if(or(equals(steps('workspace').workspaceMode, 'pick'), empty(coalesce(steps('workspace').workspaceSubscriptionManual, ''))), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat('/subscriptions/', coalesce(steps('workspace').workspaceSubscriptionManual, ''), '/resourcegroups?api-version=2021-04-01'))]"
+            }
+          },
+          {
+            "name": "wsListApi",
+            "type": "Microsoft.Solutions.ArmApiControl",
+            "request": {
+              "method": "GET",
+              "path": "[if(or(equals(steps('workspace').workspaceMode, 'pick'), empty(coalesce(steps('workspace').workspaceSubscriptionManual, '')), empty(coalesce(steps('workspace').workspaceResourceGroupManual, ''))), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat('/subscriptions/', coalesce(steps('workspace').workspaceSubscriptionManual, ''), '/resourceGroups/', coalesce(steps('workspace').workspaceResourceGroupManual, ''), '/providers/Microsoft.OperationalInsights/workspaces?api-version=2022-10-01'))]"
+            }
+          },
+          {
+            "name": "workspaceMode",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "How to choose the workspace",
+            "toolTip": "Pick from this subscription lists every workspace that runs Microsoft Sentinel in the subscription chosen on Basics, in any resource group, read live from Azure Resource Graph. Another subscription lists the subscriptions, resource groups and workspaces you can see, read live from Azure Resource Manager. The discovery identity gets read-only roles on the workspace's resource group, so you need the rights to assign roles there. Default: Pick from this subscription.",
+            "defaultValue": "Pick from this subscription",
+            "visible": true,
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "Pick from this subscription",
+                  "value": "pick"
+                },
+                {
+                  "label": "Another subscription",
+                  "value": "manual"
+                }
+              ]
+            }
+          },
+          {
+            "name": "workspacePicked",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Workspace to read",
+            "toolTip": "The Log Analytics workspace with Microsoft Sentinel to inventory. It is only read: no setting, table, rule or data in it changes. The form lists every workspace that runs Microsoft Sentinel in the subscription, in any resource group. Find it: Azure portal > Microsoft Sentinel, the workspace name. Example: sentinel-prod.",
+            "multiLine": true,
+            "filter": true,
+            "filterPlaceholder": "Filter by name",
+            "visible": "[equals(steps('workspace').workspaceMode, 'pick')]",
+            "constraints": {
+              "required": true,
+              "allowedValues": "[if(empty(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes'))), parse('[{\"label\":\"No workspace in this subscription runs Microsoft Sentinel\",\"value\":\"\"}]'), map(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => parse(concat('{\"label\":\"', w.name, '\",\"description\":\"', 'resource group ', w.resourceGroup, ', ', w.location, '\",\"value\":\"', w.id, '\"}'))))]"
+            }
+          },
+          {
+            "name": "noSentinel",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[and(equals(steps('workspace').workspaceMode, 'pick'), empty(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes'))))]",
+            "options": {
+              "icon": "Warning",
+              "text": "No workspace in this subscription runs Microsoft Sentinel. Choose another subscription on Basics, or choose Another subscription above."
+            }
+          },
+          {
+            "name": "noWorkspaceBlock",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Workspace required",
+            "toolTip": "No workspace in this subscription runs Microsoft Sentinel. Choose Another subscription, or choose another subscription on Basics.",
+            "placeholder": "Nothing to select here. See the message above.",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "isValid": "[equals(1, 2)]",
+                  "message": "No workspace in this subscription runs Microsoft Sentinel. Choose Another subscription, or choose another subscription on Basics."
+                }
+              ]
+            },
+            "visible": "[and(equals(steps('workspace').workspaceMode, 'pick'), empty(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes'))))]"
+          },
+          {
+            "name": "pickedWhere",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[and(equals(steps('workspace').workspaceMode, 'pick'), not(empty(coalesce(steps('workspace').workspacePicked, ''))))]",
+            "options": {
+              "icon": "Info",
+              "text": "[concat('Workspace ', coalesce(first(filter(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => equals(w.id, coalesce(steps('workspace').workspacePicked, '')))), parse('{\"location\":\"\",\"name\":\"\",\"id\":\"\",\"resourceGroup\":\"\",\"subscriptionId\":\"\"}')).name, ' in resource group ', coalesce(first(filter(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => equals(w.id, coalesce(steps('workspace').workspacePicked, '')))), parse('{\"location\":\"\",\"name\":\"\",\"id\":\"\",\"resourceGroup\":\"\",\"subscriptionId\":\"\"}')).resourceGroup, ', region ', coalesce(first(filter(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => equals(w.id, coalesce(steps('workspace').workspacePicked, '')))), parse('{\"location\":\"\",\"name\":\"\",\"id\":\"\",\"resourceGroup\":\"\",\"subscriptionId\":\"\"}')).location, '. It is only read.')]"
+            }
+          },
+          {
+            "name": "workspaceSubscriptionManual",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Workspace subscription",
+            "toolTip": "The subscriptions you can see, read live from Azure Resource Manager. The discovery identity gets Reader on the one you choose when Reader on the workspace subscription is on, so you need the rights to assign roles there. Find it: Azure portal > Subscriptions. Example: 00000000-0000-0000-0000-000000000000.",
+            "multiLine": true,
+            "filter": true,
+            "filterPlaceholder": "Filter by name",
+            "visible": "[not(equals(steps('workspace').workspaceMode, 'pick'))]",
+            "constraints": {
+              "required": true,
+              "allowedValues": "[if(empty(if(equals(steps('workspace').workspaceMode, 'pick'), parse('[]'), coalesce(steps('workspace').subsApi.value, parse('[]')))), parse('[{\"label\":\"No subscription could be listed\",\"value\":\"\"}]'), map(if(equals(steps('workspace').workspaceMode, 'pick'), parse('[]'), coalesce(steps('workspace').subsApi.value, parse('[]'))), (x) => parse(concat('{\"label\":\"', replace(x.displayName, '\"', ''), '\",\"description\":\"', x.subscriptionId, '\",\"value\":\"', x.subscriptionId, '\"}'))))]"
+            }
+          },
+          {
+            "name": "noSubscriptionBlock",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Subscription required",
+            "toolTip": "No subscription could be listed with your sign-in. Choose Pick from this subscription, or ask for Reader on the workspace subscription.",
+            "placeholder": "Nothing to select here. See the message above.",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "isValid": "[equals(1, 2)]",
+                  "message": "No subscription could be listed with your sign-in. Choose Pick from this subscription, or ask for Reader on the workspace subscription."
+                }
+              ]
+            },
+            "visible": "[and(not(equals(steps('workspace').workspaceMode, 'pick')), empty(if(equals(steps('workspace').workspaceMode, 'pick'), parse('[]'), coalesce(steps('workspace').subsApi.value, parse('[]')))))]"
+          },
+          {
+            "name": "workspaceResourceGroupManual",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Workspace resource group",
+            "toolTip": "The resource groups of the chosen subscription, read live from Azure Resource Manager. The discovery identity gets Reader, Microsoft Sentinel Reader and Log Analytics Reader on the one you choose. Find it: Azure portal > Log Analytics workspaces > the workspace > Overview > Resource group. Example: rg-sentinel.",
+            "multiLine": true,
+            "filter": true,
+            "filterPlaceholder": "Filter by name",
+            "visible": "[not(equals(steps('workspace').workspaceMode, 'pick'))]",
+            "constraints": {
+              "required": true,
+              "allowedValues": "[if(empty(if(or(equals(steps('workspace').workspaceMode, 'pick'), empty(coalesce(steps('workspace').workspaceSubscriptionManual, ''))), parse('[]'), coalesce(steps('workspace').rgApi.value, parse('[]')))), parse('[{\"label\":\"No resource group in this subscription\",\"value\":\"\"}]'), map(if(or(equals(steps('workspace').workspaceMode, 'pick'), empty(coalesce(steps('workspace').workspaceSubscriptionManual, ''))), parse('[]'), coalesce(steps('workspace').rgApi.value, parse('[]'))), (x) => parse(concat('{\"label\":\"', x.name, '\",\"description\":\"', x.location, '\",\"value\":\"', x.name, '\"}'))))]"
+            }
+          },
+          {
+            "name": "noResourceGroupBlock",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Resource group required",
+            "toolTip": "No resource group of the chosen subscription could be listed. Choose another subscription.",
+            "placeholder": "Nothing to select here. See the message above.",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "isValid": "[equals(1, 2)]",
+                  "message": "No resource group of the chosen subscription could be listed. Choose another subscription."
+                }
+              ]
+            },
+            "visible": "[and(not(equals(steps('workspace').workspaceMode, 'pick')), not(empty(coalesce(steps('workspace').workspaceSubscriptionManual, ''))), empty(if(or(equals(steps('workspace').workspaceMode, 'pick'), empty(coalesce(steps('workspace').workspaceSubscriptionManual, ''))), parse('[]'), coalesce(steps('workspace').rgApi.value, parse('[]')))))]"
+          },
+          {
+            "name": "workspaceNameManual",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Workspace to read",
+            "toolTip": "The Log Analytics workspaces in the chosen resource group, read live from Azure Resource Manager. Choose the one that runs Microsoft Sentinel. It is only read. Find it: Azure portal > Microsoft Sentinel, the workspace name. Example: sentinel-prod.",
+            "multiLine": true,
+            "filter": true,
+            "filterPlaceholder": "Filter by name",
+            "visible": "[not(equals(steps('workspace').workspaceMode, 'pick'))]",
+            "constraints": {
+              "required": true,
+              "allowedValues": "[if(empty(if(or(equals(steps('workspace').workspaceMode, 'pick'), empty(coalesce(steps('workspace').workspaceSubscriptionManual, '')), empty(coalesce(steps('workspace').workspaceResourceGroupManual, ''))), parse('[]'), coalesce(steps('workspace').wsListApi.value, parse('[]')))), parse('[{\"label\":\"No Log Analytics workspace in this resource group\",\"value\":\"\"}]'), map(if(or(equals(steps('workspace').workspaceMode, 'pick'), empty(coalesce(steps('workspace').workspaceSubscriptionManual, '')), empty(coalesce(steps('workspace').workspaceResourceGroupManual, ''))), parse('[]'), coalesce(steps('workspace').wsListApi.value, parse('[]'))), (x) => parse(concat('{\"label\":\"', x.name, '\",\"description\":\"', x.location, '\",\"value\":\"', x.name, '\"}'))))]"
+            }
+          },
+          {
+            "name": "noWorkspaceManualBlock",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Workspace required",
+            "toolTip": "No Log Analytics workspace is in the chosen resource group. Choose another resource group.",
+            "placeholder": "Nothing to select here. See the message above.",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "isValid": "[equals(1, 2)]",
+                  "message": "No Log Analytics workspace is in the chosen resource group. Choose another resource group."
+                }
+              ]
+            },
+            "visible": "[and(not(equals(steps('workspace').workspaceMode, 'pick')), not(empty(coalesce(steps('workspace').workspaceResourceGroupManual, ''))), empty(if(or(equals(steps('workspace').workspaceMode, 'pick'), empty(coalesce(steps('workspace').workspaceSubscriptionManual, '')), empty(coalesce(steps('workspace').workspaceResourceGroupManual, ''))), parse('[]'), coalesce(steps('workspace').wsListApi.value, parse('[]')))))]"
+          },
+          {
+            "name": "regionInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "[concat('The identity, storage account, deployment scripts and workbook this template creates go in ', location(), ', the region chosen on Basics. The workspace is read wherever it is.')]"
+            }
+          }
+        ]
+      },
+      {
+        "name": "scan",
+        "label": "What to read",
+        "elements": [
+          {
+            "name": "days",
+            "label": "Look-back window",
+            "toolTip": "How many days back the inventory reads volume, health, agents and rules, 1 to 90. A longer window gives a steadier picture of ingestion and takes longer to read. Example: 30. Default: 30.",
+            "visible": true,
+            "type": "Microsoft.Common.Slider",
+            "min": 1,
+            "max": 90,
+            "defaultValue": 30,
+            "showStepMarkers": false
+          },
+          {
+            "name": "skipRuleQueryText",
+            "label": "Leave out analytics rule KQL",
+            "toolTip": "Leaves the KQL text of analytics rules out of the output. The rule-to-table mapping is still produced. Turn it on if the queries must not leave the workspace in the report. Default: off.",
+            "visible": true,
+            "type": "Microsoft.Common.CheckBox",
+            "defaultValue": false
+          },
+          {
+            "name": "skipContentQueryText",
+            "label": "Leave out function and hunting KQL",
+            "toolTip": "Leaves the KQL text of functions, hunting queries and saved searches out of the output. The content-to-table mapping is still produced. Default: off.",
+            "visible": true,
+            "type": "Microsoft.Common.CheckBox",
+            "defaultValue": false
+          },
+          {
+            "name": "advanced",
+            "type": "Microsoft.Common.Section",
+            "label": "More settings",
+            "elements": [
+              {
+                "name": "deviceDays",
+                "label": "Sender breakdown window",
+                "toolTip": "How many days of CommonSecurityLog and Syslog the inventory scans for the sender breakdowns, 1 to 7. These read the raw tables, so leave it at 1. Example: 1. Default: 1.",
+                "visible": true,
+                "type": "Microsoft.Common.Slider",
+                "min": 1,
+                "max": 7,
+                "defaultValue": 1,
+                "showStepMarkers": false
+              },
+              {
+                "name": "profileTopTables",
+                "label": "Tables to profile",
+                "toolTip": "How many of the largest Analytics-plan tables are broken down by two columns, 0 to 50. 0 turns the breakdown off. Example: 15. Default: 15.",
+                "visible": true,
+                "type": "Microsoft.Common.Slider",
+                "min": 0,
+                "max": 50,
+                "defaultValue": 15,
+                "showStepMarkers": false
+              }
+            ],
+            "visible": "[equals(basics('depth'), 'all')]"
+          }
+        ]
+      },
+      {
+        "name": "output",
+        "label": "Output",
+        "elements": [
+          {
+            "name": "storageNameCheck",
+            "type": "Microsoft.Solutions.ArmApiControl",
+            "request": {
+              "method": "POST",
+              "path": "[concat(subscription().id, '/providers/Microsoft.Storage/checkNameAvailability?api-version=2023-05-01')]",
+              "body": {
+                "name": "[coalesce(steps('output').advanced.storageAccountName, '')]",
+                "type": "Microsoft.Storage/storageAccounts"
+              }
+            }
+          },
+          {
+            "name": "storageInGroup",
+            "type": "Microsoft.Solutions.ArmApiControl",
+            "request": {
+              "method": "POST",
+              "path": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+              "body": {
+                "subscriptions": [
+                  "[subscription().subscriptionId]"
+                ],
+                "query": "[concat('resources | where subscriptionId =~ \"', subscription().subscriptionId, '\" and resourceGroup =~ \"', resourceGroup().name, '\" and type =~ \"microsoft.storage/storageaccounts\" | project name')]",
+                "options": {
+                  "resultFormat": "objectArray"
+                }
+              }
+            }
+          },
+          {
+            "name": "deployWorkbook",
+            "label": "Install the inventory workbook",
+            "toolTip": "Installs the Sentinel inventory workbook for the workspace, attached to it; the workbook resource goes in this resource group. It queries only when opened. Find it: Azure portal > Microsoft Sentinel > Workbooks > My workbooks. Default: on.",
+            "visible": true,
+            "type": "Microsoft.Common.CheckBox",
+            "defaultValue": true
+          },
+          {
+            "name": "grantDeployerBlobRead",
+            "label": "Let me open the report",
+            "toolTip": "Gives the person deploying Storage Blob Data Reader on the report container, so they can open the report. Shared keys are off on the account, so the Owner role alone cannot read the files. Find it: Azure portal > Storage accounts > the account > Containers > sentinel-discovery. Default: on.",
+            "visible": true,
+            "type": "Microsoft.Common.CheckBox",
+            "defaultValue": true
+          },
+          {
+            "name": "assignSubscriptionReader",
+            "label": "Reader on the workspace's subscription",
+            "toolTip": "Gives the discovery identity Reader on the workspace's subscription, which it needs to list data collection rules, endpoints, Microsoft Sentinel workbooks and playbooks. Off: those areas are recorded as not read, and you need no rights on the subscription. Find it: Azure portal > Subscriptions > the subscription > Access control (IAM). Default: on.",
+            "visible": true,
+            "type": "Microsoft.Common.CheckBox",
+            "defaultValue": true
+          },
+          {
+            "name": "sendToAbstract",
+            "label": "Send a copy to Abstract",
+            "toolTip": "Off by default, and then nothing leaves your tenant. On sends exactly two files over HTTPS to the SAS URL Abstract gave you: inventory.zip (the CSVs and summary.json, with resource names and IDs, table volumes, computer names and IP addresses from Heartbeat, device vendors and products, and rule and function KQL unless left out) and report.html. No log records, watchlist items or credentials are in either file. Default: off.",
+            "visible": true,
+            "type": "Microsoft.Common.CheckBox",
+            "defaultValue": false
+          },
+          {
+            "name": "abstractSasUrl",
+            "label": {
+              "password": "Abstract SAS URL",
+              "confirmPassword": "Confirm abstract SAS URL"
+            },
+            "toolTip": "The HTTPS SAS URL of the container Abstract gave you, used only when sending a copy to Abstract. It needs write permission on that container only. The template takes it as a secure string, so the deployment's history does not show it. Find it: The URL Abstract sent you.",
+            "visible": "[steps('output').sendToAbstract]",
+            "type": "Microsoft.Common.PasswordBox",
+            "constraints": {
+              "required": true,
+              "regex": "^$|^https://.+$",
+              "validationMessage": "An https:// URL."
+            },
+            "options": {
+              "hideConfirmation": false
+            }
+          },
+          {
+            "name": "advanced",
+            "type": "Microsoft.Common.Section",
+            "label": "More settings",
+            "elements": [
+              {
+                "name": "storageAccountName",
+                "label": "Report storage account name",
+                "toolTip": "The storage account the report is written to, 3 to 24 lowercase letters and digits, unique across Azure. Empty generates a name. It is created with public blob access and shared-key access off. Find it: Azure portal > Storage accounts. Example: absdiscsecops.",
+                "visible": true,
+                "type": "Microsoft.Common.TextBox",
+                "defaultValue": "",
+                "constraints": {
+                  "required": false,
+                  "validations": [
+                    {
+                      "regex": "^$|^[a-z0-9]{3,24}$",
+                      "message": "3 to 24 lowercase letters and digits, or empty to generate one."
+                    },
+                    {
+                      "isValid": "[or(empty(coalesce(steps('output').advanced.storageAccountName, '')), coalesce(steps('output').storageNameCheck.nameAvailable, bool('true')), not(empty(filter(coalesce(steps('output').storageInGroup.data, parse('[]')), (a) => equals(toLower(a.name), toLower(coalesce(steps('output').advanced.storageAccountName, '')))))))]",
+                      "message": "This name is taken by a storage account outside this resource group. Storage account names are unique across Azure: choose another, or leave it empty to generate one."
+                    }
+                  ]
+                },
+                "placeholder": "Leave empty to generate one"
+              },
+              {
+                "name": "storageAccountNameInGroup",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[and(not(empty(coalesce(steps('output').advanced.storageAccountName, ''))), not(empty(filter(coalesce(steps('output').storageInGroup.data, parse('[]')), (a) => equals(toLower(a.name), toLower(coalesce(steps('output').advanced.storageAccountName, '')))))))]",
+                "options": {
+                  "icon": "Warning",
+                  "text": "A storage account with this name is already in this resource group. The deployment updates it in place: public blob access and shared-key access are turned off, and the sentinel-discovery container is added."
+                }
+              }
+            ],
+            "visible": "[equals(basics('depth'), 'all')]"
+          }
+        ]
+      },
+      {
+        "name": "run",
+        "label": "Run",
+        "elements": [
+          {
+            "name": "defaultsNote",
+            "type": "Microsoft.Common.TextBlock",
+            "visible": "[not(equals(basics('depth'), 'all'))]",
+            "options": {
+              "text": "Every setting on this tab keeps its default. Choose Show every setting on Basics to change them."
+            }
+          },
+          {
+            "name": "advanced",
+            "type": "Microsoft.Common.Section",
+            "label": "More settings",
+            "elements": [
+              {
+                "name": "rbacWaitMinutes",
+                "label": "Wait for role assignments",
+                "toolTip": "Minutes to wait for the role assignments to take effect before the deployment fails, 1 to 45. Raise it if a run fails because a new role has not reached the identity yet. Example: 30. Default: 20.",
+                "visible": true,
+                "type": "Microsoft.Common.Slider",
+                "min": 1,
+                "max": 45,
+                "defaultValue": 20,
+                "showStepMarkers": false
+              },
+              {
+                "name": "scriptRetention",
+                "label": "Keep script logs for",
+                "toolTip": "How long Azure keeps the deployment script resources and their logs after a run, as an ISO 8601 duration of 1 to 26 hours. The report in your storage account is not affected. Find it: Azure portal > Resource groups > this group > Deployment scripts. Example: PT26H. Default: P1D.",
+                "visible": true,
+                "type": "Microsoft.Common.TextBox",
+                "defaultValue": "P1D",
+                "constraints": {
+                  "required": true,
+                  "validations": [
+                    {
+                      "regex": "^P(1D|T([1-9]|1[0-9]|2[0-6])H)$",
+                      "message": "An ISO 8601 duration from PT1H to PT26H, or P1D."
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "tags",
+                "toolTip": "Tags put on the resources this template creates: the identity, the storage account, the deployment scripts and the workbook. Set them when your policy requires tags; Azure Policy can refuse an untagged deployment. Find it: Azure portal > Policy > Assignments, for the tags your subscription requires. Example: {\"owner\": \"secops\"}.",
+                "visible": true,
+                "type": "Microsoft.Common.TagsByResource",
+                "resources": [
+                  "Microsoft.Storage/storageAccounts"
+                ]
+              }
+            ],
+            "visible": "[equals(basics('depth'), 'all')]"
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "workspaceName": "[if(equals(steps('workspace').workspaceMode, 'pick'), coalesce(first(filter(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => equals(w.id, coalesce(steps('workspace').workspacePicked, '')))), parse('{\"location\":\"\",\"name\":\"\",\"id\":\"\",\"resourceGroup\":\"\",\"subscriptionId\":\"\"}')).name, coalesce(steps('workspace').workspaceNameManual, ''))]",
+      "workspaceResourceGroup": "[if(equals(steps('workspace').workspaceMode, 'pick'), coalesce(first(filter(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => equals(w.id, coalesce(steps('workspace').workspacePicked, '')))), parse('{\"location\":\"\",\"name\":\"\",\"id\":\"\",\"resourceGroup\":\"\",\"subscriptionId\":\"\"}')).resourceGroup, coalesce(steps('workspace').workspaceResourceGroupManual, ''))]",
+      "workspaceSubscriptionId": "[if(equals(steps('workspace').workspaceMode, 'pick'), coalesce(first(filter(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => equals(w.id, coalesce(steps('workspace').workspacePicked, '')))), parse('{\"location\":\"\",\"name\":\"\",\"id\":\"\",\"resourceGroup\":\"\",\"subscriptionId\":\"\"}')).subscriptionId, coalesce(steps('workspace').workspaceSubscriptionManual, ''))]",
+      "days": "[coalesce(steps('scan').days, 30)]",
+      "skipRuleQueryText": "[steps('scan').skipRuleQueryText]",
+      "skipContentQueryText": "[steps('scan').skipContentQueryText]",
+      "deviceDays": "[if(equals(basics('depth'), 'all'), coalesce(steps('scan').advanced.deviceDays, 1), 1)]",
+      "profileTopTables": "[if(equals(basics('depth'), 'all'), coalesce(steps('scan').advanced.profileTopTables, 15), 15)]",
+      "deployWorkbook": "[steps('output').deployWorkbook]",
+      "grantDeployerBlobRead": "[steps('output').grantDeployerBlobRead]",
+      "assignSubscriptionReader": "[steps('output').assignSubscriptionReader]",
+      "sendToAbstract": "[steps('output').sendToAbstract]",
+      "abstractSasUrl": "[if(steps('output').sendToAbstract, coalesce(steps('output').abstractSasUrl, ''), '')]",
+      "storageAccountName": "[if(equals(basics('depth'), 'all'), coalesce(steps('output').advanced.storageAccountName, ''), '')]",
+      "rbacWaitMinutes": "[if(equals(basics('depth'), 'all'), coalesce(steps('run').advanced.rbacWaitMinutes, 20), 20)]",
+      "scriptRetention": "[if(equals(basics('depth'), 'all'), coalesce(steps('run').advanced.scriptRetention, ''), 'P1D')]",
+      "tags": "[parse(if(and(contains(coalesce(steps('run').advanced.tags, parse('{\"_\":\"\"}')), 'Microsoft.Storage/storageAccounts'), equals(basics('depth'), 'all')), substring(string(coalesce(steps('run').advanced.tags, parse('{\"_\":\"\"}'))), 37, sub(length(string(coalesce(steps('run').advanced.tags, parse('{\"_\":\"\"}')))), 38)), '{}'))]"
+    }
+  }
+}

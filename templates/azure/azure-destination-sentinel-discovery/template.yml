@@ -10,6 +10,7 @@ summary: 'One Azure deployment that runs the read-only Sentinel inventory kit ag
 formats:
 - bicep
 - arm
+- portal-ui
 - script
 depends_on: []
 permissions:

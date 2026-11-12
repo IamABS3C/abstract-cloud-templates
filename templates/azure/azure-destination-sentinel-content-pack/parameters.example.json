@@ -4,6 +4,15 @@
   "parameters": {
     "workspace": {
       "value": "<workspace>"
+    },
+    "keyVaultNameSuffix": {
+      "value": "2"
+    },
+    "grantPlaybookResponder": {
+      "value": false
+    },
+    "grantPlaybookSecretsUser": {
+      "value": false
     }
   }
 }

@@ -49,7 +49,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Key Vault secret URI for the Abstract API key, for example https://<vault>.vault.azure.net/secrets/abstract-api-key. Playbooks fetch it at runtime through their managed identity (grant each 'Key Vault Secrets User'). The key is never stored in the template. Leave empty to install the playbooks without it; they fail until it is set."
+        "description": "Key Vault secret URI for the Abstract API key, with ?api-version, for example https://<vault>.vault.azure.net/secrets/abstract-api-key?api-version=7.4. Used only when keyVaultMode is None, the default: playbooks fetch it at runtime through their managed identity (grant each 'Key Vault Secrets User'). With keyVaultMode Create or Existing the template points the playbooks at the secret it stored. The key is never stored in the template. Leave empty to install the playbooks without it; they fail until it is set."
       }
     },
     "lookbackHours": {
@@ -57,6 +57,69 @@
       "defaultValue": 24,
       "metadata": {
         "description": "Enrich-incident playbook lookback window (hours)."
+      }
+    },
+    "keyVaultMode": {
+      "type": "string",
+      "defaultValue": "None",
+      "allowedValues": [
+        "None",
+        "Create",
+        "Existing"
+      ],
+      "metadata": {
+        "description": "Where this deployment stores the Abstract API key the playbooks call Abstract with. None, the default, stores nothing: the playbooks read the secret keyVaultSecretUri names, and you grant their roles yourself. Create makes a Key Vault in this resource group, in its region, (RBAC authorization, soft delete with 7-day retention, purge protection on, public network access enabled, no network rules) and writes abstractApiKey into it. A rerun with Create applies those settings to the vault again, so a vault you locked down afterwards (firewall, private endpoint) is opened again: once the vault exists, rerun with Existing. Existing writes abstractApiKey into the vault keyVaultName names, which must be in this resource group and use RBAC authorization for the role grants to apply. With Create or Existing, keyVaultSecretUri is ignored. Find existing vaults: Azure portal > Key vaults, filtered to this resource group. Default: None. Example: Create."
+      }
+    },
+    "abstractApiKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "The Abstract API key, written as a Key Vault secret when keyVaultMode is Create or Existing, and required then. A secure parameter: it never appears in the deployment's inputs, outputs or history. A rerun with Create or Existing needs the key again and writes it as a new version of the secret. Find it: the API key Abstract issued for your tenant, or ask Abstract. Default: empty."
+      }
+    },
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "",
+      "maxLength": 24,
+      "metadata": {
+        "description": "Name of the Key Vault. Create: 3 to 24 letters, digits and hyphens, unique in Azure; empty generates abskvs-<hash> from this resource group and keyVaultNameSuffix. Existing: the exact name of a vault in this resource group. Used only when keyVaultMode is Create or Existing. Purge protection keeps a deleted vault's name reserved for its 7-day retention. Find it: Azure portal > Key vaults > Name. Default: empty. Example: abstract-sentinel-kv."
+      }
+    },
+    "keyVaultNameSuffix": {
+      "type": "string",
+      "defaultValue": "",
+      "maxLength": 24,
+      "metadata": {
+        "description": "Text mixed into the generated Key Vault name (keyVaultMode Create with keyVaultName empty), so a redeploy gets a new name. Set it after you deleted the resource group or the vault: purge protection keeps the deleted vault, and its name, for 7 days, and the same generated name then fails with VaultAlreadyExists. Empty, the default, keeps the name earlier runs generated. Find deleted vaults: Azure portal > Key vaults > Manage deleted vaults. Default: empty. Example: 2."
+      }
+    },
+    "keyVaultSecretName": {
+      "type": "string",
+      "defaultValue": "abstract-api-key",
+      "metadata": {
+        "description": "Name of the secret that holds the Abstract API key, 1 to 127 letters, digits and hyphens. Used only when keyVaultMode is Create or Existing; a secret of that name already in the vault gets a new version. Find it: Key vaults > the vault > Objects > Secrets. Default: abstract-api-key. Example: abstract-api-key."
+      }
+    },
+    "grantPlaybookRoles": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Grant each playbook's managed identity Key Vault Secrets User on the stored secret (the secret only, not the vault) and Microsoft Sentinel Responder on the workspace, the two roles the playbooks need to run. Applies only when this deployment stores the key (keyVaultMode Create or Existing); with keyVaultMode None nothing is granted. Needs Owner, or User Access Administrator, on this resource group. Find the grants: Key vaults > the vault > Objects > Secrets > the secret > Access control (IAM), and the workspace > Access control (IAM). It is the master switch: grantPlaybookResponder and grantPlaybookSecretsUser leave out one role each, for playbooks that already hold it. Default: true. Example: true."
+      }
+    },
+    "grantPlaybookResponder": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "With grantPlaybookRoles, grant Microsoft Sentinel Responder on the workspace to each playbook. Turn it off when the playbooks already hold that role from an assignment made outside this deployment: Azure refuses a second assignment of the same role to the same identity on the same scope (RoleAssignmentExists), which fails the deployment. It applies to all three playbooks, so if only some hold the role, grant it to the others yourself and turn this off. Find the grants: the workspace > Access control (IAM) > Role assignments. Default: true. Example: false."
+      }
+    },
+    "grantPlaybookSecretsUser": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "With grantPlaybookRoles, grant Key Vault Secrets User on the stored secret to each playbook. Turn it off when the playbooks already hold that role on the secret from an assignment made outside this deployment, which would otherwise fail with RoleAssignmentExists. It applies to all three playbooks, so if only some hold the role, grant it to the others yourself and turn this off. Find the grants: Key vaults > the vault > Objects > Secrets > the secret > Access control (IAM). Default: true. Example: false."
       }
     }
   },
@@ -1010,7 +1073,7 @@
             "value": "[parameters('abstractVendorAccountId')]"
           },
           "keyVaultSecretUri": {
-            "value": "[parameters('keyVaultSecretUri')]"
+            "value": "[variables('playbookSecretUri')]"
           },
           "lookbackHours": {
             "value": "[parameters('lookbackHours')]"
@@ -1375,7 +1438,7 @@
             "value": "[parameters('abstractVendorAccountId')]"
           },
           "keyVaultSecretUri": {
-            "value": "[parameters('keyVaultSecretUri')]"
+            "value": "[variables('playbookSecretUri')]"
           }
         }
       }
@@ -1714,7 +1777,7 @@
             "value": "[parameters('abstractVendorAccountId')]"
           },
           "keyVaultSecretUri": {
-            "value": "[parameters('keyVaultSecretUri')]"
+            "value": "[variables('playbookSecretUri')]"
           }
         }
       }
@@ -2139,6 +2202,184 @@
           "link": "https://www.abstract.security/contact-us"
         }
       }
+    },
+    {
+      "condition": "[equals(parameters('keyVaultMode'), 'Create')]",
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2026-02-01",
+      "name": "[variables('checkedApiKeyVaultName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "tenantId": "[subscription().tenantId]",
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 7,
+        "enablePurgeProtection": true,
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "condition": "[and(variables('storeApiKey'), variables('apiKeyGiven'))]",
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2026-02-01",
+      "name": "[format('{0}/{1}', variables('checkedApiKeyVaultName'), parameters('keyVaultSecretName'))]",
+      "properties": {
+        "value": "[parameters('abstractApiKey')]",
+        "contentType": "Abstract API key"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('checkedApiKeyVaultName'))]"
+      ]
+    },
+    {
+      "condition": "[variables('grantPlaybooks')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "abstract-playbook-grants",
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('checkedApiKeyVaultName'), parameters('keyVaultSecretName'))]",
+        "[resourceId('Microsoft.Resources/deployments', 'abstract-playbook-enrich')]",
+        "[resourceId('Microsoft.Resources/deployments', 'abstract-playbook-verdict')]",
+        "[resourceId('Microsoft.Resources/deployments', 'abstract-playbook-tune')]"
+      ],
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "workspaceName": {
+            "value": "[parameters('workspace')]"
+          },
+          "keyVaultName": {
+            "value": "[variables('checkedApiKeyVaultName')]"
+          },
+          "secretName": {
+            "value": "[parameters('keyVaultSecretName')]"
+          },
+          "playbooks": {
+            "value": "[createArray(createObject('name', 'Abstract-Enrich-Incident', 'principalId', reference(resourceId('Microsoft.Logic/workflows', 'Abstract-Enrich-Incident'), '2019-05-01', 'full').identity.principalId), createObject('name', 'Abstract-Verdict', 'principalId', reference(resourceId('Microsoft.Logic/workflows', 'Abstract-Verdict'), '2019-05-01', 'full').identity.principalId), createObject('name', 'Abstract-Tune-At-Source', 'principalId', reference(resourceId('Microsoft.Logic/workflows', 'Abstract-Tune-At-Source'), '2019-05-01', 'full').identity.principalId))]"
+          },
+          "grantResponder": {
+            "value": "[parameters('grantPlaybookResponder')]"
+          },
+          "grantSecretsUser": {
+            "value": "[parameters('grantPlaybookSecretsUser')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "workspaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Log Analytics workspace that runs Microsoft Sentinel, in this resource group."
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Key Vault that holds the Abstract API key, in this resource group."
+              }
+            },
+            "secretName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the secret that holds the Abstract API key."
+              }
+            },
+            "playbooks": {
+              "type": "array",
+              "metadata": {
+                "description": "The playbooks, as the content module outputs them: [{ name, principalId }]. An empty principalId is skipped."
+              }
+            },
+            "grantResponder": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Grant Microsoft Sentinel Responder on the workspace. Off when the playbooks already hold it from another assignment."
+              }
+            },
+            "grantSecretsUser": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Grant Key Vault Secrets User on the secret. Off when the playbooks already hold it from another assignment."
+              }
+            }
+          },
+          "variables": {
+            "keyVaultSecretsUserRoleId": "4633458b-17de-408a-b874-0445c86b69e6",
+            "sentinelResponderRoleId": "3e150937-b8fe-4cfb-8069-0eaf05ecd056",
+            "grantees": "[filter(parameters('playbooks'), lambda('p', not(empty(lambdaVariables('p').principalId))))]"
+          },
+          "resources": [
+            {
+              "condition": "[parameters('grantSecretsUser')]",
+              "copy": {
+                "name": "secretReaders",
+                "count": "[length(variables('grantees'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), parameters('secretName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), parameters('secretName')), variables('grantees')[copyIndex()].principalId, variables('keyVaultSecretsUserRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsUserRoleId'))]",
+                "principalId": "[variables('grantees')[copyIndex()].principalId]",
+                "principalType": "ServicePrincipal",
+                "description": "[format('Abstract playbook {0}: read the Abstract API key.', variables('grantees')[copyIndex()].name)]"
+              }
+            },
+            {
+              "condition": "[parameters('grantResponder')]",
+              "copy": {
+                "name": "sentinelResponders",
+                "count": "[length(variables('grantees'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+              "name": "[guid(resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), variables('grantees')[copyIndex()].principalId, variables('sentinelResponderRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('sentinelResponderRoleId'))]",
+                "principalId": "[variables('grantees')[copyIndex()].principalId]",
+                "principalType": "ServicePrincipal",
+                "description": "[format('Abstract playbook {0}: read and update Microsoft Sentinel incidents.', variables('grantees')[copyIndex()].name)]"
+              }
+            }
+          ],
+          "outputs": {
+            "grantedPlaybooks": {
+              "type": "array",
+              "value": "[map(variables('grantees'), lambda('p', lambdaVariables('p').name))]"
+            }
+          }
+        }
+      }
     }
-  ]
+  ],
+  "variables": {
+    "storeApiKey": "[not(equals(parameters('keyVaultMode'), 'None'))]",
+    "apiKeyVaultName": "[if(equals(parameters('keyVaultMode'), 'Create'), if(empty(parameters('keyVaultName')), concat('abskvs-', if(empty(parameters('keyVaultNameSuffix')), uniqueString(resourceGroup().id, 'abstract-sentinel-api-key'), uniqueString(resourceGroup().id, 'abstract-sentinel-api-key', parameters('keyVaultNameSuffix')))), parameters('keyVaultName')), if(variables('storeApiKey'), parameters('keyVaultName'), 'unused-key-vault'))]",
+    "checkedApiKeyVaultName": "[if(and(equals(parameters('keyVaultMode'), 'Existing'), empty(parameters('keyVaultName'))), fail('keyVaultMode Existing needs keyVaultName: the name of a Key Vault in this resource group.'), variables('apiKeyVaultName'))]",
+    "apiKeyGiven": "[or(not(variables('storeApiKey')), not(empty(parameters('abstractApiKey'))), fail(format('keyVaultMode {0} writes abstractApiKey into a Key Vault, so abstractApiKey is required. Give the key, or use keyVaultMode None with keyVaultSecretUri', parameters('keyVaultMode'))))]",
+    "playbookSecretUri": "[if(variables('storeApiKey'), uri(format('https://{0}{1}/', variables('checkedApiKeyVaultName'), environment().suffixes.keyvaultDns), format('secrets/{0}?api-version=7.4', parameters('keyVaultSecretName'))), parameters('keyVaultSecretUri'))]",
+    "grantPlaybooks": "[and(variables('storeApiKey'), parameters('grantPlaybookRoles'), or(parameters('grantPlaybookResponder'), parameters('grantPlaybookSecretsUser')))]"
+  },
+  "outputs": {
+    "abstractApiKeySecretUri": {
+      "type": "string",
+      "value": "[variables('playbookSecretUri')]",
+      "metadata": {
+        "description": "The secret the playbooks read the Abstract API key from, as they GET it (with ?api-version). Not the key. Later content that calls the Abstract API can reuse it."
+      }
+    }
+  }
 }

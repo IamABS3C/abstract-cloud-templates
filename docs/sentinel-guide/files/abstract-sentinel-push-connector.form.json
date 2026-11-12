@@ -1,0 +1,133 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-solution/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Push connector for Microsoft Sentinel (preview)**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Installs the Abstract Security push connector into a Microsoft Sentinel workspace: the connector page, its content and the lake table. Deploy on the connector page then creates the Entra app and secret, the data collection rule, the tables and the app's role on the rule.\n\nA Microsoft Sentinel data connector that builds the Azure side from its own page, app included.",
+        "location": {
+          "visible": false
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "pitch",
+        "type": "Microsoft.Common.TextBlock",
+        "visible": true,
+        "options": {
+          "text": "A Microsoft Sentinel data connector that builds the Azure side from its own page, app included."
+        }
+      },
+      {
+        "name": "pushLimits",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "Warning",
+          "text": "Before you choose it. Preview, Azure portal only. Microsoft documents that the Deploy step needs the Microsoft Sentinel experience in the Azure portal, and that experience is supported until 31 March 2027. Abstract has not run it from the Defender portal. Routes fixed in the package. Deploy takes no parameters. Every lane in the package is created, and every event that goes to an ASIM, Okta or CEF table is also kept in the Abstract table, so it is stored twice. The one-deploy solution has a switch for each. One secret, no rotation. The portal creates the secret with an expiry it sets. Rotate it in Entra and enter the new one in Abstract. No DCR error log. The portal creates the rule without the diagnostic setting the one-deploy solution adds, so rows Azure refuses are not recorded in DCRLogErrors."
+        }
+      },
+      {
+        "name": "pushNext",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "Info",
+          "text": "This installs the connector, its content and the lake table into the workspace. It sends nothing and creates no app. Then open Microsoft Sentinel > Data connectors > Abstract Security (Push, one-click lanes) > Open connector page, and select Deploy there."
+        }
+      },
+      {
+        "name": "abstractSupport",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "None",
+          "text": "Questions or help with this deployment: email support@abstract.security or use the contact page at https://www.abstract.security/contact-us.",
+          "uri": "https://www.abstract.security/contact-us"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "workspace",
+        "label": "Workspace",
+        "elements": [
+          {
+            "name": "wsApi",
+            "type": "Microsoft.Solutions.ArmApiControl",
+            "request": {
+              "method": "POST",
+              "path": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+              "body": {
+                "subscriptions": [
+                  "[subscription().subscriptionId]"
+                ],
+                "query": "[concat('resources | where subscriptionId =~ \"', subscription().subscriptionId, '\" and type =~ \"microsoft.operationalinsights/workspaces\" and resourceGroup =~ \"', resourceGroup().name, '\" | project name, location, resourceGroup, subscriptionId, id = tolower(id) | join kind=leftouter (resources | where type =~ \"microsoft.operationsmanagement/solutions\" and name startswith \"SecurityInsights(\" | project id = tolower(tostring(properties.workspaceResourceId)), hasSentinel = 1) on id | extend sentinel = iff(isnotnull(hasSentinel), \"yes\", \"no\") | project name, location, resourceGroup, subscriptionId, id, sentinel | order by name asc')]",
+                "options": {
+                  "resultFormat": "objectArray"
+                }
+              }
+            }
+          },
+          {
+            "name": "workspace",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Microsoft Sentinel workspace",
+            "toolTip": "The workspace the push connector is installed into. It must run Microsoft Sentinel and be in this resource group, because the connector, its content and the lake table are created under it. The form lists the workspaces that run Microsoft Sentinel in this resource group. Find it: Azure portal > Microsoft Sentinel, the workspace name. Example: sentinel-prod. The list is read live from Azure Resource Graph.",
+            "multiLine": true,
+            "filter": true,
+            "filterPlaceholder": "Filter by name",
+            "visible": true,
+            "constraints": {
+              "required": true,
+              "allowedValues": "[if(empty(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes'))), parse('[{\"label\":\"No workspace in this resource group runs Microsoft Sentinel\",\"value\":\"\"}]'), map(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => parse(concat('{\"label\":\"', w.name, '\",\"description\":\"', w.location, ', Microsoft Sentinel on\",\"value\":\"', w.name, '\"}'))))]"
+            }
+          },
+          {
+            "name": "noSentinel",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[empty(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')))]",
+            "options": {
+              "icon": "Warning",
+              "text": "No workspace in this resource group runs Microsoft Sentinel. The connector needs a workspace that already runs it. Start again with the resource group that holds your Microsoft Sentinel workspace."
+            }
+          },
+          {
+            "name": "noWorkspaceBlock",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Workspace required",
+            "toolTip": "No workspace in this resource group runs Microsoft Sentinel. The connector needs a workspace that already runs it. Start again with the resource group that holds your Microsoft Sentinel workspace.",
+            "placeholder": "Nothing to select here. See the message above.",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "isValid": "[equals(1, 2)]",
+                  "message": "No workspace in this resource group runs Microsoft Sentinel. The connector needs a workspace that already runs it. Start again with the resource group that holds your Microsoft Sentinel workspace."
+                }
+              ]
+            },
+            "visible": "[empty(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')))]"
+          },
+          {
+            "name": "workspaceRegion",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[not(empty(coalesce(steps('workspace').workspace, '')))]",
+            "options": {
+              "icon": "Info",
+              "text": "[concat('Region of ', coalesce(steps('workspace').workspace, ''), ': ', coalesce(coalesce(first(filter(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => equals(toLower(w.name), toLower(coalesce(steps('workspace').workspace, ''))))), parse('{\"location\":\"\",\"name\":\"\",\"id\":\"\",\"resourceGroup\":\"\",\"subscriptionId\":\"\"}')).location, 'unknown'), '. Everything this deployment creates under the workspace uses this region.')]"
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "workspace": "[coalesce(steps('workspace').workspace, '')]",
+      "workspace-location": "[coalesce(coalesce(first(filter(filter(coalesce(steps('workspace').wsApi.data, parse('[]')), (w) => equals(w.sentinel, 'yes')), (w) => equals(toLower(w.name), toLower(coalesce(steps('workspace').workspace, ''))))), parse('{\"location\":\"\",\"name\":\"\",\"id\":\"\",\"resourceGroup\":\"\",\"subscriptionId\":\"\"}')).location, location())]"
+    }
+  }
+}

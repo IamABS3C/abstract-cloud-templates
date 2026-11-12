@@ -32,7 +32,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Key Vault secret URI for the Abstract API key, for example https://<vault>.vault.azure.net/secrets/abstract-api-key. Playbooks fetch it at runtime through their managed identity (grant each 'Key Vault Secrets User'). The key is never stored in the template. Leave empty to install the playbooks without it; they fail until it is set."
+        "description": "Key Vault secret URI for the Abstract API key, with ?api-version, for example https://<vault>.vault.azure.net/secrets/abstract-api-key?api-version=7.4. Used only when keyVaultMode is None, the default: playbooks fetch it at runtime through their managed identity (grant each 'Key Vault Secrets User'). With keyVaultMode Create or Existing the template points the playbooks at the secret it stored. The key is never stored in the template. Leave empty to install the playbooks without it; they fail until it is set."
       }
     },
     "lookbackHours": {
@@ -4715,6 +4715,10 @@
     "packageId": {
       "type": "string",
       "value": "ffb59bbb-ab7c-5964-8c86-22d7b5df331b"
+    },
+    "playbookPrincipalIds": {
+      "type": "array",
+      "value": "[if(parameters('deployPlaybooks'), createArray(createObject('name', 'Abstract-Enrich-Incident', 'principalId', reference(resourceId('Microsoft.Logic/workflows', 'Abstract-Enrich-Incident'), '2019-05-01', 'full').identity.principalId), createObject('name', 'Abstract-Verdict', 'principalId', reference(resourceId('Microsoft.Logic/workflows', 'Abstract-Verdict'), '2019-05-01', 'full').identity.principalId), createObject('name', 'Abstract-Tune-At-Source', 'principalId', reference(resourceId('Microsoft.Logic/workflows', 'Abstract-Tune-At-Source'), '2019-05-01', 'full').identity.principalId)), createArray())]"
     }
   }
 }
