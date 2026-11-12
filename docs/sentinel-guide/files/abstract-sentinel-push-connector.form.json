@@ -6,7 +6,7 @@
     "config": {
       "isWizard": false,
       "basics": {
-        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-solution/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Push connector for Microsoft Sentinel (preview)**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Installs the Abstract Security push connector into a Microsoft Sentinel workspace: the connector page, its content and the lake table. Deploy on the connector page then creates the Entra app and secret, the data collection rule, the tables and the app's role on the rule.\n\nA Microsoft Sentinel data connector that builds the Azure side from its own page, app included.",
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-solution/abstract-logo-black.svg\" height=\"64\" alt=\"Abstract Security\" style=\"background:#FFFFFF;padding:10px 16px;border-radius:6px\">\n\n**Push connector for Microsoft Sentinel (preview)**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Installs the Abstract Security push connector into a Microsoft Sentinel workspace: the connector page, its content and the lake table. Deploy on the connector page then creates the Entra app and secret, the data collection rule, the tables and the app's role on the rule.\n\nA Microsoft Sentinel data connector that builds the Azure side from its own page, app included.",
         "location": {
           "visible": false
         }

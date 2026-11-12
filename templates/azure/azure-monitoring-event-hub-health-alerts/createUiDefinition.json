@@ -279,7 +279,7 @@
     },
     "config": {
       "basics": {
-        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-monitoring-event-hub-health-alerts/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Azure alerts when the Abstract feed stalls**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Event Hubs publishes no consumer-lag metric, so when the Abstract consumer stalls, incoming traffic keeps arriving, nothing errors, and retention quietly expires the backlog. These alert rules watch for outgoing traffic collapsing while incoming continues, plus the producer-side and capacity failures."
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-monitoring-event-hub-health-alerts/abstract-logo-black.svg\" height=\"64\" alt=\"Abstract Security\" style=\"background:#FFFFFF;padding:10px 16px;border-radius:6px\">\n\n**Azure alerts when the Abstract feed stalls**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. Event Hubs publishes no consumer-lag metric, so when the Abstract consumer stalls, incoming traffic keeps arriving, nothing errors, and retention quietly expires the backlog. These alert rules watch for outgoing traffic collapsing while incoming continues, plus the producer-side and capacity failures."
       }
     }
   }

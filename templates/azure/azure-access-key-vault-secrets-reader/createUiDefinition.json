@@ -110,7 +110,7 @@
     },
     "config": {
       "basics": {
-        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-access-key-vault-secrets-reader/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n**Read access to a Key Vault: one role assignment**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. A small helper that grants one role to one principal on an existing Key Vault. The Sentinel destination templates call it as a module to give their identities Key Vault Secrets Officer or Secrets User on the vault that holds the client secret."
+        "description": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-access-key-vault-secrets-reader/abstract-logo-black.svg\" height=\"64\" alt=\"Abstract Security\" style=\"background:#FFFFFF;padding:10px 16px;border-radius:6px\">\n\n**Read access to a Key Vault: one role assignment**\n\nAbstract Security: a security data pipeline and agentic SIEM in one platform. A small helper that grants one role to one principal on an existing Key Vault. The Sentinel destination templates call it as a module to give their identities Key Vault Secrets Officer or Secrets User on the vault that holds the client secret."
       }
     }
   }
