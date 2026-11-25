@@ -122,7 +122,7 @@ param excludeNativeVendorsFromAsim bool = true
 @description('Install the data connector tile Abstract Security (Security Data Pipeline). Its status counts Abstract rows in AbstractEventLogs_CL and the ASim tables. Turn it off only if you do not want the tile. Find it after deployment: Microsoft Sentinel > Data connectors. Default: true. Example: true. No ingestion cost.')
 param deployDataConnectors bool = true
 
-@description('Install the workspace function ASim_AbstractEvent, which reads every Abstract event wherever the routes stored it and gives it ASIM column names. The hunting queries and the Pipeline Overview and Value & ROI workbooks read it, so turning it off breaks them. Find it after deployment: Logs > Functions > ASim_AbstractEvent. Default: true. Example: true.')
+@description('Install the workspace function ASim_AbstractEvent, which reads every Abstract event wherever the routes stored it and gives it ASIM column names. The hunting queries and the Abstract Security for Microsoft Sentinel workbook read it, so turning it off breaks them. Find it after deployment: Logs > Functions > ASim_AbstractEvent. Default: true. Example: true.')
 param deployParsers bool = true
 
 @description('Install the analytics rules Abstract Security - Finding, Abstract Security - High or Critical event and Abstract - Repeated auth failures followed by success. Each is on or off as enabledAnalyticsRules says. They read the tables directly and call no workspace function. Find them: Microsoft Sentinel > Analytics. Default: true. Example: true.')
@@ -134,7 +134,7 @@ param enabledAnalyticsRules array = []
 @description('Install the hunting queries Rare or newly-seen product activity, High cumulative-risk identities and Daily value & reduction summary. Find them: Microsoft Sentinel > Hunting > Queries. Default: true. Example: true. They run only when someone runs them.')
 param deployHuntingQueries bool = true
 
-@description('Install the workbooks Pipeline Overview, Value & ROI, Data Health and Cost by Table (the Sentinel Discovery workbook has its own switch). Find them: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true. They query only when opened.')
+@description('Install the workbook Abstract Security for Microsoft Sentinel (one workbook with tabs for overview, sources and coverage, data health, security activity, detections and response, and cost and volume) (the Sentinel Discovery workbook has its own switch). Find them: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true. They query only when opened.')
 param deployWorkbooks bool = true
 
 @description('Install the Sentinel Discovery workbook, which inventories the workspace (tables, connectors, rules, cost). Find it: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true.')

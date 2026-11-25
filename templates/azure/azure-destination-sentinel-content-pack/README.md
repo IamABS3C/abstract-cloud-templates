@@ -78,7 +78,7 @@ az group create -n RESOURCE_GROUP -l LOCATION   # skip if it exists
 - Three hunting queries: Abstract_RareProduct, Abstract_HighRiskIdentities, Abstract_DailyValueSummary
 - Two scheduled analytics rules, installed disabled
 - Three automation rules, installed disabled and scoped to this pack's two rules
-- Two workbooks: Pipeline Overview and Value &amp; ROI
+- One workbook: Abstract Security for Microsoft Sentinel, with tabs for overview, sources and coverage, data health, security activity, detections and response, and cost and volume
 - Three playbooks as nested deployments: enrich, verdict and tune
 - Only with keyVaultMode Create or Existing: a Key Vault (Create: RBAC authorization, soft delete, purge protection), the secret keyVaultSecretName holding abstractApiKey, and with grantPlaybookRoles a nested deployment granting each playbook Key Vault Secrets User on that secret and Microsoft Sentinel Responder on the workspace
 

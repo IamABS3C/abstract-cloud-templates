@@ -4,7 +4,7 @@
   {
    "type": 1,
    "content": {
-    "json": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-discovery/abstract-logo-white.svg\" height=\"36\" alt=\"Abstract Security\" style=\"background:#060608;padding:8px 12px;border-radius:6px\">\n\n## Sentinel inventory (read-only)\nOpen this from **Microsoft Sentinel > Workbooks** (or the Log Analytics workspace > Workbooks) so the Logs tabs run against that workspace. Each grid has **Export to Excel** in its toolbar.\n\nNot in this workbook, by design: the **Content Hub** list and the **full analytics rule list with the tables each rule reads**. They need Azure Resource Manager list calls that page through results, and Learn does not document the workbook format for paged ARM results. `Get-SentinelInventory.ps1` collects both (`content_hub_solutions.csv`, `analytic_rules.csv`, `rule_table_map.csv`).",
+    "json": "<img src=\"https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/templates/azure/azure-destination-sentinel-discovery/abstract-logo-black.svg\" height=\"64\" alt=\"Abstract Security\" style=\"background:#FFFFFF;padding:10px 16px;border-radius:6px\">\n\n## Sentinel inventory (read-only)\nOpen this from **Microsoft Sentinel > Workbooks** (or the Log Analytics workspace > Workbooks) so the Logs tabs run against that workspace. Each grid has **Export to Excel** in its toolbar.\n\nNot in this workbook, by design: the **Content Hub** list and the **full analytics rule list with the tables each rule reads**. They need Azure Resource Manager list calls that page through results, and Learn does not document the workbook format for paged ARM results. `Get-SentinelInventory.ps1` collects both (`content_hub_solutions.csv`, `analytic_rules.csv`, `rule_table_map.csv`).",
     "style": "info"
    },
    "name": "header"
@@ -142,7 +142,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No ingestion recorded in the last 30 complete days.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -167,7 +169,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No ingestion recorded in the last 30 complete days.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -204,7 +208,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No SentinelHealth rows: health monitoring is off or covers none of these connectors. Turn it on in Microsoft Sentinel > Settings > Auditing and health monitoring.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -229,7 +235,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No ingestion recorded in the last 31 days.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -266,7 +274,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No data collection rule with a dataflow in the selected subscriptions, or this account cannot read them.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -291,7 +301,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No machine is associated with a data collection rule in the selected subscriptions. Agentless and API-based collection have none.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -316,7 +328,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No data collection endpoint in the selected subscriptions.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -341,7 +355,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No Microsoft Sentinel workspace in the selected subscriptions.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -366,7 +382,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No agent sent a heartbeat in 31 days: no Azure Monitor Agent or legacy agent reports to this workspace.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -403,7 +421,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "CommonSecurityLog received nothing yesterday: no CEF sender reports to this workspace.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -428,7 +448,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "Syslog received nothing yesterday: no Syslog sender reports to this workspace.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -465,7 +487,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No SentinelHealth rows for analytics rules: health monitoring is off. Turn it on in Microsoft Sentinel > Settings > Auditing and health monitoring.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -502,7 +526,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No billable ingestion in the last 30 complete days.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -527,7 +553,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No data ingestion benefit was applied in the last 31 days (none is recorded in the Operation table).",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -564,7 +592,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No Microsoft Sentinel workbook in the selected subscriptions.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -589,7 +619,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "No playbook triggered by Microsoft Sentinel in the selected subscriptions.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",
@@ -614,7 +646,9 @@
     "visualization": "table",
     "gridSettings": {
      "filter": true
-    }
+    },
+    "noDataMessage": "The Microsoft Sentinel data lake is not onboarded in the selected subscriptions.",
+    "noDataMessageStyle": 3
    },
    "conditionalVisibility": {
     "parameterName": "selectedTab",

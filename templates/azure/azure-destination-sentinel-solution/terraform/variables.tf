@@ -149,7 +149,7 @@ variable "deployDataConnectors" {
 variable "deployParsers" {
   type        = bool
   default     = true
-  description = "Install the workspace function ASim_AbstractEvent, which reads every Abstract event wherever the routes stored it and gives it ASIM column names. The hunting queries and the Pipeline Overview and Value & ROI workbooks read it, so turning it off breaks them. Find it after deployment: Logs > Functions > ASim_AbstractEvent. Default: true. Example: true."
+  description = "Install the workspace function ASim_AbstractEvent, which reads every Abstract event wherever the routes stored it and gives it ASIM column names. The hunting queries and the Abstract Security for Microsoft Sentinel workbook read it, so turning it off breaks them. Find it after deployment: Logs > Functions > ASim_AbstractEvent. Default: true. Example: true."
 }
 
 variable "deployAnalyticsRules" {
@@ -173,7 +173,7 @@ variable "deployHuntingQueries" {
 variable "deployWorkbooks" {
   type        = bool
   default     = true
-  description = "Install the workbooks Pipeline Overview, Value & ROI, Data Health and Cost by Table (the Sentinel Discovery workbook has its own switch). Find them: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true. They query only when opened."
+  description = "Install the workbook Abstract Security for Microsoft Sentinel (one workbook with tabs for overview, sources and coverage, data health, security activity, detections and response, and cost and volume) (the Sentinel Discovery workbook has its own switch). Find them: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true. They query only when opened."
 }
 
 variable "deployDiscovery" {

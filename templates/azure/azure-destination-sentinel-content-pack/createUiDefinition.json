@@ -129,7 +129,7 @@
             "type": "Microsoft.Common.TextBlock",
             "visible": true,
             "options": {
-              "text": "Installs the Abstract Security data connector tiles, the ASim_AbstractEvent parser, two analytics rules and three automation rules (all installed disabled), three hunting queries, the Pipeline Overview and Value & ROI workbooks, and three playbooks. Your own rules, workbooks and playbooks are not touched."
+              "text": "Installs the Abstract Security data connector tiles, the ASim_AbstractEvent parser, two analytics rules and three automation rules (all installed disabled), three hunting queries, the Abstract Security for Microsoft Sentinel workbook, and three playbooks. Your own rules, workbooks and playbooks are not touched."
             }
           },
           {

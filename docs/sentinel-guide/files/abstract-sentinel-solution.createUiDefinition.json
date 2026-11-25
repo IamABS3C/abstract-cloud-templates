@@ -1429,7 +1429,7 @@
               {
                 "name": "deployWorkbooks",
                 "type": "Microsoft.Common.CheckBox",
-                "label": "Workbooks: Pipeline Overview, Value & ROI",
+                "label": "Workbook: Abstract Security for Microsoft Sentinel",
                 "defaultValue": true,
                 "toolTip": "What: two workbooks on Abstract's pipeline volume, reduction and cost. Portal: Microsoft Sentinel > Workbooks > My workbooks. When: keep on. Consequence: none on data; opened on demand.",
                 "visible": "[equals(basics('depth'), 'all')]"

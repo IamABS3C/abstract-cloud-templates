@@ -56,7 +56,7 @@ creates:
   and metadata linking each installed item to the package)
 - 'Behind its own switch each: the data connector tile, the ASim_AbstractEvent parser, the analytics rules High or
   Critical event, Repeated auth failures followed by success and Finding (all disabled), three hunting queries, the workbooks
-  Pipeline Overview, Value & ROI and Sentinel Discovery, the playbooks Abstract-Enrich-Incident, Abstract-Verdict
+  Abstract Security for Microsoft Sentinel and Sentinel Discovery, the playbooks Abstract-Enrich-Incident, Abstract-Verdict
   and Abstract-Tune-At-Source with their Sentinel API connection, and the automation rules (disabled)'
 - 'Only with keyVaultMode Create or Existing: a Key Vault (Create: RBAC authorization, soft delete, purge protection),
   the secret keyVaultSecretName holding abstractApiKey, and with grantPlaybookRoles each playbook''s Key Vault Secrets
@@ -337,7 +337,7 @@ parameters:
   type: bool
   required: false
   description: 'Install the workspace function ASim_AbstractEvent, which reads every Abstract event wherever the routes
-    stored it and gives it ASIM column names. The hunting queries and the Pipeline Overview and Value & ROI workbooks read it,
+    stored it and gives it ASIM column names. The hunting queries and the Abstract Security for Microsoft Sentinel workbook read it,
     so turning it off breaks them. Find it after deployment: Logs > Functions > ASim_AbstractEvent. Default: true. Example: true.'
   default: true
   example: true
@@ -375,7 +375,7 @@ parameters:
 - name: deployWorkbooks
   type: bool
   required: false
-  description: 'Install the workbooks Pipeline Overview, Value & ROI, Data Health and Cost by Table (the Sentinel Discovery workbook has its own switch). Find them: Microsoft Sentinel > Workbooks
+  description: 'Install the workbook Abstract Security for Microsoft Sentinel (one workbook with tabs for overview, sources and coverage, data health, security activity, detections and response, and cost and volume) (the Sentinel Discovery workbook has its own switch). Find them: Microsoft Sentinel > Workbooks
     > My workbooks. Default: true. Example: true. They query only when opened.'
   default: true
   example: true
