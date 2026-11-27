@@ -107,8 +107,11 @@ param lakeRetentionDays int = 365
 // ---------------------------------------------------------------------------
 // Vendor tables
 // ---------------------------------------------------------------------------
-@description('Vendors and Microsoft tables the rule also writes to, one dataflow each of the 20 a rule allows, so Microsoft\'s own Content hub content works unchanged on Abstract-delivered data. Supported: okta (OktaV2_CL, created if missing), crowdstrike-hosts (CrowdStrikeHostsV2_CL, created if missing), csl-cef (CEF lines into CommonSecurityLog), csl-acs (Cisco ASA, Fortinet FortiGate and F5 ASM into CommonSecurityLog), syslog (Linux, Nutanix and Infoblox lines into Syslog), aws-cloudtrail (AWSCloudTrail), and the ASIM schemas asim-alert (Abstract findings into ASimAlertEventLogs), asim-dhcp (ASimDhcpEventLogs) and asim-user-management (ASimUserManagementActivityLogs). Use a vendor entry instead of, not as well as, Microsoft\'s own connector for that vendor, or every event arrives twice. When two entries select the same event it goes to one table only, the first in this order: asim-alert, okta, crowdstrike-hosts, aws-cloudtrail, csl-cef, csl-acs, syslog, asim-dhcp, asim-user-management. So Infoblox DHCP lines stay in Syslog, and CloudTrail and Okta user changes stay in AWSCloudTrail and OktaV2_CL. An unsupported name stops the deployment before any change. Default: none. Example: [\'okta\', \'csl-cef\'].')
+@description('Vendors and Microsoft tables the solution also writes to, one dataflow per lane, so Microsoft\'s own Content hub content works unchanged on Abstract-delivered data. On the main rule, or on its family\'s rule when the family is in laneFamilies: okta (OktaV2_CL, created if missing), crowdstrike-hosts (CrowdStrikeHostsV2_CL, created if missing; not a default, because only Microsoft\'s CrowdStrike parser reads it), csl-cef (CEF lines into CommonSecurityLog), csl-acs (Cisco ASA, Fortinet FortiGate and F5 ASM into CommonSecurityLog), syslog (Linux, Nutanix and Infoblox lines into Syslog), aws-cloudtrail (AWSCloudTrail), and the ASIM schemas asim-alert (Abstract findings into ASimAlertEventLogs), asim-dhcp (ASimDhcpEventLogs) and asim-user-management (ASimUserManagementActivityLogs). Only on their family\'s own rule, so the family must be in laneFamilies: windows-securityevent (windows: Windows Security channel events into SecurityEvent; opt-in, because those rows are billed as Analytics data and raise the Windows Security Events rules\' incidents, and the Defender for Servers Plan 2 500 MB daily allowance is documented for the Azure Monitor Agent only), crowdstrike-fdr (endpoint: CrowdStrike Falcon Data Replicator events into the eight ASim tables with Microsoft\'s own CrowdStrike transformations, every other FDR event into AbstractEventLogs_CL), aws-vpcflow (cloud: version 2 VPC Flow Logs lines into AWSVPCFlow with Microsoft\'s transformation; Transit Gateway flow logs are left out), zscaler-nss-web (csl: Zscaler NSS web logs into CommonSecurityLog as Zscaler / NSSWeblog), syslog-appliances (syslog: ISC BIND, Sophos XG Firewall and Veeam Backup & Replication lines into Syslog) and cisco-umbrella (saas: Cisco Umbrella web, DNS and cloud firewall logs into CiscoUmbrellaWebTraffic_CL, CiscoUmbrellaDNS_CL and CiscoUmbrellaCloudFirewall_CL with Microsoft\'s transformations, created if missing). Use a vendor entry instead of, not as well as, Microsoft\'s own connector for that vendor, or every event arrives twice. When two entries on one rule select the same event it goes to one table only, the first in this order: asim-alert, okta, crowdstrike-hosts, crowdstrike-fdr, aws-cloudtrail, aws-vpcflow, windows-securityevent, csl-cef, csl-acs, zscaler-nss-web, syslog, syslog-appliances, cisco-umbrella, asim-dhcp, asim-user-management. So Infoblox DHCP lines stay in Syslog, and CloudTrail and Okta user changes stay in AWSCloudTrail and OktaV2_CL. An unsupported name stops the deployment before any change. Default: none. Example: [\'okta\', \'csl-cef\'].')
 param nativeVendors array = []
+
+@description('Lane families that get a Data Collection Rule of their own, on the same Data Collection Endpoint: csl, syslog, windows, cloud, endpoint, saas. Each family rule is named <main rule>-<family> and tagged abstract-lane-family and abstract-main-rule. Azure replaces a rule that already has that name, so deploy.sh and the portal form refuse to go ahead when a rule of that name exists without both tags (a rule another deployment or another tool made); a family rule this deployment made before is updated in place. The main rule keeps the catch-all, the ASIM routes, the lake, Abstract findings and the asim-dhcp and asim-user-management lanes. A lane whose family is listed runs on <main rule>-<family> (for example abstract-dcr-endpoint) instead of the main rule, so it no longer counts against the main rule\'s 20 dataflows and 15,360 characters per transformation. Each family rule gets Monitoring Metrics Publisher for the Abstract app and its own DCRLogErrors setting, and is output in laneDataCollectionRules: Abstract needs one Sentinel destination per rule, routing only that family\'s sources to it, because a family rule keeps only what its lanes select and drops the rest. Lanes added with families (for example windows-securityevent and crowdstrike-fdr) run only on their family\'s rule, so their family must be listed. Empty keeps every lane on the main rule, exactly as before families existed. Find what each rule holds: Azure portal > Monitor > Data Collection Rules. Default: none. Example: [\'endpoint\', \'cloud\'].')
+param laneFamilies array = []
 
 @description('Your Okta org domain, written to the DomainName column of OktaV2_CL as Microsoft\'s own Okta connector does. Used only with okta in nativeVendors. Microsoft\'s Okta content does not filter on it, so empty works, but the column is then empty. Find it: the address you sign in to Okta with, without https://. Default: empty. Example: example.okta.com.')
 param oktaDomain string = ''
@@ -266,14 +269,19 @@ param grantPlaybookSecretsUser bool = true
 var nativeCatalog = concat(loadJsonContent('content/native-vendors.json').vendors, loadJsonContent('content/native-lanes.generated.json').lanes)
 // Enabled lanes in precedence order (content/lane-precedence.json): earlier lanes win an event several lanes select.
 var lanePrecedence = loadJsonContent('content/lane-precedence.json').order
-var enabledNative = flatten(map(lanePrecedence, name => filter(nativeCatalog, vendor => vendor.name == name && contains(nativeVendors, name))))
+// A catalog lane is turned on by its option (its nativeVendors name): one option can turn on several dataflows.
+var enabledNative = flatten(map(lanePrecedence, name => filter(nativeCatalog, vendor => vendor.name == name && contains(nativeVendors, vendor.option))))
+// Lanes whose family is in laneFamilies run on that family's own rule; the rest stay on the main rule. With laneFamilies
+// empty, mainNative is enabledNative and the main rule is exactly what it was before families existed.
+var mainNative = filter(enabledNative, vendor => !contains(laneFamilies, vendor.family))
+var familyNative = filter(enabledNative, vendor => contains(laneFamilies, vendor.family))
 // A lane has `table` only when the table must be created (a vendor _CL table); Microsoft's own tables already exist.
-var nativeTables = map(filter(enabledNative, vendor => contains(vendor, 'table')), vendor => vendor.table)
+var nativeTables = map(filter(mainNative, vendor => contains(vendor, 'table')), vendor => vendor.table)
 // Microsoft's Okta transform takes DomainName from its poller; the okta lane's prefix sets it from oktaDomain.
 // Each lane's own selection, minus every earlier enabled lane's selection: each event lands in exactly one lane table.
 // The union of the lanes (nativeSelection, the catch-all's _lane) is unchanged, so the catch-all transform does not grow.
-var nativeFlows = [for (vendor, i) in enabledNative: {
-  transformKql: replace(i == 0 ? vendor.transformKql : replace(vendor.transformKql, '| where ${vendor.selectKql}\n', '| where (${vendor.selectKql}) and not(${join(map(take(enabledNative, i), earlier => '(${earlier.selectKql})'), ' or ')})\n'), 'DomainName = ""', 'DomainName = "${oktaDomain}"')
+var nativeFlows = [for (vendor, i) in mainNative: {
+  transformKql: replace(i == 0 ? vendor.transformKql : replace(vendor.transformKql, '| where ${vendor.selectKql}\n', '| where (${vendor.selectKql}) and not(${join(map(take(mainNative, i), earlier => '(${earlier.selectKql})'), ' or ')})\n'), 'DomainName = ""', 'DomainName = "${oktaDomain}"')
   outputStream: vendor.outputStream
 }]
 // oktaDomain is spliced into a KQL string literal, so characters that would end or escape it are refused.
@@ -288,16 +296,42 @@ var dataFlowCount = 1 + asimFlowCount + lakeFlowCount + length(nativeFlows)
 // required ("default value which is not present in the list of allowed values"). Unknown names fail here instead.
 var unknownRules = filter(enabledAnalyticsRules, r => !contains(['finding', 'high-or-critical', 'repeated-auth-failures', 'data-stopped', 'new-source', 'ingestion-errors'], r))
 var checkedEnabledAnalyticsRules = length(unknownRules) > 0 ? fail('enabledAnalyticsRules has unsupported values ${string(unknownRules)}. Supported: finding, high-or-critical, repeated-auth-failures, data-stopped, new-source, ingestion-errors.') : enabledAnalyticsRules
-var unknownVendors = filter(nativeVendors, v => !contains(map(nativeCatalog, c => c.name), v))
+var unknownVendors = filter(nativeVendors, v => !contains(map(nativeCatalog, c => c.option), v))
 // What the vendor lanes take, from the catalog's selectKql: the exact selection each lane's transformKql starts with.
-var nativeSelection = (excludeNativeVendorsFromAsim && !empty(enabledNative)) ? join(map(enabledNative, vendor => '(${vendor.selectKql})'), ' or ') : ''
-var checkedNativeFlows = oktaDomainUnsafe ? fail('oktaDomain must be a domain name such as example.okta.com, with no quotes, spaces, backslashes, | or ;.') : length(unknownVendors) > 0 ? fail('nativeVendors has unsupported values ${string(unknownVendors)}. Supported: ${string(map(nativeCatalog, c => c.name))}.') : (dataFlowCount > 20 ? fail('The Data Collection Rule would have ${dataFlowCount} dataflows; Azure allows 20. Remove ASIM schemas or entries from nativeVendors.') : nativeFlows)
+var nativeSelection = (excludeNativeVendorsFromAsim && !empty(mainNative)) ? join(map(mainNative, vendor => '(${vendor.selectKql})'), ' or ') : ''
+var checkedNativeFlows = oktaDomainUnsafe ? fail('oktaDomain must be a domain name such as example.okta.com, with no quotes, spaces, backslashes, | or ;.') : !empty(unknownFamilies) ? fail('laneFamilies has unsupported values ${string(unknownFamilies)}. Supported: ${string(laneFamilyOrder)}.') : !empty(familyOnlyOff) ? fail('These nativeVendors run only on their family\'s own Data Collection Rule; add the family to laneFamilies: ${string(familyOnlyOff)}.') : length(unknownVendors) > 0 ? fail('nativeVendors has unsupported values ${string(unknownVendors)}. Supported: ${string(map(nativeCatalog, c => c.option))}.') : (dataFlowCount > 20 ? fail('The Data Collection Rule would have ${dataFlowCount} dataflows; Azure allows 20. Remove ASIM schemas or entries from nativeVendors.') : nativeFlows)
+
+// One rule per lane family in laneFamilies that has an enabled lane, in this order. Within a family rule, each lane takes
+// only what no earlier lane of that rule takes (lane-precedence.json), as on the main rule. A family rule has no
+// catch-all: one table per event across rules depends on Abstract sending each source to one rule only.
+var laneFamilyOrder = [
+  'csl'
+  'syslog'
+  'windows'
+  'cloud'
+  'endpoint'
+  'saas'
+]
+var unknownFamilies = filter(laneFamilies, f => !contains(laneFamilyOrder, f))
+var familyOnlyOff = map(filter(enabledNative, vendor => (vendor.?familyOnly ?? false) && !contains(laneFamilies, vendor.family)), vendor => '${vendor.option} (family ${vendor.family})')
+var familyPlan = filter(map(laneFamilyOrder, f => {
+  family: f
+  lanes: filter(familyNative, vendor => vendor.family == f)
+}), plan => !empty(plan.lanes))
+var familyFlows = map(familyPlan, plan => map(range(0, length(plan.lanes)), i => {
+  transformKql: replace(i == 0 ? plan.lanes[i].transformKql : replace(plan.lanes[i].transformKql, '| where ${plan.lanes[i].selectKql}\n', '| where (${plan.lanes[i].selectKql}) and not(${join(map(take(plan.lanes, i), earlier => '(${earlier.selectKql})'), ' or ')})\n'), 'DomainName = ""', 'DomainName = "${oktaDomain}"')
+  outputStream: plan.lanes[i].outputStream
+}))
+var oversizedFamilies = map(filter(range(0, length(familyPlan)), k => length(familyFlows[k]) > 20), k => '${familyPlan[k].family} (${length(familyFlows[k])})')
+var checkedFamilyFlows = !empty(oversizedFamilies) ? fail('A lane family rule would have more than 20 dataflows: ${string(oversizedFamilies)}.') : familyFlows
+var streamColumns = loadJsonContent('../_modules/sentinel/sentinel-destination.schema.json').streamColumns
 
 // What ASim_AbstractEvent must read so each stored event counts once. With store-once off, AbstractEventLogs_CL already
 // holds everything; with it on, the ASim tables hold what they took, and a vendor table holds what its lane took
 // only when the exclusion keeps those events out of the ASim tables.
 var parserReadsAsim = enableAsim && excludeAsimFromAbstractTable && asimFlowCount > 0
-var parserNativeVendors = (parserReadsAsim && excludeNativeVendorsFromAsim) ? map(enabledNative, vendor => vendor.name) : []
+// A family lane's events reach only its family rule, so the parser always reads that lane's table.
+var parserNativeVendors = union((parserReadsAsim && excludeNativeVendorsFromAsim) ? map(mainNative, vendor => vendor.name) : [], map(familyNative, vendor => vendor.name))
 
 // With the data plane off, content and discovery target an existing workspace in this resource group, named by workspaceName.
 var noWorkspaceTarget = !deployDataPlane && (createWorkspace || empty(workspaceName))
@@ -354,6 +388,27 @@ module dataPlane '../azure-destination-sentinel/main.bicep' = if (deployDataPlan
     additionalDataFlows: checkedNativeFlows
   }
 }
+
+// ---------------------------------------------------------------------------
+// 2a. One Data Collection Rule per lane family in laneFamilies (family-dcr.bicep), on the data plane's endpoint
+// ---------------------------------------------------------------------------
+module familyDcr 'family-dcr.bicep' = [for (plan, k) in familyPlan: if (deployDataPlane) {
+  name: 'abstract-sentinel-dcr-${plan.family}'
+  params: {
+    name: '${dataCollectionRuleName}-${plan.family}'
+    location: workspaceLocation
+    tags: tags
+    family: plan.family
+    mainRuleName: dataCollectionRuleName
+    dataCollectionEndpointName: dataCollectionEndpointName
+    workspaceName: targetWorkspaceName
+    streamColumns: streamColumns
+    flows: checkedFamilyFlows[k]
+    tables: map(filter(plan.lanes, vendor => contains(vendor, 'table')), vendor => vendor.table)
+    principalId: principalId
+    enableDcrErrorLogs: enableDcrErrorLogs
+  }
+}]
 
 // ---------------------------------------------------------------------------
 // 3. Content package
@@ -495,6 +550,25 @@ output rbacAssigned bool = deployDataPlane ? dataPlane.outputs.rbacAssigned : fa
 #disable-next-line BCP318
 output dataFlowCount int = deployDataPlane ? dataPlane.outputs.dataFlowCount : 0
 output nativeVendorTables array = map(filter(enabledNative, vendor => contains(vendor, 'table')), vendor => vendor.table.name)
+// One entry per lane family rule this deployment made (laneFamilies), with the values of the Abstract Sentinel
+// destination each one needs (abstractDestination is the main rule's): Abstract sends each family's sources to its rule.
+#disable-next-line BCP318
+output laneDataCollectionRules array = [for (plan, k) in familyPlan: deployDataPlane ? {
+  family: plan.family
+  #disable-next-line BCP318
+  data_collection_rule_name: familyDcr[k].outputs.dataCollectionRuleName
+  tenant_id: subscription().tenantId
+  #disable-next-line BCP318
+  data_collection_endpoint: dataPlane.outputs.dataCollectionEndpointUrl
+  #disable-next-line BCP318
+  data_collection_rule_id: familyDcr[k].outputs.dataCollectionRuleImmutableId
+  #disable-next-line BCP318
+  log_stream_name: familyDcr[k].outputs.logStreamName
+  #disable-next-line BCP318
+  dataFlowCount: familyDcr[k].outputs.dataFlowCount
+  #disable-next-line BCP318
+  outputStreams: familyDcr[k].outputs.outputStreams
+} : {}]
 #disable-next-line BCP318
 output contentTemplateCount int = deployContent ? content.outputs.contentTemplateCount : 0
 // The secret the playbooks read the Abstract API key from, as they GET it (with ?api-version). Not the key. Later content

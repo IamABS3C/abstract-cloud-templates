@@ -29,6 +29,39 @@ content/native-lanes.generated.json, lane "csl-cef":
   The mapping of CEF keys to CommonSecurityLog columns is from Microsoft's published page
   https://learn.microsoft.com/en-us/azure/sentinel/cef-name-mapping (retrieved 2026-11-08).
 
+content/native-lanes.generated.json, lanes "crowdstrike-fdr-audit", "-file", "-network", "-process", "-auth", "-dns",
+"-registry" and "-user":
+  The Data Collection Rule transformations that map CrowdStrike Falcon Data Replicator events into
+  the eight ASim tables, and the routing of each event_simpleName to one of them, are copied unchanged
+  from Microsoft's "CrowdStrike Falcon Endpoint Protection" solution in the Azure/Azure-Sentinel
+  repository, at commit 3aadb1e4e481e2254fec50259123955ed04ded96:
+    Solutions/CrowdStrike Falcon Endpoint Protection/Data Connectors/CrowdstrikeReplicatorCLv2/CSFDRv2_Deploymnet/azuredeploy_cdfdrv2_connector.json
+    Solutions/CrowdStrike Falcon Endpoint Protection/Data Connectors/CrowdstrikeReplicatorCLv2/CrowdstrikeFalconAPISentinelConn/QueueTriggerCS/EventsToTableMapping.json
+  Abstract added a prefix that selects the FDR events routed to each table and unpacks
+  event.original into the columns of Microsoft's input stream (AdditionalFields carries the whole
+  record), and pointed Microsoft's one reference to `source` at that prefix.
+
+content/native-lanes.generated.json, lane "aws-vpcflow":
+  The Data Collection Rule transformation that maps a VPC Flow Logs record into AWSVPCFlow is copied
+  unchanged from Microsoft's "AWS VPC Flow Logs" solution in the Azure/Azure-Sentinel repository, at
+  commit 3aadb1e4e481e2254fec50259123955ed04ded96:
+    Solutions/AWS VPC Flow Logs/Data Connectors/AWSVPCFlowLogs_CCP/AWSVPCFlowLogs_DCR.json
+  Abstract added a prefix that splits the version 2 flow log line in event.original into the
+  columns of Microsoft's input stream by position.
+
+content/native-lanes.generated.json, lanes "cisco-umbrella-web", "cisco-umbrella-dns" and
+"cisco-umbrella-firewall":
+  The Data Collection Rule transformations that map Cisco Umbrella web, DNS and cloud firewall
+  records into CiscoUmbrellaWebTraffic_CL, CiscoUmbrellaDNS_CL and CiscoUmbrellaCloudFirewall_CL,
+  and those table schemas, are copied unchanged from Microsoft's "CiscoUmbrella" solution in the
+  Azure/Azure-Sentinel repository, at commit 3aadb1e4e481e2254fec50259123955ed04ded96:
+    Solutions/CiscoUmbrella/Data Connectors/CiscoUmbrella_CCP/CiscoUmbrella_DCR.json
+    Solutions/CiscoUmbrella/Data Connectors/CiscoUmbrella_CCP/CiscoUmbrellaWebTraffic_table.json
+    Solutions/CiscoUmbrella/Data Connectors/CiscoUmbrella_CCP/CiscoUmbrellaDNS_table.json
+    Solutions/CiscoUmbrella/Data Connectors/CiscoUmbrella_CCP/CiscoUmbrellaCloudFirewall_table.json
+  Abstract added a prefix that takes the quoted fields of the CSV line in event.original, in
+  order, into the columns of Microsoft's input stream.
+
 That material is licensed under the MIT License:
 
     MIT License

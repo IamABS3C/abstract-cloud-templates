@@ -346,7 +346,7 @@
                     "subscriptions": [
                       "[subscription().subscriptionId]"
                     ],
-                    "query": "[concat('resources | where subscriptionId =~ \"', subscription().subscriptionId, '\" and resourceGroup =~ \"', resourceGroup().name, '\" and type in~ (\"microsoft.insights/datacollectionendpoints\", \"microsoft.insights/datacollectionrules\") | project name, location, dcKind = iff(type =~ \"microsoft.insights/datacollectionendpoints\", \"dce\", \"dcr\"), isAbstract = iff(isnotnull(properties.streamDeclarations[\"Custom-AbstractEventLogs_CL\"]), \"yes\", \"no\"), flows = coalesce(array_length(properties.dataFlows), 0) | order by name asc')]",
+                    "query": "[concat('resources | where subscriptionId =~ \"', subscription().subscriptionId, '\" and resourceGroup =~ \"', resourceGroup().name, '\" and type in~ (\"microsoft.insights/datacollectionendpoints\", \"microsoft.insights/datacollectionrules\") | project name, location, dcKind = iff(type =~ \"microsoft.insights/datacollectionendpoints\", \"dce\", \"dcr\"), isAbstract = iff(isnotnull(properties.streamDeclarations[\"Custom-AbstractEventLogs_CL\"]), \"yes\", \"no\"), flows = coalesce(array_length(properties.dataFlows), 0), laneFamily = tostring(tags[\"abstract-lane-family\"]), mainRule = tostring(tags[\"abstract-main-rule\"]) | order by name asc')]",
                     "options": {
                       "resultFormat": "objectArray"
                     }
@@ -1137,6 +1137,57 @@
                 }
               },
               {
+                "name": "tbl_windows-securityevent",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane-content', 'dataplane'), equals('dataplane-content', 'dataplane-content'), equals('dataplane-content', 'everything')), and(equals('dataplane-content', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/SecurityEvent?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "status_windows-securityevent",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(and(or(or(equals('dataplane-content', 'dataplane'), equals('dataplane-content', 'dataplane-content'), equals('dataplane-content', 'everything')), and(equals('dataplane-content', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('Windows Security events: table SecurityEvent ', if(empty(coalesce(steps('vendors').on_vendors.tbl_windows-securityevent.properties.plan, '')), 'is not in this workspace yet (the deployment creates it)', 'already exists'), '. Microsoft solution Windows Security Events: ', if(empty(coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-securityevents'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version), 'not installed. Install it from Microsoft Sentinel > Content hub to get its parsers, rules and workbooks.', concat('installed, version ', coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-securityevents'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version, '.')))]"
+                }
+              },
+              {
+                "name": "tbl_zscaler-nss-web",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane-content', 'dataplane'), equals('dataplane-content', 'dataplane-content'), equals('dataplane-content', 'everything')), and(equals('dataplane-content', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/CommonSecurityLog?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "status_zscaler-nss-web",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(and(or(or(equals('dataplane-content', 'dataplane'), equals('dataplane-content', 'dataplane-content'), equals('dataplane-content', 'everything')), and(equals('dataplane-content', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('Zscaler NSS web logs: table CommonSecurityLog ', if(empty(coalesce(steps('vendors').on_vendors.tbl_zscaler-nss-web.properties.plan, '')), 'is not in this workspace yet (the deployment creates it)', 'already exists'), '. Microsoft solution Zscaler Internet Access CCF: ', if(empty(coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'zscaler.zscaler_zia'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version), 'not installed. Install it from Microsoft Sentinel > Content hub to get its parsers, rules and workbooks.', concat('installed, version ', coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'zscaler.zscaler_zia'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version, '.')))]"
+                }
+              },
+              {
+                "name": "tbl_syslog-appliances",
+                "type": "Microsoft.Solutions.ArmApiControl",
+                "request": {
+                  "method": "GET",
+                  "path": "[if(and(or(or(equals('dataplane-content', 'dataplane'), equals('dataplane-content', 'dataplane-content'), equals('dataplane-content', 'everything')), and(equals('dataplane-content', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')), '/providers/Microsoft.OperationalInsights/operations?api-version=2022-10-01', concat(concat(concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name), '/providers/Microsoft.OperationalInsights/workspaces/', coalesce(basics('workspaceExisting'), 'none')), '/tables/Syslog?api-version=2022-10-01'))]"
+                }
+              },
+              {
+                "name": "status_syslog-appliances",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[not(and(or(or(equals('dataplane-content', 'dataplane'), equals('dataplane-content', 'dataplane-content'), equals('dataplane-content', 'everything')), and(equals('dataplane-content', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new')))]",
+                "options": {
+                  "icon": "Info",
+                  "text": "[concat('Syslog (ISC BIND, Sophos XG, Veeam): table Syslog ', if(empty(coalesce(steps('vendors').on_vendors.tbl_syslog-appliances.properties.plan, '')), 'is not in this workspace yet (the deployment creates it)', 'already exists'), '. Microsoft solution ISC Bind, Sophos XG Firewall, Veeam App: ', if(empty(coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-iscbind'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version), 'not installed. Install it from Microsoft Sentinel > Content hub to get its parsers, rules and workbooks.', concat('installed, version ', coalesce(first(filter(coalesce(steps('vendors').on_vendors.pkgApi.value, parse('[]')), (p) => equals(p.properties.contentId, 'azuresentinel.azure-sentinel-solution-iscbind'))), parse('{\"location\":\"\",\"name\":\"\",\"isAbstract\":\"no\",\"properties\":{\"version\":\"\"}}')).properties.version, '.')))]"
+                }
+              },
+              {
                 "name": "vendorsNewWs",
                 "type": "Microsoft.Common.InfoBox",
                 "visible": "[and(or(or(equals('dataplane-content', 'dataplane'), equals('dataplane-content', 'dataplane-content'), equals('dataplane-content', 'everything')), and(equals('dataplane-content', 'custom'), bool('false'))), equals(basics('workspaceMode'), 'new'))]",
@@ -1149,39 +1200,39 @@
                 "name": "nativeVendors",
                 "type": "Microsoft.Common.DropDown",
                 "label": "Vendor tables",
-                "toolTip": "What: the vendors whose own Sentinel table this rule also fills. When: pick a vendor whose Microsoft solution you use, or plan to. Consequence: one dataflow per vendor, and each event lands in exactly one vendor table: when several selected vendors match it, the first in this order takes it: asim-alert, okta, crowdstrike-hosts, aws-cloudtrail, csl-cef, csl-acs, syslog, asim-dhcp, asim-user-management. With store-once on (One copy, and Store each vendor event once), AbstractEventLogs_CL keeps only the events no vendor table, ASIM route or lake table takes; with it off, it also keeps every vendor event. Portal: Microsoft Sentinel > Content hub, the vendor's solution.",
+                "toolTip": "What: the vendors whose own Sentinel table this rule also fills. When: pick a vendor whose Microsoft solution you use, or plan to. Consequence: one dataflow per lane (CrowdStrike FDR has nine), and each event lands in exactly one table of the rule it is sent to: when several selected vendors on one rule match it, the first in this order takes it: asim-alert, okta, crowdstrike-hosts, crowdstrike-fdr, aws-cloudtrail, aws-vpcflow, windows-securityevent, csl-cef, csl-acs, zscaler-nss-web, syslog, syslog-appliances, cisco-umbrella, asim-dhcp, asim-user-management. With store-once on (One copy, and Store each vendor event once), AbstractEventLogs_CL keeps only the events no vendor table, ASIM route or lake table takes; with it off, it also keeps every vendor event. Portal: Microsoft Sentinel > Content hub, the vendor's solution.",
                 "multiLine": true,
                 "constraints": {
                   "allowedValues": [
                     {
                       "label": "Okta: OktaV2_CL",
                       "value": "okta",
-                      "description": "Fills OktaV2_CL, the table Microsoft's Okta Single Sign-On solution reads, with Microsoft's own connector transformation."
+                      "description": "Fills OktaV2_CL, the table Microsoft's Okta Single Sign-On solution reads, with Microsoft's own connector transformation. Lane family saas."
                     },
                     {
                       "label": "CEF sources: CommonSecurityLog",
                       "value": "csl-cef",
-                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads."
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads. Lane family csl."
                     },
                     {
                       "label": "Cisco ASA, FortiGate and F5 ASM: CommonSecurityLog",
                       "value": "csl-acs",
-                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads."
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads. Lane family csl."
                     },
                     {
                       "label": "Syslog (Linux, Nutanix, Infoblox): Syslog",
                       "value": "syslog",
-                      "description": "Fills Syslog, the table Microsoft's Syslog solution reads."
+                      "description": "Fills Syslog, the table Microsoft's Syslog solution reads. Lane family syslog."
                     },
                     {
                       "label": "AWS CloudTrail: AWSCloudTrail",
                       "value": "aws-cloudtrail",
-                      "description": "Fills AWSCloudTrail, the table Microsoft's Amazon Web Services solution reads."
+                      "description": "Fills AWSCloudTrail, the table Microsoft's Amazon Web Services solution reads. Lane family cloud."
                     },
                     {
                       "label": "CrowdStrike Falcon hosts: CrowdStrikeHostsV2_CL",
                       "value": "crowdstrike-hosts",
-                      "description": "Fills CrowdStrikeHostsV2_CL, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads."
+                      "description": "Fills CrowdStrikeHostsV2_CL, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads, with Microsoft's own connector transformation. Lane family endpoint. Not a default: pick it only if you use its table."
                     },
                     {
                       "label": "ASIM Alert (Abstract findings): ASimAlertEventLogs",
@@ -1197,6 +1248,36 @@
                       "label": "ASIM User Management: ASimUserManagementActivityLogs",
                       "value": "asim-user-management",
                       "description": "Writes ASimUserManagementActivityLogs, read by Microsoft's built-in ASIM parser."
+                    },
+                    {
+                      "label": "Windows Security events: SecurityEvent",
+                      "value": "windows-securityevent",
+                      "description": "Fills SecurityEvent, the table Microsoft's Windows Security Events solution reads. Lane family windows: needs that family in Lane families. Opt-in: SecurityEvent rows are billed as Analytics data and feed the Windows Security Events rules, which can raise new incidents; the Defender for Servers Plan 2 allowance of 500 MB a day per server is documented for data the Azure Monitor Agent collects, so Abstract-delivered rows should be assumed to count in full. Not a default: pick it only if you use its table."
+                    },
+                    {
+                      "label": "CrowdStrike FDR (8 ASim tables): ASimAuthenticationEventLogs, ASimProcessEventLogs and 6 more ASim tables",
+                      "value": "crowdstrike-fdr",
+                      "description": "Fills ASimAuthenticationEventLogs, ASimProcessEventLogs and 6 more ASim tables, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads, with Microsoft's own connector transformation. Lane family endpoint: needs that family in Lane families."
+                    },
+                    {
+                      "label": "AWS VPC Flow Logs: AWSVPCFlow",
+                      "value": "aws-vpcflow",
+                      "description": "Fills AWSVPCFlow, the table Microsoft's AWS VPC Flow Logs solution reads, with Microsoft's own connector transformation. Lane family cloud: needs that family in Lane families."
+                    },
+                    {
+                      "label": "Zscaler NSS web logs: CommonSecurityLog",
+                      "value": "zscaler-nss-web",
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Zscaler Internet Access CCF solution reads. Lane family csl: needs that family in Lane families."
+                    },
+                    {
+                      "label": "Syslog (ISC BIND, Sophos XG, Veeam): Syslog",
+                      "value": "syslog-appliances",
+                      "description": "Fills Syslog, the table Microsoft's ISC Bind, Sophos XG Firewall, Veeam App solution reads. Lane family syslog: needs that family in Lane families."
+                    },
+                    {
+                      "label": "Cisco Umbrella (web, DNS, firewall): CiscoUmbrellaWebTraffic_CL, CiscoUmbrellaDNS_CL, CiscoUmbrellaCloudFirewall_CL",
+                      "value": "cisco-umbrella",
+                      "description": "Fills CiscoUmbrellaWebTraffic_CL, CiscoUmbrellaDNS_CL, CiscoUmbrellaCloudFirewall_CL, the table Microsoft's CiscoUmbrella solution reads, with Microsoft's own connector transformation. Lane family saas: needs that family in Lane families."
                     }
                   ],
                   "required": false
@@ -1205,6 +1286,78 @@
                 "defaultValue": [],
                 "multiselect": true,
                 "selectAll": true
+              },
+              {
+                "name": "laneFamilies",
+                "type": "Microsoft.Common.DropDown",
+                "label": "Lane families with their own rule",
+                "toolTip": "What: the lane families that get a Data Collection Rule of their own, on the same endpoint: csl (CEF lines, ACS-mapped firewalls, Zscaler NSS); syslog (Syslog lanes); windows (SecurityEvent); cloud (AWSCloudTrail, AWSVPCFlow); endpoint (CrowdStrike FDR into the ASim tables, CrowdStrike hosts); saas (Okta, Cisco Umbrella, Netskope). When: list a family to free the main rule's 20 dataflows and 15,360-character transformations, and for every lane marked as needing its family. Consequence: each family rule is a separate Abstract Sentinel destination (deployment output laneDataCollectionRules), and Abstract must send that family's sources to it: a family rule keeps only what its lanes select. Empty keeps every lane on the main rule, as before. Portal: Monitor > Data Collection Rules.",
+                "multiLine": true,
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "csl",
+                      "value": "csl",
+                      "description": "CommonSecurityLog lanes (CEF lines, ACS-mapped firewalls, Zscaler NSS)."
+                    },
+                    {
+                      "label": "syslog",
+                      "value": "syslog",
+                      "description": "Syslog lanes."
+                    },
+                    {
+                      "label": "windows",
+                      "value": "windows",
+                      "description": "Windows event lanes (SecurityEvent)."
+                    },
+                    {
+                      "label": "cloud",
+                      "value": "cloud",
+                      "description": "AWS and other cloud provider tables (AWSCloudTrail, AWSVPCFlow)."
+                    },
+                    {
+                      "label": "endpoint",
+                      "value": "endpoint",
+                      "description": "Endpoint tables (CrowdStrike FDR into the ASim tables, CrowdStrike hosts)."
+                    },
+                    {
+                      "label": "saas",
+                      "value": "saas",
+                      "description": "SaaS vendor tables (Okta, Cisco Umbrella, Netskope)."
+                    }
+                  ],
+                  "required": false
+                },
+                "visible": true,
+                "defaultValue": [],
+                "multiselect": true,
+                "selectAll": true
+              },
+              {
+                "name": "familyRuleCollision",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[or(and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'csl'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"csl-acs\", \"csl-cef\", \"zscaler-nss-web\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-csl'))), not(and(equals(coalesce(r.laneFamily, ''), 'csl'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'syslog'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"syslog\", \"syslog-appliances\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-syslog'))), not(and(equals(coalesce(r.laneFamily, ''), 'syslog'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'windows'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"windows-securityevent\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-windows'))), not(and(equals(coalesce(r.laneFamily, ''), 'windows'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'cloud'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"aws-cloudtrail\", \"aws-vpcflow\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-cloud'))), not(and(equals(coalesce(r.laneFamily, ''), 'cloud'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'endpoint'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"crowdstrike-fdr\", \"crowdstrike-hosts\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-endpoint'))), not(and(equals(coalesce(r.laneFamily, ''), 'endpoint'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'saas'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"cisco-umbrella\", \"okta\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-saas'))), not(and(equals(coalesce(r.laneFamily, ''), 'saas'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))))]",
+                "options": {
+                  "icon": "Error",
+                  "text": "[concat('A Data Collection Rule named like a lane family rule this deployment would create is already in this resource group and was not made by this deployment: ', concat(if(and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'csl'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"csl-acs\", \"csl-cef\", \"zscaler-nss-web\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-csl'))), not(and(equals(coalesce(r.laneFamily, ''), 'csl'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-csl '), ''), if(and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'syslog'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"syslog\", \"syslog-appliances\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-syslog'))), not(and(equals(coalesce(r.laneFamily, ''), 'syslog'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-syslog '), ''), if(and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'windows'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"windows-securityevent\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-windows'))), not(and(equals(coalesce(r.laneFamily, ''), 'windows'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-windows '), ''), if(and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'cloud'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"aws-cloudtrail\", \"aws-vpcflow\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-cloud'))), not(and(equals(coalesce(r.laneFamily, ''), 'cloud'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-cloud '), ''), if(and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'endpoint'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"crowdstrike-fdr\", \"crowdstrike-hosts\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-endpoint'))), not(and(equals(coalesce(r.laneFamily, ''), 'endpoint'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-endpoint '), ''), if(and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'saas'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"cisco-umbrella\", \"okta\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-saas'))), not(and(equals(coalesce(r.laneFamily, ''), 'saas'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-saas '), '')), '. Deploying would replace its streams, destinations and dataflows. Rename or remove that rule, choose another rule name on the Data collection tab, or leave the family out.')]"
+                }
+              },
+              {
+                "name": "familyRuleCollisionBlock",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Family rule name in use",
+                "toolTip": "What: a lane family rule this deployment would create has the name of a Data Collection Rule it did not make. When: shown only then. Consequence: deploying would replace that rule's streams, destinations and dataflows, so the form stops here. Portal: Monitor > Settings > Data Collection Rules.",
+                "placeholder": "Nothing to select in this resource group. Choose Create new, or start again with another resource group.",
+                "constraints": {
+                  "required": true,
+                  "validations": [
+                    {
+                      "isValid": "[equals(1, 2)]",
+                      "message": "What: a lane family rule this deployment would create has the name of a Data Collection Rule it did not make. When: shown only then. Consequence: deploying would replace that rule's streams, destinations and dataflows, so the form stops here. Portal: Monitor > Settings > Data Collection Rules."
+                    }
+                  ]
+                },
+                "visible": "[or(and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'csl'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"csl-acs\", \"csl-cef\", \"zscaler-nss-web\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-csl'))), not(and(equals(coalesce(r.laneFamily, ''), 'csl'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'syslog'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"syslog\", \"syslog-appliances\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-syslog'))), not(and(equals(coalesce(r.laneFamily, ''), 'syslog'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'windows'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"windows-securityevent\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-windows'))), not(and(equals(coalesce(r.laneFamily, ''), 'windows'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'cloud'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"aws-cloudtrail\", \"aws-vpcflow\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-cloud'))), not(and(equals(coalesce(r.laneFamily, ''), 'cloud'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'endpoint'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"crowdstrike-fdr\", \"crowdstrike-hosts\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-endpoint'))), not(and(equals(coalesce(r.laneFamily, ''), 'endpoint'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))), and(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'saas'), greater(length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"cisco-umbrella\", \"okta\"]'), v))), 0), not(empty(filter(filter(coalesce(steps('collection').on_collection.dcApi.data, parse('[]')), (r) => equals(r.dcKind, 'dcr')), (r) => and(equals(toLower(r.name), toLower(concat(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting), '-saas'))), not(and(equals(coalesce(r.laneFamily, ''), 'saas'), equals(toLower(coalesce(r.mainRule, '')), toLower(if(equals(steps('collection').on_collection.dcrMode, 'new'), steps('collection').on_collection.dcrNameNew, steps('collection').on_collection.dcrExisting)))))))))))]"
               },
               {
                 "name": "oktaDomain",
@@ -1238,7 +1391,7 @@
                 "visible": true,
                 "options": {
                   "icon": "Info",
-                  "text": "[concat('This configuration gives the Data Collection Rule ', string(add(add(add(1, if(steps('asim').on_asim.enableAsim, length(coalesce(steps('asim').on_asim.asimSchemas, parse('[]'))), 0)), if(and(steps('lake').on_lake.enableLake, not(empty(parse(if(empty(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), if(empty(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), replace(concat(string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c))))), '][', ','))))))), 1, 0)), length(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]'))))), ' of the 20 dataflows Azure allows: 1 for AbstractEventLogs_CL, one per ASIM schema, one for the lake and one per vendor.')]"
+                  "text": "[concat('This configuration gives the main Data Collection Rule ', string(add(add(add(1, if(steps('asim').on_asim.enableAsim, length(coalesce(steps('asim').on_asim.asimSchemas, parse('[]'))), 0)), if(and(steps('lake').on_lake.enableLake, not(empty(parse(if(empty(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), if(empty(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), replace(concat(string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c))))), '][', ','))))))), 1, 0)), add(add(add(add(add(add(add(0, length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"asim-alert\", \"asim-dhcp\", \"asim-user-management\"]'), v)))), if(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'csl'), 0, length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"csl-acs\", \"csl-cef\", \"zscaler-nss-web\"]'), v))))), if(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'syslog'), 0, length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"syslog\", \"syslog-appliances\"]'), v))))), if(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'windows'), 0, length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"windows-securityevent\"]'), v))))), if(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'cloud'), 0, length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"aws-cloudtrail\", \"aws-vpcflow\"]'), v))))), if(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'endpoint'), 0, length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"crowdstrike-fdr\", \"crowdstrike-hosts\"]'), v))))), if(contains(coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), 'saas'), 0, length(filter(coalesce(steps('vendors').on_vendors.nativeVendors, parse('[]')), (v) => contains(parse('[\"cisco-umbrella\", \"okta\"]'), v))))))), ' of the 20 dataflows Azure allows: 1 for AbstractEventLogs_CL, one per ASIM schema, one for the lake and one per vendor lane that stays on the main rule. A lane whose family is in Lane families runs on the rule of that family instead.')]"
                 }
               }
             ],
@@ -1493,32 +1646,32 @@
                     {
                       "label": "Okta: OktaV2_CL",
                       "value": "okta",
-                      "description": "Fills OktaV2_CL, the table Microsoft's Okta Single Sign-On solution reads, with Microsoft's own connector transformation."
+                      "description": "Fills OktaV2_CL, the table Microsoft's Okta Single Sign-On solution reads, with Microsoft's own connector transformation. Lane family saas."
                     },
                     {
                       "label": "CEF sources: CommonSecurityLog",
                       "value": "csl-cef",
-                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads."
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads. Lane family csl."
                     },
                     {
                       "label": "Cisco ASA, FortiGate and F5 ASM: CommonSecurityLog",
                       "value": "csl-acs",
-                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads."
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads. Lane family csl."
                     },
                     {
                       "label": "Syslog (Linux, Nutanix, Infoblox): Syslog",
                       "value": "syslog",
-                      "description": "Fills Syslog, the table Microsoft's Syslog solution reads."
+                      "description": "Fills Syslog, the table Microsoft's Syslog solution reads. Lane family syslog."
                     },
                     {
                       "label": "AWS CloudTrail: AWSCloudTrail",
                       "value": "aws-cloudtrail",
-                      "description": "Fills AWSCloudTrail, the table Microsoft's Amazon Web Services solution reads."
+                      "description": "Fills AWSCloudTrail, the table Microsoft's Amazon Web Services solution reads. Lane family cloud."
                     },
                     {
                       "label": "CrowdStrike Falcon hosts: CrowdStrikeHostsV2_CL",
                       "value": "crowdstrike-hosts",
-                      "description": "Fills CrowdStrikeHostsV2_CL, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads."
+                      "description": "Fills CrowdStrikeHostsV2_CL, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads, with Microsoft's own connector transformation. Lane family endpoint. Not a default: pick it only if you use its table."
                     },
                     {
                       "label": "ASIM Alert (Abstract findings): ASimAlertEventLogs",
@@ -1534,6 +1687,36 @@
                       "label": "ASIM User Management: ASimUserManagementActivityLogs",
                       "value": "asim-user-management",
                       "description": "Writes ASimUserManagementActivityLogs, read by Microsoft's built-in ASIM parser."
+                    },
+                    {
+                      "label": "Windows Security events: SecurityEvent",
+                      "value": "windows-securityevent",
+                      "description": "Fills SecurityEvent, the table Microsoft's Windows Security Events solution reads. Lane family windows: needs that family in Lane families. Opt-in: SecurityEvent rows are billed as Analytics data and feed the Windows Security Events rules, which can raise new incidents; the Defender for Servers Plan 2 allowance of 500 MB a day per server is documented for data the Azure Monitor Agent collects, so Abstract-delivered rows should be assumed to count in full. Not a default: pick it only if you use its table."
+                    },
+                    {
+                      "label": "CrowdStrike FDR (8 ASim tables): ASimAuthenticationEventLogs, ASimProcessEventLogs and 6 more ASim tables",
+                      "value": "crowdstrike-fdr",
+                      "description": "Fills ASimAuthenticationEventLogs, ASimProcessEventLogs and 6 more ASim tables, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads, with Microsoft's own connector transformation. Lane family endpoint: needs that family in Lane families."
+                    },
+                    {
+                      "label": "AWS VPC Flow Logs: AWSVPCFlow",
+                      "value": "aws-vpcflow",
+                      "description": "Fills AWSVPCFlow, the table Microsoft's AWS VPC Flow Logs solution reads, with Microsoft's own connector transformation. Lane family cloud: needs that family in Lane families."
+                    },
+                    {
+                      "label": "Zscaler NSS web logs: CommonSecurityLog",
+                      "value": "zscaler-nss-web",
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Zscaler Internet Access CCF solution reads. Lane family csl: needs that family in Lane families."
+                    },
+                    {
+                      "label": "Syslog (ISC BIND, Sophos XG, Veeam): Syslog",
+                      "value": "syslog-appliances",
+                      "description": "Fills Syslog, the table Microsoft's ISC Bind, Sophos XG Firewall, Veeam App solution reads. Lane family syslog: needs that family in Lane families."
+                    },
+                    {
+                      "label": "Cisco Umbrella (web, DNS, firewall): CiscoUmbrellaWebTraffic_CL, CiscoUmbrellaDNS_CL, CiscoUmbrellaCloudFirewall_CL",
+                      "value": "cisco-umbrella",
+                      "description": "Fills CiscoUmbrellaWebTraffic_CL, CiscoUmbrellaDNS_CL, CiscoUmbrellaCloudFirewall_CL, the table Microsoft's CiscoUmbrella solution reads, with Microsoft's own connector transformation. Lane family saas: needs that family in Lane families."
                     }
                   ],
                   "required": false
@@ -2069,6 +2252,7 @@
       "lakeCategories": "[if(steps('lake').on_lake.enableLake, parse(if(empty(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), if(empty(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c)))), replace(concat(string(coalesce(steps('lake').on_lake.lakeCategories, parse('[]'))), string(filter(split(replace(coalesce(steps('lake').on_lake.lakeCategoriesOther, ''), ' ', ''), ','), (c) => not(empty(c))))), '][', ',')))), parse('[]'))]",
       "lakeRetentionDays": "[if(equals(basics('depth'), 'all'), coalesce(steps('lake').on_lake.lakeRetentionDays, 365), 365)]",
       "oktaDomain": "[coalesce(steps('vendors').on_vendors.oktaDomain, '')]",
+      "laneFamilies": "[if(or(or(equals('dataplane-content', 'dataplane'), equals('dataplane-content', 'dataplane-content'), equals('dataplane-content', 'everything')), and(equals('dataplane-content', 'custom'), bool('false'))), coalesce(steps('vendors').on_vendors.laneFamilies, parse('[]')), parse('[]'))]",
       "deployDataConnectors": "[if(equals(basics('depth'), 'all'), steps('content').on_content.deployDataConnectors, bool('true'))]",
       "deployParsers": "[if(equals(basics('depth'), 'all'), steps('content').on_content.deployParsers, bool('true'))]",
       "deployAnalyticsRules": "[steps('content').on_content.deployAnalyticsRules]",

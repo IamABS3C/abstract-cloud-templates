@@ -58,6 +58,11 @@ output "abstractDestination" {
   value       = local.outputs["abstractDestination"]
 }
 
+output "laneDataCollectionRules" {
+  description = "One entry per lane family rule (laneFamilies), each with the values of the Abstract Sentinel destination it needs."
+  value       = local.outputs["laneDataCollectionRules"]
+}
+
 output "abstractApiKeySecretUri" {
   description = "The Key Vault secret the playbooks read the Abstract API key from, with ?api-version, as they GET it. Not the key. Later content that calls the Abstract API can reuse it."
   value       = local.outputs["abstractApiKeySecretUri"]

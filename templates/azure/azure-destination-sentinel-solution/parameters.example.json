@@ -68,6 +68,11 @@
         "okta"
       ]
     },
+    "laneFamilies": {
+      "value": [
+        "endpoint"
+      ]
+    },
     "oktaDomain": {
       "value": "example.okta.com"
     },

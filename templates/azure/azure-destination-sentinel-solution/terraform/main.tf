@@ -40,6 +40,7 @@ locals {
     lakeCategories                    = var.lakeCategories
     lakeRetentionDays                 = var.lakeRetentionDays
     nativeVendors                     = var.nativeVendors
+    laneFamilies                      = var.laneFamilies
     oktaDomain                        = var.oktaDomain
     excludeNativeVendorsFromAsim      = var.excludeNativeVendorsFromAsim
     deployDataConnectors              = var.deployDataConnectors

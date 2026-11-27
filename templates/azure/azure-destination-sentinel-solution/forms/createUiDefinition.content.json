@@ -449,32 +449,32 @@
                     {
                       "label": "Okta: OktaV2_CL",
                       "value": "okta",
-                      "description": "Fills OktaV2_CL, the table Microsoft's Okta Single Sign-On solution reads, with Microsoft's own connector transformation."
+                      "description": "Fills OktaV2_CL, the table Microsoft's Okta Single Sign-On solution reads, with Microsoft's own connector transformation. Lane family saas."
                     },
                     {
                       "label": "CEF sources: CommonSecurityLog",
                       "value": "csl-cef",
-                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads."
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads. Lane family csl."
                     },
                     {
                       "label": "Cisco ASA, FortiGate and F5 ASM: CommonSecurityLog",
                       "value": "csl-acs",
-                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads."
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Common Event Format solution reads. Lane family csl."
                     },
                     {
                       "label": "Syslog (Linux, Nutanix, Infoblox): Syslog",
                       "value": "syslog",
-                      "description": "Fills Syslog, the table Microsoft's Syslog solution reads."
+                      "description": "Fills Syslog, the table Microsoft's Syslog solution reads. Lane family syslog."
                     },
                     {
                       "label": "AWS CloudTrail: AWSCloudTrail",
                       "value": "aws-cloudtrail",
-                      "description": "Fills AWSCloudTrail, the table Microsoft's Amazon Web Services solution reads."
+                      "description": "Fills AWSCloudTrail, the table Microsoft's Amazon Web Services solution reads. Lane family cloud."
                     },
                     {
                       "label": "CrowdStrike Falcon hosts: CrowdStrikeHostsV2_CL",
                       "value": "crowdstrike-hosts",
-                      "description": "Fills CrowdStrikeHostsV2_CL, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads."
+                      "description": "Fills CrowdStrikeHostsV2_CL, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads, with Microsoft's own connector transformation. Lane family endpoint. Not a default: pick it only if you use its table."
                     },
                     {
                       "label": "ASIM Alert (Abstract findings): ASimAlertEventLogs",
@@ -490,6 +490,36 @@
                       "label": "ASIM User Management: ASimUserManagementActivityLogs",
                       "value": "asim-user-management",
                       "description": "Writes ASimUserManagementActivityLogs, read by Microsoft's built-in ASIM parser."
+                    },
+                    {
+                      "label": "Windows Security events: SecurityEvent",
+                      "value": "windows-securityevent",
+                      "description": "Fills SecurityEvent, the table Microsoft's Windows Security Events solution reads. Lane family windows: needs that family in Lane families. Opt-in: SecurityEvent rows are billed as Analytics data and feed the Windows Security Events rules, which can raise new incidents; the Defender for Servers Plan 2 allowance of 500 MB a day per server is documented for data the Azure Monitor Agent collects, so Abstract-delivered rows should be assumed to count in full. Not a default: pick it only if you use its table."
+                    },
+                    {
+                      "label": "CrowdStrike FDR (8 ASim tables): ASimAuthenticationEventLogs, ASimProcessEventLogs and 6 more ASim tables",
+                      "value": "crowdstrike-fdr",
+                      "description": "Fills ASimAuthenticationEventLogs, ASimProcessEventLogs and 6 more ASim tables, the table Microsoft's CrowdStrike Falcon Endpoint Protection solution reads, with Microsoft's own connector transformation. Lane family endpoint: needs that family in Lane families."
+                    },
+                    {
+                      "label": "AWS VPC Flow Logs: AWSVPCFlow",
+                      "value": "aws-vpcflow",
+                      "description": "Fills AWSVPCFlow, the table Microsoft's AWS VPC Flow Logs solution reads, with Microsoft's own connector transformation. Lane family cloud: needs that family in Lane families."
+                    },
+                    {
+                      "label": "Zscaler NSS web logs: CommonSecurityLog",
+                      "value": "zscaler-nss-web",
+                      "description": "Fills CommonSecurityLog, the table Microsoft's Zscaler Internet Access CCF solution reads. Lane family csl: needs that family in Lane families."
+                    },
+                    {
+                      "label": "Syslog (ISC BIND, Sophos XG, Veeam): Syslog",
+                      "value": "syslog-appliances",
+                      "description": "Fills Syslog, the table Microsoft's ISC Bind, Sophos XG Firewall, Veeam App solution reads. Lane family syslog: needs that family in Lane families."
+                    },
+                    {
+                      "label": "Cisco Umbrella (web, DNS, firewall): CiscoUmbrellaWebTraffic_CL, CiscoUmbrellaDNS_CL, CiscoUmbrellaCloudFirewall_CL",
+                      "value": "cisco-umbrella",
+                      "description": "Fills CiscoUmbrellaWebTraffic_CL, CiscoUmbrellaDNS_CL, CiscoUmbrellaCloudFirewall_CL, the table Microsoft's CiscoUmbrella solution reads, with Microsoft's own connector transformation. Lane family saas: needs that family in Lane families."
                     }
                   ],
                   "required": false
