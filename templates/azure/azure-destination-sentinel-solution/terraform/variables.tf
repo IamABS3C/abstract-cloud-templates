@@ -137,7 +137,7 @@ variable "oktaDomain" {
 variable "excludeNativeVendorsFromAsim" {
   type        = bool
   default     = true
-  description = "Stores each vendor event in one place. With a vendor in nativeVendors, an event that vendor's table takes is not also written to the ASim tables or the lake, and, with excludeAsimFromAbstractTable on, not to AbstractEventLogs_CL either. Without it the same Okta event lands in both ASimAuditEventLogs and OktaV2_CL and is billed twice. Turn it off only if you need that vendor in Microsoft's ASIM content as well as in the vendor's own solution. With it on, this solution's two analytics rules, the connector tile and ASim_AbstractEvent read that vendor's table, so they still see its events, but Microsoft's own ASIM rules and parsers do not. Find what a vendor lane takes: Logs, then query the vendor table, for example OktaV2_CL. Default: true. Example: true."
+  description = "Stores each vendor event in one place. With a vendor in nativeVendors, an event that vendor's table takes is not also written to the ASim tables or the lake, and, with excludeAsimFromAbstractTable on, not to AbstractEventLogs_CL either. Without it the same Okta event lands in both ASimAuditEventLogs and OktaV2_CL and is billed twice. Turn it off only if you need that vendor in Microsoft's ASIM content as well as in the vendor's own solution. With it on, this solution's event rules, the connector tile and ASim_AbstractEvent read that vendor's table, so they still see its events, but Microsoft's own ASIM rules and parsers do not. Find what a vendor lane takes: Logs, then query the vendor table, for example OktaV2_CL. Default: true. Example: true."
 }
 
 variable "deployDataConnectors" {

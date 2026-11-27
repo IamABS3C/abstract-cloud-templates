@@ -309,7 +309,7 @@
                 "type": "Microsoft.Common.CheckBox",
                 "label": "Workbook: Abstract Security for Microsoft Sentinel",
                 "defaultValue": true,
-                "toolTip": "What: two workbooks on Abstract's pipeline volume, reduction and cost. Portal: Microsoft Sentinel > Workbooks > My workbooks. When: keep on. Consequence: none on data; opened on demand.",
+                "toolTip": "What: one workbook with tabs for overview, sources and coverage, data health, security activity, detections and response, and cost and volume. Portal: Microsoft Sentinel > Workbooks > My workbooks. When: keep on. Consequence: none on data; opened on demand.",
                 "visible": "[equals(basics('depth'), 'all')]"
               },
               {

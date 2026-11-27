@@ -434,7 +434,7 @@ only ever adds its own items:
 - three automation rules (installed **disabled**, and scoped to the pack's two rules by
   rule ID, so they never act on your incidents);
 - the `ASim_AbstractEvent` function and three hunting queries (saved searches);
-- three workbooks;
+- one workbook, Abstract Security for Microsoft Sentinel;
 - three Logic App playbooks and their API connections;
 - two connector tiles, which are display only. The second one's instructions describe
   deploying an optional Logic App pull connector (`solution/connector/`), which writes

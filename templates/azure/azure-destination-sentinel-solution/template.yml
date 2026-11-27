@@ -10,7 +10,7 @@ summary: 'One Azure deployment sets up everything Abstract needs to deliver data
   logging. On the same rule it adds the routes you choose: Microsoft''s ASim tables, a store-once option, a cheap
   Auxiliary lake table, and vendor-native tables filled with Microsoft''s own connector transformation (Okta into
   OktaV2_CL). The Content hub package Abstract Security for Microsoft Sentinel is installed with it: a data connector
-  tile, the ASim_AbstractEvent parser, two analytics rules (disabled), three hunting queries, five workbooks, three
+  tile, the ASim_AbstractEvent parser, three analytics rules (disabled), three hunting queries, two workbooks, three
   playbooks and their automation rules. Every content item has its own switch.'
 formats:
 - bicep
@@ -318,7 +318,7 @@ parameters:
     takes is not also written to the ASim tables or the lake, and, with excludeAsimFromAbstractTable on, not to AbstractEventLogs_CL
     either. Without it the same Okta event lands in both ASimAuditEventLogs and OktaV2_CL and is billed twice. Turn it
     off only if you need that vendor in Microsoft''s ASIM content as well as in the vendor''s own solution. With it
-    on, this solution''s two analytics rules, the connector tile and ASim_AbstractEvent read that vendor''s table, so they still
+    on, this solution''s event rules, the connector tile and ASim_AbstractEvent read that vendor''s table, so they still
     see its events, but Microsoft''s own ASIM rules and parsers do not. Find what a vendor lane takes: Logs, then query the vendor table, for example OktaV2_CL. Default:
     true. Example: true.'
   default: true
