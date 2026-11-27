@@ -134,15 +134,46 @@
           },
           {
             "name": "ingestionStoppedWindowMinutes",
-            "type": "Microsoft.Common.Slider",
-            "label": "Ingestion stopped window (minutes)",
-            "min": 5,
-            "max": 1440,
-            "defaultValue": 60,
-            "showStepMarkers": false,
-            "toolTip": "Zero incoming messages for this long means the PRODUCER side broke \u2014 a deleted diagnostic setting, a revoked Send key, or a firewall change that blocked Azure Monitor's own delivery.",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Ingestion stopped window",
+            "defaultValue": "1 hour",
+            "toolTip": "Zero incoming messages for this long means the PRODUCER side broke \u2014 a deleted diagnostic setting, a revoked Send key, or a firewall change that blocked Azure Monitor's own delivery. Azure accepts only these windows for a metric alert.",
             "constraints": {
-              "required": true
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "5 minutes",
+                  "value": 5
+                },
+                {
+                  "label": "10 minutes",
+                  "value": 10
+                },
+                {
+                  "label": "15 minutes",
+                  "value": 15
+                },
+                {
+                  "label": "30 minutes",
+                  "value": 30
+                },
+                {
+                  "label": "1 hour",
+                  "value": 60
+                },
+                {
+                  "label": "6 hours",
+                  "value": 360
+                },
+                {
+                  "label": "12 hours",
+                  "value": 720
+                },
+                {
+                  "label": "1 day",
+                  "value": 1440
+                }
+              ]
             },
             "visible": true
           },

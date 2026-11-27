@@ -407,17 +407,17 @@
             {
               "name": "enableDefenderExport",
               "type": "Microsoft.Common.CheckBox",
-              "label": "Microsoft Defender for Cloud alerts \u2192 Event Hub",
+              "label": "Microsoft Defender for Cloud recommendations and alerts \u2192 Event Hub",
               "defaultValue": false,
-              "toolTip": "Defender for Cloud uses 'continuous export', another mechanism entirely. Enabling this gives Abstract the cloud-posture and workload-protection alert stream to correlate against raw resource activity."
+              "toolTip": "Defender for Cloud uses 'continuous export', another mechanism entirely. Enabling this gives Abstract the cloud-posture recommendations and workload-protection alerts to correlate against raw resource activity."
             },
             {
               "name": "defenderEventHubAuthorizationRuleId",
               "type": "Microsoft.Common.TextBox",
-              "label": "Event Hubs authorization rule ID (Defender \u2014 HUB level, not namespace)",
+              "label": "Event Hubs authorization rule ID (Defender \u2014 HUB level, with Send)",
               "visible": "[steps('additional').enableDefenderExport]",
               "placeholder": "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.EventHub/namespaces/<ns>/eventhubs/<hub>/authorizationRules/<rule>",
-              "toolTip": "Watch the shape \u2014 unlike every other policy in this pack, the Defender built-in wants a rule scoped to the HUB, not the namespace. Set perHubSasRules=true on the Abstract Event Hub source template to have one created.",
+              "toolTip": "Watch the shape \u2014 unlike every other policy in this pack, the Defender built-in wants a rule on the HUB itself, not the namespace rule, because continuous export lists only the hub's own rules. The foundation template creates one on its mdc hub (abstract-mdc-send, Send) and outputs its id as defenderForCloudSendRuleId: az deployment group show -g <resource-group> -n azure-foundation-event-hub --query properties.outputs.defenderForCloudSendRuleId.value -o tsv",
               "constraints": {
                 "required": "[steps('additional').enableDefenderExport]",
                 "regex": "^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.EventHub/namespaces/[^/]+/[Ee]vent[Hh]ubs/[^/]+/[Aa]uthorization[Rr]ules/[^/]+$",
@@ -435,6 +435,64 @@
                 "required": "[steps('additional').enableDefenderExport]",
                 "regex": "^[a-zA-Z0-9._()-]{1,90}$",
                 "validationMessage": "1-90 chars, valid resource group name."
+              }
+            },
+            {
+              "name": "defenderExportedDataTypes",
+              "type": "Microsoft.Common.DropDown",
+              "label": "Defender for Cloud data types to export",
+              "multiselect": true,
+              "selectAll": true,
+              "defaultValue": [
+                "Security recommendations",
+                "Security alerts"
+              ],
+              "visible": "[steps('additional').enableDefenderExport]",
+              "toolTip": "The built-in policy's own names. Recommendations and alerts stream as they change; the secure-score, compliance and snapshot types add volume.",
+              "constraints": {
+                "required": true,
+                "allowedValues": [
+                  {
+                    "label": "Security recommendations",
+                    "value": "Security recommendations"
+                  },
+                  {
+                    "label": "Security alerts",
+                    "value": "Security alerts"
+                  },
+                  {
+                    "label": "Overall secure score",
+                    "value": "Overall secure score"
+                  },
+                  {
+                    "label": "Secure score controls",
+                    "value": "Secure score controls"
+                  },
+                  {
+                    "label": "Regulatory compliance",
+                    "value": "Regulatory compliance"
+                  },
+                  {
+                    "label": "Overall secure score - snapshot",
+                    "value": "Overall secure score - snapshot"
+                  },
+                  {
+                    "label": "Secure score controls - snapshot",
+                    "value": "Secure score controls - snapshot"
+                  },
+                  {
+                    "label": "Regulatory compliance - snapshot",
+                    "value": "Regulatory compliance - snapshot"
+                  },
+                  {
+                    "label": "Security recommendations - snapshot",
+                    "value": "Security recommendations - snapshot"
+                  },
+                  {
+                    "label": "Security findings - snapshot",
+                    "value": "Security findings - snapshot"
+                  }
+                ]
               }
             },
             {
@@ -533,6 +591,7 @@
         "enableDefenderExport": "[steps('additional').enableDefenderExport]",
         "defenderEventHubAuthorizationRuleId": "[steps('additional').defenderEventHubAuthorizationRuleId]",
         "defenderExportResourceGroup": "[steps('additional').defenderExportResourceGroup]",
+        "defenderExportedDataTypes": "[steps('additional').defenderExportedDataTypes]",
         "defenderAlertSeverities": "[steps('additional').defenderAlertSeverities]"
       }
     }

@@ -104,9 +104,30 @@ param consumerStallWindowMinutes int = 30
 param minIncomingToAlert int = 100
 
 @description('Minutes with zero incoming messages before ingestion is considered stopped. This is the producer side - a deleted diagnostic setting, a revoked Send key, or a firewall change.')
-@minValue(5)
-@maxValue(1440)
+@allowed([
+  5
+  10
+  15
+  30
+  60
+  360
+  720
+  1440
+])
 param ingestionStoppedWindowMinutes int = 60
+
+// A metric alert's window is one of a fixed set of ISO 8601 durations, and PT60M is not one of them (measured
+// 2026-11-27: "Invalid time span. It must be one of [PT1M, PT5M, PT10M, PT15M, PT30M, PT1H, PT6H, PT12H, P1D]").
+var ingestionStoppedWindow = {
+  '5': 'PT5M'
+  '10': 'PT10M'
+  '15': 'PT15M'
+  '30': 'PT30M'
+  '60': 'PT1H'
+  '360': 'PT6H'
+  '720': 'PT12H'
+  '1440': 'P1D'
+}[string(ingestionStoppedWindowMinutes)]
 
 @description('Throttled requests over 5 minutes before alerting. Any sustained throttling means throughput units are saturated.')
 @minValue(1)
@@ -240,7 +261,7 @@ resource ingestionStopped 'Microsoft.Insights/metricAlerts@2018-03-01' = {
       ehNamespace.id
     ]
     evaluationFrequency: 'PT5M'
-    windowSize: 'PT${ingestionStoppedWindowMinutes}M'
+    windowSize: ingestionStoppedWindow
     targetResourceType: 'Microsoft.EventHub/namespaces'
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'

@@ -88,7 +88,7 @@ param hubPrefix string = 'abs'
 @description('Environment token used in auto-generated hub names (prod, staging, dev, ...).')
 param environment string = 'prod'
 
-@description('Log sources - one Event Hub is generated per entry when autoHubNaming = true. Typical sources: activity (Azure Activity Log), entra (Entra ID sign-in/audit), defender (Defender XDR streaming), m365, resource (Azure Resource Logs).')
+@description('Log sources - one Event Hub is generated per entry when autoHubNaming = true. Typical sources: activity (Azure Activity Log), entra (Entra ID sign-in/audit), defender (the Defender XDR Streaming API target, read by the Microsoft Defender XDR via Event Hub integration; the streaming setting itself is made in the Microsoft Defender portal, never by this template), mdc (Defender for Cloud continuous export, which also gets its own hub-level Send rule), intune, devops, resource (Azure Resource Logs).')
 param hubSources array = [
   'activity'
   'entra'
@@ -132,8 +132,19 @@ param sasRights array = [
   'Listen'
 ]
 
-@description('Also create a per-hub SAS rule with the same name/rights - a tighter blast radius than the namespace-level rule.')
+@description('Also create a per-hub SAS rule with the same name/rights - a tighter blast radius than the namespace-level rule. These are consumer (Listen) rules; the Send rule Defender for Cloud continuous export needs on its own hub is created separately, by defenderForCloudHubSource.')
 param perHubSasRules bool = false
+
+// Defender for Cloud continuous export writes with the key of an authorization rule ON THE HUB: its target picker
+// lists only the hub's own rules, and the built-in export policy (cdfcce10) takes a hub-level rule id. The
+// namespace-level abstract-diagnostics-send rule does not qualify, so the export's hub gets a rule of its own.
+// Send only, measured 2026-11-27: the built-in export policy built its export with a Send-only hub rule, and
+// Defender for Cloud assessments arrived on the hub through it (tools/templates/lab-evidence/azure-foundation-event-hub).
+@description('Source whose hub receives Defender for Cloud continuous export (default mdc). When autoHubNaming is on, enableSas is on and this source is in hubSources, its hub gets the hub-level rule defenderForCloudSendRuleName, whose id is the defenderForCloudSendRuleId output (the management-group policy template\'s defenderEventHubAuthorizationRuleId). Empty creates no rule.')
+param defenderForCloudHubSource string = 'mdc'
+
+@description('Name of the hub-level rule for Defender for Cloud continuous export.')
+param defenderForCloudSendRuleName string = 'abstract-mdc-send'
 
 @description('Create a dedicated Send-only SAS rule for LOG PRODUCERS (Azure diagnostic settings: Activity Log, Entra ID, Defender, resource logs). This is separate from the Listen-only Abstract consumer rule and is what the subscription Activity Log export uses. Requires local auth (enableSas = true).')
 param createDiagnosticsSendRule bool = true
@@ -397,6 +408,29 @@ resource diagnosticsSendRule 'Microsoft.EventHub/namespaces/authorizationRules@2
   }
 }
 
+// Hub-level rule for Defender for Cloud continuous export (see defenderForCloudHubSource).
+var mdcSource = toLower(trim(defenderForCloudHubSource))
+var createMdcRule = enableSas && autoHubNaming && !empty(mdcSource) && contains(map(cleanedSources, s => toLower(s)), mdcSource)
+var mdcHubName = toLower('${hubPrefix}-${environment}-${mdcSource}')
+
+resource mdcHub 'Microsoft.EventHub/namespaces/eventhubs@2024-01-01' existing = {
+  parent: ehNamespace
+  name: mdcHubName
+}
+
+resource mdcSendRule 'Microsoft.EventHub/namespaces/eventhubs/authorizationRules@2024-01-01' = if (createMdcRule) {
+  parent: mdcHub
+  name: defenderForCloudSendRuleName
+  properties: {
+    rights: [
+      'Send'
+    ]
+  }
+  dependsOn: [
+    hubs
+  ]
+}
+
 // ---------------------------------------------------------------------------
 // Checkpoint Storage Account + private blob container
 // Required by the Abstract consumer for checkpointing / lease management.
@@ -590,6 +624,10 @@ output privateEndpointEnabled bool = enablePrivateEndpoint
 // Activity Log template (templates/subscription/activitylog) and any resource
 // diagnostic setting. Falls back to a hint when local auth is disabled.
 output abstractDiagnosticsAuthRuleId string = (enableSas && createDiagnosticsSendRule) ? diagnosticsSendRule!.id : '(diagnostics Send rule not created - enableSas is false / local auth disabled)'
+
+// Hub-level rule id for Defender for Cloud continuous export: the management-group policy template's
+// defenderEventHubAuthorizationRuleId, or the policy picked on the Continuous export page.
+output defenderForCloudSendRuleId string = createMdcRule ? mdcSendRule.id : '(not created: add ${empty(mdcSource) ? 'mdc' : mdcSource} to hubSources, with autoHubNaming and enableSas on)'
 
 // Field-for-field answers for the Abstract integration modal
 // (docs.abstractsecurity.app -> Azure Event Hub -> Event Hub Connection Details)

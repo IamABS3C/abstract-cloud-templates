@@ -41,6 +41,7 @@ az group create -n RESOURCE_GROUP -l LOCATION   # skip if it exists
 - Decide the ingestion mode first; it determines whether createStorageAccount should be true
 - If the namespace firewall will deny by default, keep allowAzureServices true or Azure Monitor cannot deliver
 - Choose at least 4 partitions; partition count cannot be reduced later
+- The defender hub is the target of the Defender XDR Streaming API, read by the Microsoft Defender XDR via Event Hub integration. The streaming setting itself is made in the Microsoft Defender portal (Settings &gt; Microsoft Defender XDR &gt; Streaming API &gt; Add), never by this or any Azure template: it takes this namespace's resource ID (the namespaceId output) and the hub name, for example abs-prod-defender. Type the hub name; left blank, Defender creates one hub per table
 
 ## Cost
 
@@ -61,7 +62,7 @@ Throughput or processing units are a step charge for provisioned capacity. Auto-
 | `autoHubNaming` | bool | no | true = generate hub names as &lt;hubPrefix&gt;-&lt;environment&gt;-&lt;source&gt; from hubSources; false = use the eventHubs array verbatim. |  |
 | `hubPrefix` | string | no | Prefix for auto-generated hub names (e.g. "abs" -&gt; abs-prod-entra). |  |
 | `environment` | string | no | Environment token used in auto-generated hub names (prod, staging, dev, ...). |  |
-| `hubSources` | array | no | Log sources - one Event Hub is generated per entry when autoHubNaming = true. Typical sources: activity (Azure Activity Log), entra (Entra ID sign-in/audit), defender (Defender XDR streaming), m365, resource (Azure Resource Logs). |  |
+| `hubSources` | array | no | Log sources - one Event Hub is generated per entry when autoHubNaming = true. Typical sources: activity (Azure Activity Log), entra (Entra ID sign-in/audit), defender (the Defender XDR Streaming API target, read by the Microsoft Defender XDR via Event Hub integration; the streaming setting itself is made in the Microsoft Defender portal, never by this template), mdc (Defender for Cloud continuous export, which also gets its own hub-level Send rule), intune, devops, resource (Azure Resource Logs). |  |
 | `eventHubs` | array | no | Explicit hub definitions, used only when autoHubNaming = false: [{ name, partitionCount, retentionDays }]. |  |
 | `defaultPartitionCount` | int | no | Partition count for auto-generated hubs. Abstract docs recommend AT LEAST 4. Partitions cannot be reduced after creation; max 32 on Standard. |  |
 | `defaultRetentionDays` | int | no | Message retention in days for auto-generated hubs. Size this to ride out ingestion downtime/delay (Abstract docs). Standard allows 1-7; Basic is forced to 1. |  |
@@ -69,7 +70,9 @@ Throughput or processing units are a step charge for provisioned capacity. Auto-
 | `enableSas` | bool | no | Create SAS authorization rules for Connection String authentication in Abstract. When false, local (SAS) auth is fully DISABLED on the namespace and only Entra ID / RBAC works. |  |
 | `sasRuleName` | string | no | Name of the least-privilege SAS rule created at namespace level (and per hub when perHubSasRules = true). Prefer this over RootManageSharedAccessKey when pasting a connection string into Abstract. |  |
 | `sasRights` | array | no | Rights for the SAS rule. Listen is all Abstract needs to consume; include Send only if log producers will share the same rule. |  |
-| `perHubSasRules` | bool | no | Also create a per-hub SAS rule with the same name/rights - a tighter blast radius than the namespace-level rule. |  |
+| `perHubSasRules` | bool | no | Also create a per-hub SAS rule with the same name/rights - a tighter blast radius than the namespace-level rule. These are consumer (Listen) rules; the Send rule Defender for Cloud continuous export needs on its own hub is created separately, by defenderForCloudHubSource. |  |
+| `defenderForCloudHubSource` | string | no | Source whose hub receives Defender for Cloud continuous export (default mdc). When autoHubNaming is on, enableSas is on and this source is in hubSources, its hub gets the hub-level rule defenderForCloudSendRuleName, whose id is the defenderForCloudSendRuleId output (the management-group policy template's defenderEventHubAuthorizationRuleId). Empty creates no rule. |  |
+| `defenderForCloudSendRuleName` | string | no | Name of the hub-level rule for Defender for Cloud continuous export. |  |
 | `createDiagnosticsSendRule` | bool | no | Create a dedicated Send-only SAS rule for LOG PRODUCERS (Azure diagnostic settings: Activity Log, Entra ID, Defender, resource logs). This is separate from the Listen-only Abstract consumer rule and is what the subscription Activity Log export uses. Requires local auth (enableSas = true). |  |
 | `diagnosticsSendRuleName` | string | no | Name of the diagnostics SAS rule used by log producers / diagnostic settings. |  |
 | `diagnosticsRuleRights` | string | no | Rights on the diagnostics rule. ManageSendListen is what Microsoft documents as required for Event Hubs streaming and is the default; SendOnly is narrower but UNVERIFIED - if it does not work, every Azure log path silently collects nothing. See the comment above this parameter. |  |
@@ -108,6 +111,7 @@ Throughput or processing units are a step charge for provisioned capacity. Auto-
 
 - An Event Hubs namespace (Standard by default, TLS 1.2, Auto-Inflate on)
 - One hub per log source, auto-named &lt;hubPrefix&gt;-&lt;environment&gt;-&lt;source&gt; (defaults activity, entra, defender)
+- With mdc in hubSources: a hub-level Send rule abstract-mdc-send on that hub, for Defender for Cloud continuous export, emitted as defenderForCloudSendRuleId
 - A consumer group named abstract on every hub
 - A checkpoint storage account and private blob container for the Abstract consumer
 - A Listen SAS rule abstract-access at namespace level, and optional per-hub rules
@@ -139,6 +143,7 @@ Throughput or processing units are a step charge for provisioned capacity. Auto-
 - `safeModeEnabled`
 - `privateEndpointEnabled`
 - `abstractDiagnosticsAuthRuleId`
+- `defenderForCloudSendRuleId`
 - `abstractOnboarding`
 
 ## Example parameter profiles

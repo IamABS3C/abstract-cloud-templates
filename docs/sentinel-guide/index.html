@@ -905,9 +905,9 @@ window.WIZARD = {"groups": [{"id": "solution", "intro": "One template, azure-des
   /* A discovery report's table volumes. Accepts summary.tables (rows with TableName and BillableGBPerDay,
      as the inventory kit's tables.csv names them, or table / gbPerDay) or summary.volumes ({table: GB/day}).
      Never throws: anything unreadable is skipped, and a table the catalog does not know, or with no usable
-     volume, is listed in `unknown`. */
+     volume, is listed in `unknown`. `withData` lists every table with billable volume above zero, known or not. */
   function loadReport(summary) {
-    var out = { sources: [], volumes: {}, unknown: [] };
+    var out = { sources: [], volumes: {}, unknown: [], withData: [] };
     if (!summary || typeof summary !== "object") return out;
     var rows = [];
     if (Array.isArray(summary.tables)) {
@@ -925,6 +925,7 @@ window.WIZARD = {"groups": [{"id": "solution", "intro": "One template, azure-des
     var sources = [];
     rows.forEach(function (row) {
       var t = row[0], gb = row[1];
+      if (gb !== null && gb > 0 && out.withData.indexOf(t) < 0) out.withData.push(t);
       if (gb === null || gb < 0 || !known[t]) {
         if (out.unknown.indexOf(t) < 0) out.unknown.push(t);
         return;
@@ -1282,7 +1283,7 @@ window.WIZARD = {"groups": [{"id": "solution", "intro": "One template, azure-des
   var report = null;
   if (window.REPORT) {
     var r0 = PB.loadReport(window.REPORT);
-    report = { file: "Your discovery report", volumes: r0.volumes, sources: r0.sources, unknown: r0.unknown, tables: Object.keys(r0.volumes).length + r0.unknown.length };
+    report = { file: "Your discovery report", volumes: r0.volumes, sources: r0.sources, unknown: r0.unknown, withData: r0.withData, tables: Object.keys(r0.volumes).length + r0.unknown.length };
   } else {
     report = load(K_REPORT);
     if (!report || typeof report.volumes !== "object") report = null;
@@ -1506,10 +1507,24 @@ window.WIZARD = {"groups": [{"id": "solution", "intro": "One template, azure-des
     });
   }
 
+  // The numbers say what they are out of: every table in the report, the ones with billable data, and the matches.
+  function countLine(r) {
+    var withData = (r.withData || []).length, n = Object.keys(r.volumes).length;
+    return (r.tables || 0) + " tables, " + withData + " with billable data in the report's window; " + n +
+      (n === 1 ? " matches" : " match") + " this playbook's sources.";
+  }
+  function noMatchLine(r) {
+    var w = r.withData || [];
+    if (!w.length) return "<p>No table in this report has billable data in its window, so there is nothing to match yet.</p>";
+    var shown = w.slice(0, 8).map(esc).join(", ") + (w.length > 8 ? " and " + (w.length - 8) + " more" : "");
+    return "<p>The table" + (w.length === 1 ? " with data is " : "s with data are ") + shown +
+      ". None of them is a source this playbook covers.</p>";
+  }
+
   function renderReportState() {
     var html = report
-      ? "<p><b>Volumes from " + esc(report.file) + ".</b> " + Object.keys(report.volumes).length + " of its " + (report.tables || 0) +
-        " tables match this playbook's sources. <button type=\"button\" class=\"linkbtn\" data-clear-report>Clear</button></p>" +
+      ? "<p><b>Volumes from " + esc(report.file) + ".</b> " + countLine(report) +
+        ' <button type="button" class="linkbtn" data-clear-report>Clear</button></p>' +
         (report.context ? "<p>" + esc(report.context) + "</p>" : "")
       : '<p>No report loaded: the estimate uses <b>example</b> volumes. <a href="#discover-load">Load your report</a>.</p>';
     var p = $("plan-report");
@@ -1520,7 +1535,7 @@ window.WIZARD = {"groups": [{"id": "solution", "intro": "One template, azure-des
       ? html + (matches.length ? "<p>Tables found: " + matches.map(function (m) {
           var names = m.sources.map(function (id) { return esc(byId[id] ? byId[id].name : id); });
           return esc(m.table) + (m.shared ? " (one or more of " + names.join(", ") + ")" : " (" + names[0] + ")");
-        }).join("; ") + '. <a href="#plan">Open the plan</a>.</p>' : "<p>None of its tables match this playbook's sources.</p>")
+        }).join("; ") + '. <a href="#plan">Open the plan</a>.</p>' : noMatchLine(report))
       : "<p>No report loaded. The plan shows example volumes, labelled example.</p>";
   }
 
@@ -1556,8 +1571,16 @@ window.WIZARD = {"groups": [{"id": "solution", "intro": "One template, azure-des
   var input = $("report-file");
   if (input) input.addEventListener("change", function () {
     var files = Array.prototype.slice.call(input.files || []);
+    // A whole kit folder holds about 50 files; the plan reads only tables.csv and summary.json.
+    var skipped = 0, wanted = /^(tables\.csv|summary\.json)$/i;
+    if (files.length > 1) {
+      var keep = files.filter(function (f) { return wanted.test(f.name); });
+      if (keep.length) { skipped = files.length - keep.length; files = keep; }
+    }
+    var skipNote = skipped ? '<p class="fine">' + skipped + " other kit file" + (skipped === 1 ? " was" : "s were") +
+      " not needed here and " + (skipped === 1 ? "was" : "were") + " skipped.</p>" : "";
     Promise.all(files.map(function (f) { return readFile(f).then(function (t) { return { name: f.name, text: t }; }); })).then(function (all) {
-      var next = { file: "", volumes: {}, sources: [], unknown: [], tables: 0, context: "" };
+      var next = { file: "", volumes: {}, sources: [], unknown: [], withData: [], tables: 0, context: "" };
       var errors = [], names = [];
       all.forEach(function (f) {
         var t = (f.text || "").replace(/^﻿/, "");
@@ -1582,19 +1605,21 @@ window.WIZARD = {"groups": [{"id": "solution", "intro": "One template, azure-des
       if (!Object.keys(next.volumes).length && !next.unknown.length) {
         var d = $("report-status");
         if (d) d.innerHTML = "<p class=\"bad\">" + esc(errors.concat(next.context ? ["summary.json has run totals only. Add tables.csv for volumes per table."] : []).join(" ") ||
-          "No table volumes found.") + "</p>" + (next.context ? "<p>" + esc(next.context) + "</p>" : "");
+          "No table volumes found.") + "</p>" + (next.context ? "<p>" + esc(next.context) + "</p>" : "") + skipNote;
         return;
       }
       report = next;
       save(K_REPORT, report);
       renderPlan();
       if (errors.length) $("report-status").insertAdjacentHTML("beforeend", '<p class="bad">' + esc(errors.join(" ")) + "</p>");
+      if (skipNote) $("report-status").insertAdjacentHTML("beforeend", skipNote);
     });
   });
   function merge(into, rep) {
     Object.keys(rep.volumes).forEach(function (t) { into.volumes[t] = (into.volumes[t] || 0) + rep.volumes[t]; });
     rep.sources.forEach(function (s) { if (into.sources.indexOf(s) < 0) into.sources.push(s); });
     rep.unknown.forEach(function (s) { if (into.unknown.indexOf(s) < 0) into.unknown.push(s); });
+    (rep.withData || []).forEach(function (s) { if (into.withData.indexOf(s) < 0) into.withData.push(s); });
     into.tables += Object.keys(rep.volumes).length + rep.unknown.length;
   }
 

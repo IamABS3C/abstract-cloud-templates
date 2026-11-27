@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "10168214332908304023"
+      "templateHash": "8256600159045048883"
     }
   },
   "parameters": {
@@ -74,8 +74,16 @@
     "ingestionStoppedWindowMinutes": {
       "type": "int",
       "defaultValue": 60,
-      "minValue": 5,
-      "maxValue": 1440,
+      "allowedValues": [
+        5,
+        10,
+        15,
+        30,
+        60,
+        360,
+        720,
+        1440
+      ],
       "metadata": {
         "description": "Minutes with zero incoming messages before ingestion is considered stopped. This is the producer side - a deleted diagnostic setting, a revoked Send key, or a firewall change."
       }
@@ -118,6 +126,7 @@
     }
   },
   "variables": {
+    "ingestionStoppedWindow": "[createObject('5', 'PT5M', '10', 'PT10M', '15', 'PT15M', '30', 'PT30M', '60', 'PT1H', '360', 'PT6H', '720', 'PT12H', '1440', 'P1D')[string(parameters('ingestionStoppedWindowMinutes'))]]",
     "actions": "[if(empty(parameters('actionGroupId')), createArray(), createArray(createObject('actionGroupId', parameters('actionGroupId'))))]",
     "scheduledQueryActions": "[if(empty(parameters('actionGroupId')), createObject(), createObject('actionGroups', createArray(parameters('actionGroupId'))))]",
     "ruleState": "[if(parameters('createDisabled'), false(), true())]",
@@ -173,7 +182,7 @@
           "[resourceId('Microsoft.EventHub/namespaces', parameters('namespaceName'))]"
         ],
         "evaluationFrequency": "PT5M",
-        "windowSize": "[format('PT{0}M', parameters('ingestionStoppedWindowMinutes'))]",
+        "windowSize": "[variables('ingestionStoppedWindow')]",
         "targetResourceType": "Microsoft.EventHub/namespaces",
         "criteria": {
           "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",

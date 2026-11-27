@@ -1,0 +1,171 @@
+{
+ "frame": {
+  "title": "Two apps, one per Microsoft integration",
+  "subtitle": "App 1 reads the Office 365 Management APIs, App 2 reads Microsoft Graph; each is consented only to its own API",
+  "cloud_label": "Your Entra tenant",
+  "height": 600,
+  "abstract_y": 230,
+  "abstract_label": "Abstract platform",
+  "abstract_sublabel": "Microsoft 365 API and\nMicrosoft Graph API integrations"
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "Microsoft 365 and Graph apps",
+   "nodes": [
+    {
+     "id": "app1",
+     "label": "App 1: Microsoft 365",
+     "sublabel": "single tenant,\nno secret created",
+     "icon": "azure:identity/App_Registrations",
+     "x": 60,
+     "y": 130,
+     "builds": [
+      "Microsoft.Graph/applications@",
+      "abstract:microsoft-365-api"
+     ]
+    },
+    {
+     "id": "consent1",
+     "label": "Admin consent",
+     "sublabel": "ActivityFeed.Read\nActivityFeed.ReadDlp",
+     "icon": "azure:security/Keys",
+     "x": 330,
+     "y": 130,
+     "builds": [
+      "Microsoft.Graph/appRoleAssignedTo@",
+      "m365Consent"
+     ]
+    },
+    {
+     "id": "o365",
+     "label": "Office 365 Management APIs",
+     "sublabel": "audit and DLP\ncontent",
+     "icon": "azure:identity/Enterprise_Applications",
+     "x": 600,
+     "y": 130,
+     "existing": true
+    },
+    {
+     "id": "app2",
+     "label": "App 2: Microsoft Graph",
+     "sublabel": "single tenant,\nno secret created",
+     "icon": "azure:identity/App_Registrations",
+     "x": 60,
+     "y": 380,
+     "builds": [
+      "Microsoft.Graph/applications@",
+      "abstract:microsoft-graph-api"
+     ]
+    },
+    {
+     "id": "consent2",
+     "label": "Admin consent",
+     "sublabel": "19 read-only Graph\napplication permissions",
+     "icon": "azure:security/Keys",
+     "x": 330,
+     "y": 380,
+     "builds": [
+      "Microsoft.Graph/appRoleAssignedTo@",
+      "graphConsent"
+     ]
+    },
+    {
+     "id": "graph",
+     "label": "Microsoft Graph",
+     "sublabel": "sign-ins, audits, alerts,\nrisk, Intune, directory",
+     "icon": "azure:identity/Enterprise_Applications",
+     "x": 600,
+     "y": 380,
+     "existing": true
+    }
+   ],
+   "edges": [
+    {
+     "from": "app1",
+     "to": "consent1",
+     "label": "holds",
+     "tone": "amber",
+     "dashed": true
+    },
+    {
+     "from": "consent1",
+     "to": "o365",
+     "label": "on",
+     "tone": "amber",
+     "dashed": true
+    },
+    {
+     "from": "app2",
+     "to": "consent2",
+     "label": "holds",
+     "tone": "amber",
+     "dashed": true
+    },
+    {
+     "from": "consent2",
+     "to": "graph",
+     "label": "on",
+     "tone": "amber",
+     "dashed": true
+    },
+    {
+     "from": "o365",
+     "to": "abstract",
+     "label": "audit and DLP records (polled)",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.25
+     ]
+    },
+    {
+     "from": "graph",
+     "to": "abstract",
+     "label": "Graph records (polled)",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.5
+     ]
+    },
+    {
+     "from": "abstract",
+     "to": "app1",
+     "label": "signs in as App 1",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0.5,
+      0
+     ],
+     "entry": [
+      0.5,
+      0
+     ]
+    },
+    {
+     "from": "abstract",
+     "to": "app2",
+     "label": "signs in as App 2",
+     "tone": "amber",
+     "dashed": true,
+     "exit": [
+      0,
+      0.85
+     ],
+     "entry": [
+      0.5,
+      0
+     ]
+    }
+   ]
+  }
+ ]
+}

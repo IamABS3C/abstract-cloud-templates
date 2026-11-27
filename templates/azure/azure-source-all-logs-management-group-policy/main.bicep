@@ -23,7 +23,7 @@
 //   3. Azure SQL auditing -> Event Hub           BUILT-IN 9a04cb4d-..., per region
 //        SQL auditing is a separate feature from diagnostic settings, so the
 //        resource-log initiative does NOT cover it.
-//   4. Defender for Cloud alerts -> Event Hub    BUILT-IN cdfcce10-... (optional)
+//   4. Defender for Cloud export -> Event Hub    BUILT-IN cdfcce10-... (optional)
 //        Continuous export; also a separate mechanism from diagnostic settings.
 //
 //  THE REGION RULE (the single most important design constraint)
@@ -137,18 +137,31 @@ param enableSqlAuditing bool = false
 // ---------------------------------------------------------------------------
 // Stream 4 - Microsoft Defender for Cloud continuous export
 // ---------------------------------------------------------------------------
-@description('Also export Defender for Cloud alerts, recommendations and secure-score data to the Event Hub. Another separate mechanism (continuous export), not a diagnostic setting.')
+@description('Also export Defender for Cloud recommendations and alerts (defenderExportedDataTypes) to the Event Hub. Another separate mechanism (continuous export), not a diagnostic setting.')
 param enableDefenderExport bool = false
 
 @description('Resource group the Defender continuous-export resource is created in, inside every in-scope subscription.')
 param defenderExportResourceGroup string = 'rg-abstract-defender-export'
 
-@description('HUB-level Event Hubs authorization rule for the Defender export. Unlike the other policies here this one wants a rule scoped to the hub, not the namespace: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.EventHub/namespaces/{ns}/eventhubs/{hub}/authorizationRules/{rule}. Set perHubSasRules=true in main.bicep to have one created.')
+@description('HUB-level Event Hubs authorization rule with Send rights for the Defender export. Unlike the other policies here this one wants a rule on the hub itself, not the namespace rule: continuous export lists only the hub\'s own rules. Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.EventHub/namespaces/{ns}/eventhubs/{hub}/authorizationRules/{rule}. The foundation creates it on the mdc hub (abstract-mdc-send, Send) and emits its id as defenderForCloudSendRuleId. The policy reads the rule\'s key with listKeys, so the assignment identity needs that right on the namespace (the Grant step gives it).')
 param defenderEventHubAuthorizationRuleId string = ''
 
-@description('Defender for Cloud data types to export.')
+@description('Defender for Cloud data types to export, by the built-in policy cdfcce10\'s own names (anything else fails the assignment). The default streams recommendations and alerts; the secure-score, compliance and snapshot types add volume and are opt-in.')
+@allowed([
+  'Security recommendations'
+  'Security alerts'
+  'Overall secure score'
+  'Secure score controls'
+  'Regulatory compliance'
+  'Overall secure score - snapshot'
+  'Secure score controls - snapshot'
+  'Regulatory compliance - snapshot'
+  'Security recommendations - snapshot'
+  'Security findings - snapshot'
+])
 param defenderExportedDataTypes array = [
-  'Alerts'
+  'Security recommendations'
+  'Security alerts'
 ]
 
 @description('Alert severities exported from Defender for Cloud.')
@@ -509,7 +522,7 @@ resource defenderExportAssignment 'Microsoft.Authorization/policyAssignments@202
   }
   properties: {
     displayName: 'Abstract Security - Defender for Cloud export to Event Hub'
-    description: 'Continuous export of Defender for Cloud alerts to the Abstract Event Hub, on every in-scope subscription.'
+    description: 'Continuous export of Defender for Cloud recommendations and alerts to the Abstract Event Hub, on every in-scope subscription.'
     policyDefinitionId: builtIn.defenderExportToEventHub
     enforcementMode: enforcementMode
     parameters: {
@@ -531,7 +544,7 @@ resource defenderExportAssignment 'Microsoft.Authorization/policyAssignments@202
       // NOTE the shape difference: unlike every other policy here, this one takes a
       // HUB-level authorization rule resource ID as a single string
       // (/subscriptions/.../namespaces/{ns}/eventhubs/{hub}/authorizationRules/{rule}),
-      // not a namespace-level rule. Set perHubSasRules=true in main.bicep to create it.
+      // not a namespace-level rule, with Send rights.
       eventHubDetails: {
         value: defenderEventHubAuthorizationRuleId
       }

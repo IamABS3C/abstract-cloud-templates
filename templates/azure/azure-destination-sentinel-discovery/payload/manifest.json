@@ -1,12 +1,12 @@
 {
  "bundles": {
   "kit": {
-   "b64Chars": 52388,
+   "b64Chars": 52520,
    "files": [
     "Get-SentinelInventory.ps1",
     "az"
    ],
-   "sha256": "0ee0621fd750e562e79a08b526f6a3b8026882a758b846682f537377c48d2510"
+   "sha256": "5e8fe97b0d54e28e6ad0ba6487ef4290c68c26e05a0e505cf0bcd873fb72caa7"
   },
   "report": {
    "b64Chars": 56256,
@@ -21,7 +21,7 @@
   }
  },
  "sources": {
-  "kit/Get-SentinelInventory.ps1": "15e3c9d3ed11b4835709a79e38fb329342af3969a7611a2cbd47fe25be10ba48",
+  "kit/Get-SentinelInventory.ps1": "9fc90acf14ca08e9af75aff0e90e37d321c181d1827a8cd8aa51ff44cb2c6c54",
   "kit/az": "c4a54123cdbfd10c02e2592e7eef17cb7d372c021a7d6c008ba9745688ba2977",
   "report/abstract-logo-black.svg": "5cac2cff0ac62e8b4befffaa63e15c3973c8888578cf56a4760c49bf3ff75b9c",
   "report/asim_builtin_sources.json": "48dc2f94c96cf02423b4637800b5c44986fe0cb9688fe2edaac5e3720ac2b293",

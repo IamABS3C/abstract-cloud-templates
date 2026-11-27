@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "15799060236753571950"
+      "templateHash": "17044402044225571730"
     }
   },
   "parameters": {
@@ -135,7 +135,7 @@
       "type": "bool",
       "defaultValue": false,
       "metadata": {
-        "description": "Also export Defender for Cloud alerts, recommendations and secure-score data to the Event Hub. Another separate mechanism (continuous export), not a diagnostic setting."
+        "description": "Also export Defender for Cloud recommendations and alerts (defenderExportedDataTypes) to the Event Hub. Another separate mechanism (continuous export), not a diagnostic setting."
       }
     },
     "defenderExportResourceGroup": {
@@ -149,16 +149,29 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "HUB-level Event Hubs authorization rule for the Defender export. Unlike the other policies here this one wants a rule scoped to the hub, not the namespace: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.EventHub/namespaces/{ns}/eventhubs/{hub}/authorizationRules/{rule}. Set perHubSasRules=true in main.bicep to have one created."
+        "description": "HUB-level Event Hubs authorization rule with Send rights for the Defender export. Unlike the other policies here this one wants a rule on the hub itself, not the namespace rule: continuous export lists only the hub's own rules. Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.EventHub/namespaces/{ns}/eventhubs/{hub}/authorizationRules/{rule}. The foundation creates it on the mdc hub (abstract-mdc-send, Send) and emits its id as defenderForCloudSendRuleId. The policy reads the rule's key with listKeys, so the assignment identity needs that right on the namespace (the Grant step gives it)."
       }
     },
     "defenderExportedDataTypes": {
       "type": "array",
       "defaultValue": [
-        "Alerts"
+        "Security recommendations",
+        "Security alerts"
+      ],
+      "allowedValues": [
+        "Security recommendations",
+        "Security alerts",
+        "Overall secure score",
+        "Secure score controls",
+        "Regulatory compliance",
+        "Overall secure score - snapshot",
+        "Secure score controls - snapshot",
+        "Regulatory compliance - snapshot",
+        "Security recommendations - snapshot",
+        "Security findings - snapshot"
       ],
       "metadata": {
-        "description": "Defender for Cloud data types to export."
+        "description": "Defender for Cloud data types to export, by the built-in policy cdfcce10's own names (anything else fails the assignment). The default streams recommendations and alerts; the secure-score, compliance and snapshot types add volume and are opt-in."
       }
     },
     "defenderAlertSeverities": {
@@ -526,7 +539,7 @@
       },
       "properties": {
         "displayName": "Abstract Security - Defender for Cloud export to Event Hub",
-        "description": "Continuous export of Defender for Cloud alerts to the Abstract Event Hub, on every in-scope subscription.",
+        "description": "Continuous export of Defender for Cloud recommendations and alerts to the Abstract Event Hub, on every in-scope subscription.",
         "policyDefinitionId": "[variables('builtIn').defenderExportToEventHub]",
         "enforcementMode": "[parameters('enforcementMode')]",
         "parameters": {

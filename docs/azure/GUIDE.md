@@ -12,6 +12,10 @@ Answer the questions below. Each answer leads to the next question or to one pla
   Activity Log, resource logs and Entra ID sign-in and audit logs, through an Event Hub.
 - **Send data out of Abstract, into Microsoft Sentinel or an Event Hub of yours** → [Send data out of Abstract: where should Abstract deliver its events?](#send-data-out-of-abstract-where-should-abstract-deliver-its-events)
   The other direction. Nothing here collects Azure logs.
+- **Collect virtual network flow logs** → [Collect virtual network flow logs](#collect-virtual-network-flow-logs)
+  Network Watcher writes flow logs to Blob Storage, and the Azure Network Flow Log integration reads them through a storage queue. No Event Hub is involved.
+- **Collect Microsoft 365 audit and Microsoft Graph data** → [Collect Microsoft 365 audit and Microsoft Graph data](#collect-microsoft-365-audit-and-microsoft-graph-data)
+  The Microsoft 365 API and Microsoft Graph API integrations read their APIs directly, each signed in as its own Entra app registration. No Event Hub is involved.
 - **Give Abstract API access in each subscription, with an app registration** → [Does your organization require every Azure change to be made through Azure Policy?](#does-your-organization-require-every-azure-change-to-be-made-through-azure-policy)
   For Abstract integrations that read the Microsoft Graph or Microsoft 365 APIs. Each subscription gets its own Entra app, with a role on that subscription and Graph read permissions, which are always tenant-wide. Event Hub collection needs none of this.
 
@@ -794,7 +798,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
 **Why this way:** One Logic App with one pre-consented identity creates each subscription's app registration when you onboard it, so there is one identity to audit.
 
-[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=2.0). To send someone this plan, share this link.
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=4.0). To send someone this plan, share this link.
 
 **Not chosen:** The Policy variant: it runs a privileged script inside every subscription.
 
@@ -857,7 +861,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
 **Why this way:** Policy cannot create Entra objects, so the assignment runs a deployment script as a pre-consented identity in each subscription.
 
-[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=2.1). To send someone this plan, share this link.
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=4.1). To send someone this plan, share this link.
 
 **Not chosen:** The Logic App: preferred, but not delivered through Policy.
 
@@ -942,6 +946,165 @@ Abstract writes processed events to a system of yours. This does not bring any A
    ```
 
    **Check:** The assignment is gone, no Abstract app registration remains, and Revoke ends with "everything recorded is undone".
+
+## Collect Microsoft 365 audit and Microsoft Graph data
+
+**Fits when:** You want Exchange, SharePoint, Teams, Purview DLP and Entra audit records from the Office 365 Management Activity API, and sign-ins, alerts, incidents, risk, Intune and the directory from Microsoft Graph.
+
+**Why this way:** Two integrations, two app registrations: each app is consented only to the API its own integration calls, so each secret rotates on its own schedule and Entra's sign-in logs name the integration that called.
+
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=3). To send someone this plan, share this link.
+
+**Not chosen:** One app for both integrations: it would hold both APIs' permissions behind one secret.
+
+**Not chosen:** The per-subscription app registration plans: they give an app a role in each subscription, and these APIs are tenant-wide.
+
+1. **Check first.** Cloud admin, in Azure Cloud Shell (Bash).
+
+   Take stock first. These commands are read-only: who you are signed in as, your management groups and subscriptions, the diagnostic settings and Event Hub namespaces you already have, and whether Entra ID already streams its logs somewhere.
+
+   ```bash
+   az account show --query "{tenant:tenantId, user:user.name, subscription:name}" -o table
+   az account management-group list --query "[].{name:name, displayName:displayName}" -o table
+   az account list --query "[].{name:name, id:id, state:state}" -o table
+   az monitor diagnostic-settings subscription list --query "value[].{name:name,hub:eventHubName,cats:logs[?enabled].category}" -o json
+   az eventhubs namespace list --query "[].{name:name, group:resourceGroup, sku:sku.name}" -o table
+   az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01"
+   ```
+
+   **Check:** The output names the management group and subscriptions you will cover, and the diagnostic-settings and aadiam lists show any setting that already sends to an Event Hub (a non-empty hub or eventHubName). Note those: Azure allows at most 5 diagnostic settings per subscription, per resource and on the tenant.
+
+2. **Set up.** A Privileged Role Administrator or Global Administrator, with Contributor on any resource group, in Azure Cloud Shell (Bash).
+
+   Create both apps with their permissions and admin consent in one deployment. App 1 gets the Office 365 Management APIs permissions ActivityFeed.Read and ActivityFeed.ReadDlp; App 2 gets every Microsoft Graph application permission a Graph API switch uses (19, all read-only). The resource group is only where the deployment runs: nothing is created in it. The preview cannot show Microsoft Graph objects, so it lists no changes; the outputs after --yes are the proof.
+
+   > **This changes:** Creates two app registrations and grants tenant-wide admin consent to read-only application permissions. ActivityFeed.ReadDlp can return the sensitive values a DLP policy detected.
+
+   Template: [Microsoft 365 and Graph apps](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-access-m365-graph-apps)
+
+   ```bash
+   [ -d ~/abstract-cloud-templates ] || git clone --depth 1 https://github.com/IamABS3C/abstract-cloud-templates ~/abstract-cloud-templates
+   cd ~/abstract-cloud-templates/templates/azure
+   az group create --name <resource-group> --location <region>   # skip if it exists
+   ./azure-access-m365-graph-apps/deploy.sh <resource-group>
+   ./azure-access-m365-graph-apps/deploy.sh <resource-group> --yes
+   ```
+
+   **Check:** az deployment group show -g &lt;resource-group> -n azure-access-m365-graph-apps --query properties.outputs.abstractOnboarding.value shows a tenant ID and a client ID for each integration, and grantedGraphPermissions lists 19 permissions.
+
+3. **Set up.** The same administrator, in Microsoft Entra admin center.
+
+   The template creates no secret. On each app, open App registrations > All applications > the app > Certificates & secrets > New client secret, choose an expiry, and copy the Value straight into the Abstract form in the next steps. Entra shows it once; never paste it into a terminal, chat or ticket.
+
+   **Check:** Each app lists one client secret with the expiry you chose.
+
+4. **Verify.** Abstract admin, in Abstract console.
+
+   Add the Microsoft 365 API integration with App 1's values. Unified audit logging must be on in the Microsoft Purview portal (Audit); a tenant where it was just turned on can take 24 to 48 hours to produce records.
+
+   ```bash
+   az rest --method get --url https://graph.microsoft.com/v1.0/organization --query "value[0].verifiedDomains[?isInitial].name" -o tsv
+   ```
+
+   In Abstract, add the **Microsoft 365 API** integration and fill in:
+
+   - **Tenant Domain:** The initial *.onmicrosoft.com domain, from the command
+   - **Tenant ID:** The tenantId output
+   - **Client ID:** The m365ClientId output
+   - **Client Secret:** App 1's secret, from the Entra admin center
+   - **Event Query Delay:** 3, the default; 5 for a busy tenant
+
+   **Check:** The integration saves without an authentication or permission error.
+
+5. **Verify.** Abstract admin, in Abstract console.
+
+   Add the Microsoft Graph API integration with App 2's values. Turn on only the switches your licences support: Abstract checks each switch that is on against the API when you save.
+
+   In Abstract, add the **Microsoft Graph API** integration and fill in:
+
+   - **Tenant ID:** The tenantId output
+   - **Client ID:** The graphClientId output
+   - **Client Secret:** App 2's secret, from the Entra admin center
+   - **Event Delay:** 5, the default
+
+   **Check:** The integration saves without an authentication or permission error.
+
+6. **Clean up.** The same administrator, in Abstract console, then Cloud Shell.
+
+   Delete both integrations in Abstract first, then both apps. Deleting the resource group does not delete them; an app deleted this way stays in Entra's deleted applications until it is purged.
+
+   ```bash
+   az ad app delete --id <m365ClientId>
+   az ad app delete --id <graphClientId>
+   ```
+
+   **Check:** az ad app show --id &lt;m365ClientId> and az ad app show --id &lt;graphClientId> both report that the app does not exist.
+
+## Collect virtual network flow logs
+
+**Fits when:** You want to see which addresses talked to which, on which ports, and whether each flow was allowed or denied.
+
+**Why this way:** Flow logs cannot go to an Event Hub. Network Watcher writes them to a storage account in the network's region, Event Grid puts a message on a queue for every write, and the integration reads the queue, then only the new part of each file.
+
+[Open this plan in the onboarding app](https://main.d3lmkfjwtkmxi3.amplifyapp.com/setup/azure?a=2). To send someone this plan, share this link.
+
+**Not chosen:** The Event Hub foundation: Azure does not stream flow logs to an Event Hub.
+
+1. **Check first.** Cloud admin, in Azure Cloud Shell (Bash).
+
+   Take stock first. These commands are read-only: who you are signed in as, your management groups and subscriptions, the diagnostic settings and Event Hub namespaces you already have, and whether Entra ID already streams its logs somewhere.
+
+   ```bash
+   az account show --query "{tenant:tenantId, user:user.name, subscription:name}" -o table
+   az account management-group list --query "[].{name:name, displayName:displayName}" -o table
+   az account list --query "[].{name:name, id:id, state:state}" -o table
+   az monitor diagnostic-settings subscription list --query "value[].{name:name,hub:eventHubName,cats:logs[?enabled].category}" -o json
+   az eventhubs namespace list --query "[].{name:name, group:resourceGroup, sku:sku.name}" -o table
+   az rest --method get --url "https://management.azure.com/providers/microsoft.aadiam/diagnosticSettings?api-version=2017-04-01"
+   ```
+
+   **Check:** The output names the management group and subscriptions you will cover, and the diagnostic-settings and aadiam lists show any setting that already sends to an Event Hub (a non-empty hub or eventHubName). Note those: Azure allows at most 5 diagnostic settings per subscription, per resource and on the tenant.
+
+2. **Set up.** Cloud admin with Contributor on a resource group in the region and Network Contributor on the networks and NetworkWatcherRG, in Azure Cloud Shell (Bash).
+
+   One deployment per region. It creates a storage account kept for flow logs, the queue abstract-flowlogs, an Event Grid subscription that announces each flow log write on the queue, and one virtual network flow log per network you list. The first command lists the region's networks. A network with no running workload writes nothing, so expect files only once traffic flows; in the lab, with a VM already sending traffic, the first message was on the queue 3 minutes after the deploy.
+
+   Template: [Virtual network flow logs to Abstract](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-source-vnet-flow-logs)
+
+   ```bash
+   [ -d ~/abstract-cloud-templates ] || git clone --depth 1 https://github.com/IamABS3C/abstract-cloud-templates ~/abstract-cloud-templates
+   cd ~/abstract-cloud-templates/templates/azure
+   az resource list --resource-type Microsoft.Network/virtualNetworks --query "[?location=='<region>'].id" -o tsv
+   az group create --name <resource-group> --location <region>   # skip if it exists
+   ./azure-source-vnet-flow-logs/deploy.sh <resource-group> --parameters 'virtualNetworkIds=["<vnet-id>"]'
+   ./azure-source-vnet-flow-logs/deploy.sh <resource-group> --parameters 'virtualNetworkIds=["<vnet-id>"]' --yes
+   ```
+
+   **Check:** az storage message peek --queue-name abstract-flowlogs --account-name &lt;storageAccountName> --auth-mode key --num-messages 1 returns a message once traffic has flowed. --auth-mode key reads the account key, which Contributor can; --auth-mode login needs a Storage Queue Data role.
+
+3. **Verify.** Abstract admin, with a Cloud admin to copy the connection string, in Abstract console, then the Azure portal.
+
+   Add one Azure Network Flow Log integration per storage account. The connection string is a secret: copy it in the Azure portal (Storage accounts > the account > Security + networking > Access keys > key1 > Connection string) and paste it straight into Abstract, never into a terminal, chat or ticket.
+
+   In Abstract, add the **Azure Network Flow Log** integration and fill in:
+
+   - **Storage Account Connection String:** key1's connection string, copied in the portal
+   - **Container Name:** insights-logs-flowlogflowevent (the containerName output)
+   - **Queue Name:** abstract-flowlogs (the queueName output)
+
+   **Check:** The integration saves, and the queue stays near empty while traffic flows.
+
+4. **Clean up.** Cloud admin, in Abstract console, then Cloud Shell.
+
+   Delete the integration in Abstract first. Then each flow log, which lives in the Network Watcher's resource group, and last the resource group with the storage account, queue and Event Grid topic.
+
+   ```bash
+   az network watcher flow-log list --location <region> --query "[?starts_with(name, 'abstract-')].name" -o tsv
+   az network watcher flow-log delete --location <region> --name <flow-log-name>
+   az group delete --name <resource-group>
+   ```
+
+   **Check:** az network watcher flow-log list --location &lt;region> lists no abstract- flow log, and the resource group is gone.
 
 ## Other templates
 

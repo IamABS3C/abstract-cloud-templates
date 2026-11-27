@@ -82,7 +82,8 @@ parameters:
   type: array
   required: false
   description: "Entra ID log categories to stream. Defaults to the security-relevant set that\nevery Abstract\
-    \ Entra detection is built on.\n\nLicensing / availability notes (revised 2026-08-26 against Microsoft's\
+    \ Entra detection is built on. MicrosoftGraphActivityLogs is not in\nthe default; enableGraphActivityLogs\
+    \ adds it.\n\nLicensing / availability notes (revised 2026-08-26 against Microsoft's\
     \ own\nlicensing table - the previous note overstated the P1 requirement):\n  AuditLogs, SignInLogs\
     \        - available on Entra ID FREE. Microsoft's\n                                 monitoring-and-health\
     \ licensing table lists\n                                 both as \"Yes\" for Free and for P1/P2.\n\
@@ -127,7 +128,15 @@ parameters:
   - UserRiskEvents
   - RiskyServicePrincipals
   - ServicePrincipalRiskEvents
-  - MicrosoftGraphActivityLogs
+- name: enableGraphActivityLogs
+  type: bool
+  required: false
+  description: 'Also stream MicrosoftGraphActivityLogs (every Microsoft Graph API call in the tenant). Off
+    by default: it is high volume and grows steeply with user count (Microsoft publishes about 1,000 GiB a
+    month and 4.8 million Event Hubs messages a month at 100,000 users), so it can dominate a namespace. Turn
+    it on once the identity hub is sized for it. Needs Entra ID P1 or P2. Listing it in entraLogCategories
+    has the same effect.'
+  default: false
 outputs:
 - diagnosticSettingName
 - eventHubName
@@ -143,8 +152,9 @@ verify:
   healthy: Incoming Messages non-zero on the identity hub; zero for under 24 hours is expected.
 - check: Sign-in events parse as Entra events, not generic Activity Log
   healthy: A sampled sign-in event has user, IP and result populated.
-cost: The setting is free; volume into the hub is the charge. MicrosoftGraphActivityLogs grows steeply
-  with user count and can dominate a namespace, so size for it deliberately.
+cost: 'The setting is free; volume into the hub is the charge. MicrosoftGraphActivityLogs is off by default
+  because it grows steeply with user count (about 1,000 GiB a month at 100,000 users, per Microsoft) and can
+  dominate a namespace; size the identity hub for it before turning on enableGraphActivityLogs.'
 when_to_use: 'Always, and early: sign-in and audit logs carry the identity detections customers care about.'
 when_not_to_use: Microsoft Graph API or Microsoft 365 unified-audit collection, which are API-pull integrations
   behind an app registration and use no Event Hub.

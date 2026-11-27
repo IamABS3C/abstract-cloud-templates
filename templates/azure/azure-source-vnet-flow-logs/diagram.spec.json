@@ -1,0 +1,129 @@
+{
+ "frame": {
+  "title": "Flow logs reach Abstract through Blob Storage and a queue",
+  "subtitle": "Network Watcher writes flow logs to storage; Event Grid announces each write on a queue Abstract reads",
+  "cloud_label": "Your subscription, one region",
+  "height": 600,
+  "abstract_y": 200,
+  "abstract_sublabel": "reads the queue, then the\nnew part of each file",
+  "integration_y": 470
+ },
+ "theme": "dark",
+ "pages": [
+  {
+   "name": "VNet flow logs",
+   "nodes": [
+    {
+     "id": "vnet",
+     "label": "Virtual networks",
+     "sublabel": "the networks you list,\nunchanged",
+     "icon": "azure:networking/Virtual_Networks",
+     "x": 60,
+     "y": 170,
+     "existing": true
+    },
+    {
+     "id": "flowlog",
+     "label": "VNet flow log",
+     "sublabel": "one per network, in\nNetworkWatcherRG",
+     "icon": "azure:networking/Network_Watcher",
+     "x": 330,
+     "y": 170,
+     "builds": [
+      "Microsoft.Network/networkWatchers/flowLogs"
+     ]
+    },
+    {
+     "id": "storage",
+     "label": "Storage account",
+     "sublabel": "container insights-logs-\nflowlogflowevent",
+     "icon": "azure:storage/Storage_Accounts",
+     "x": 600,
+     "y": 170,
+     "builds": [
+      "Microsoft.Storage/storageAccounts@"
+     ]
+    },
+    {
+     "id": "topic",
+     "label": "Event Grid topic",
+     "sublabel": "system topic; Blob\nCreated in the flow\nlog container only",
+     "icon": "azure:integration/System_Topic",
+     "x": 870,
+     "y": 170,
+     "builds": [
+      "Microsoft.EventGrid/systemTopics@",
+      "Microsoft.EventGrid/systemTopics/eventSubscriptions@"
+     ]
+    },
+    {
+     "id": "queue",
+     "label": "Storage queue",
+     "sublabel": "abstract-flowlogs",
+     "icon": "azure:general/Storage_Queue",
+     "x": 870,
+     "y": 430,
+     "builds": [
+      "Microsoft.Storage/storageAccounts/queueServices/queues@"
+     ]
+    }
+   ],
+   "edges": [
+    {
+     "from": "vnet",
+     "to": "flowlog",
+     "label": "flows"
+    },
+    {
+     "from": "flowlog",
+     "to": "storage",
+     "label": "writes PT1H.json"
+    },
+    {
+     "from": "storage",
+     "to": "topic",
+     "label": "Blob Created"
+    },
+    {
+     "from": "topic",
+     "to": "queue",
+     "label": "one message per write",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0.5,
+      0
+     ]
+    },
+    {
+     "from": "queue",
+     "to": "abstract",
+     "label": "which file changed",
+     "exit": [
+      1,
+      0.5
+     ],
+     "entry": [
+      0,
+      0.75
+     ]
+    },
+    {
+     "from": "storage",
+     "to": "abstract",
+     "label": "new blocks of the file",
+     "exit": [
+      0.5,
+      0
+     ],
+     "entry": [
+      0.5,
+      0
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -85,6 +85,15 @@ parameters:
   description: Minutes with zero incoming messages before ingestion is considered stopped. This is the
     producer side - a deleted diagnostic setting, a revoked Send key, or a firewall change.
   default: 60
+  allowed:
+  - 5
+  - 10
+  - 15
+  - 30
+  - 60
+  - 360
+  - 720
+  - 1440
 - name: throttleThreshold
   type: int
   required: false

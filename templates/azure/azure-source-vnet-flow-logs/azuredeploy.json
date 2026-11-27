@@ -1,0 +1,279 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.47.16.16243",
+      "templateHash": "1283108525806220462"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Region of the storage account, the Event Grid topic and the flow logs. Must be the region of every virtual network in virtualNetworkIds and of the Network Watcher."
+      }
+    },
+    "virtualNetworkIds": {
+      "type": "array",
+      "metadata": {
+        "description": "Resource IDs of the virtual networks to log, all in this region and this subscription. One flow log is created per network."
+      }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "defaultValue": "",
+      "maxLength": 24,
+      "metadata": {
+        "description": "Storage account to create for the flow logs and the queue. Empty generates absflow<hash>. 3-24 lowercase letters and digits, globally unique."
+      }
+    },
+    "queueName": {
+      "type": "string",
+      "defaultValue": "abstract-flowlogs",
+      "metadata": {
+        "description": "Queue the Event Grid subscription writes to. Enter it in the Queue Name field of the Abstract integration."
+      }
+    },
+    "systemTopicName": {
+      "type": "string",
+      "defaultValue": "abstract-flowlogs-topic",
+      "metadata": {
+        "description": "Name of the Event Grid system topic on the storage account."
+      }
+    },
+    "networkWatcherName": {
+      "type": "string",
+      "defaultValue": "[format('NetworkWatcher_{0}', parameters('location'))]",
+      "metadata": {
+        "description": "Network Watcher of this region. Azure creates NetworkWatcher_<region> in NetworkWatcherRG the first time a virtual network is created in a region."
+      }
+    },
+    "networkWatcherResourceGroup": {
+      "type": "string",
+      "defaultValue": "NetworkWatcherRG",
+      "metadata": {
+        "description": "Resource group of the Network Watcher; the flow logs are created there."
+      }
+    },
+    "retentionDays": {
+      "type": "int",
+      "defaultValue": 7,
+      "minValue": 0,
+      "maxValue": 365,
+      "metadata": {
+        "description": "Days Azure keeps flow log files in the storage account (0 keeps them forever). Abstract reads each record within minutes of the write, so this is your own retention, not Abstract's."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Tags applied to the storage account and the Event Grid topic."
+      }
+    }
+  },
+  "variables": {
+    "flowLogContainer": "insights-logs-flowlogflowevent",
+    "accountName": "[if(empty(parameters('storageAccountName')), take(format('absflow{0}', uniqueString(resourceGroup().id, parameters('location'))), 24), parameters('storageAccountName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('accountName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true,
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": true
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/queueServices",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', variables('accountName'), 'default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('accountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', variables('accountName'), 'default', parameters('queueName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/queueServices', variables('accountName'), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.EventGrid/systemTopics",
+      "apiVersion": "2022-06-15",
+      "name": "[parameters('systemTopicName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "source": "[resourceId('Microsoft.Storage/storageAccounts', variables('accountName'))]",
+        "topicType": "Microsoft.Storage.StorageAccounts"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('accountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.EventGrid/systemTopics/eventSubscriptions",
+      "apiVersion": "2022-06-15",
+      "name": "[format('{0}/{1}', parameters('systemTopicName'), parameters('queueName'))]",
+      "properties": {
+        "eventDeliverySchema": "EventGridSchema",
+        "filter": {
+          "includedEventTypes": [
+            "Microsoft.Storage.BlobCreated"
+          ],
+          "subjectBeginsWith": "[format('/blobServices/default/containers/{0}/', variables('flowLogContainer'))]"
+        },
+        "destination": {
+          "endpointType": "StorageQueue",
+          "properties": {
+            "resourceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('accountName'))]",
+            "queueName": "[parameters('queueName')]"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('accountName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/queueServices/queues', variables('accountName'), 'default', parameters('queueName'))]",
+        "[resourceId('Microsoft.EventGrid/systemTopics', parameters('systemTopicName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "abstract-vnet-flow-logs",
+      "resourceGroup": "[parameters('networkWatcherResourceGroup')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "networkWatcherName": {
+            "value": "[parameters('networkWatcherName')]"
+          },
+          "virtualNetworkIds": {
+            "value": "[parameters('virtualNetworkIds')]"
+          },
+          "storageId": {
+            "value": "[resourceId('Microsoft.Storage/storageAccounts', variables('accountName'))]"
+          },
+          "retentionDays": {
+            "value": "[parameters('retentionDays')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "9127457733974043741"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "networkWatcherName": {
+              "type": "string"
+            },
+            "virtualNetworkIds": {
+              "type": "array"
+            },
+            "storageId": {
+              "type": "string"
+            },
+            "retentionDays": {
+              "type": "int"
+            }
+          },
+          "resources": [
+            {
+              "copy": {
+                "name": "flowLog",
+                "count": "[length(parameters('virtualNetworkIds'))]"
+              },
+              "type": "Microsoft.Network/networkWatchers/flowLogs",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', parameters('networkWatcherName'), take(format('abstract-{0}', last(split(parameters('virtualNetworkIds')[copyIndex()], '/'))), 80))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "targetResourceId": "[parameters('virtualNetworkIds')[copyIndex()]]",
+                "storageId": "[parameters('storageId')]",
+                "enabled": true,
+                "format": {
+                  "type": "JSON",
+                  "version": 2
+                },
+                "retentionPolicy": {
+                  "days": "[parameters('retentionDays')]",
+                  "enabled": "[greater(parameters('retentionDays'), 0)]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "flowLogIds": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('virtualNetworkIds'))]",
+                "input": "[resourceId('Microsoft.Network/networkWatchers/flowLogs', parameters('networkWatcherName'), take(format('abstract-{0}', last(split(parameters('virtualNetworkIds')[copyIndex()], '/'))), 80))]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('accountName'))]",
+        "[resourceId('Microsoft.EventGrid/systemTopics/eventSubscriptions', parameters('systemTopicName'), parameters('queueName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "storageAccountName": {
+      "type": "string",
+      "value": "[variables('accountName')]"
+    },
+    "containerName": {
+      "type": "string",
+      "value": "[variables('flowLogContainer')]"
+    },
+    "queueName": {
+      "type": "string",
+      "value": "[parameters('queueName')]"
+    },
+    "flowLogIds": {
+      "type": "array",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('networkWatcherResourceGroup')), 'Microsoft.Resources/deployments', 'abstract-vnet-flow-logs'), '2025-04-01').outputs.flowLogIds.value]"
+    },
+    "abstractOnboarding": {
+      "type": "object",
+      "value": {
+        "integration": "Azure Network Flow Log",
+        "storageAccountConnectionString": "[format('Portal: Storage accounts > {0} > Security + networking > Access keys > key1 > Connection string. It is a secret: copy it from the portal straight into Abstract.', variables('accountName'))]",
+        "containerName": "[variables('flowLogContainer')]",
+        "queueName": "[parameters('queueName')]"
+      }
+    }
+  }
+}

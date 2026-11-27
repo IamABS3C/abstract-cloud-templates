@@ -64,10 +64,10 @@ Azure Policy and diagnostic settings are free; the volume they switch on is not.
 | `resourceTypeList` | array | no | Restrict the resource-log initiative to specific resource types. Empty = every supported type (recommended). |  |
 | `diagnosticSettingName` | string | no | Name given to the diagnostic settings the policy creates. Pick something recognisable so operators know not to delete it by hand. |  |
 | `enableSqlAuditing` | bool | no | Also enable Azure SQL server auditing to the Event Hub. SQL auditing is NOT a diagnostic setting, so the resource-log initiative does not cover it. |  |
-| `enableDefenderExport` | bool | no | Also export Defender for Cloud alerts, recommendations and secure-score data to the Event Hub. Another separate mechanism (continuous export), not a diagnostic setting. |  |
+| `enableDefenderExport` | bool | no | Also export Defender for Cloud recommendations and alerts (defenderExportedDataTypes) to the Event Hub. Another separate mechanism (continuous export), not a diagnostic setting. |  |
 | `defenderExportResourceGroup` | string | no | Resource group the Defender continuous-export resource is created in, inside every in-scope subscription. |  |
-| `defenderEventHubAuthorizationRuleId` | string | no | HUB-level Event Hubs authorization rule for the Defender export. Unlike the other policies here this one wants a rule scoped to the hub, not the namespace: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.EventHub/namespaces/{ns}/eventhubs/{hub}/authorizationRules/{rule}. Set perHubSasRules=true in main.bicep to have one created. | `az eventhubs eventhub authorization-rule list -g <resource-group> --namespace-name <namespace> --eventhub-name <hub> --query [].id -o tsv` |
-| `defenderExportedDataTypes` | array | no | Defender for Cloud data types to export. |  |
+| `defenderEventHubAuthorizationRuleId` | string | no | HUB-level Event Hubs authorization rule with Send rights for the Defender export. Unlike the other policies here this one wants a rule on the hub itself, not the namespace rule: continuous export lists only the hub's own rules. Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.EventHub/namespaces/{ns}/eventhubs/{hub}/authorizationRules/{rule}. The foundation creates it on the mdc hub (abstract-mdc-send, Send) and emits its id as defenderForCloudSendRuleId. The policy reads the rule's key with listKeys, so the assignment identity needs that right on the namespace (the Grant step gives it). | `az deployment group show -g <resource-group> -n azure-foundation-event-hub --query properties.outputs.defenderForCloudSendRuleId.value -o tsv` |
+| `defenderExportedDataTypes` | array | no | Defender for Cloud data types to export, by the built-in policy cdfcce10's own names (anything else fails the assignment). The default streams recommendations and alerts; the secure-score, compliance and snapshot types add volume and are opt-in. |  |
 | `defenderAlertSeverities` | array | no | Alert severities exported from Defender for Cloud. |  |
 
 ## Permissions
@@ -84,7 +84,7 @@ Azure Policy and diagnostic settings are free; the volume they switch on is not.
 - A custom DeployIfNotExists policy definition and assignment for Activity Log to Event Hub (no Microsoft built-in exists for it)
 - One assignment of the built-in resource-log initiative per region
 - One assignment of the built-in Azure SQL auditing policy per region
-- An optional Defender for Cloud continuous-export assignment
+- An optional Defender for Cloud continuous-export assignment (recommendations and alerts by default)
 - A system-assigned managed identity per assignment, with role assignments at the management group for remediation
 
 ## Never touches

@@ -30,6 +30,8 @@ permissions:
 creates:
 - An Event Hubs namespace (Standard by default, TLS 1.2, Auto-Inflate on)
 - One hub per log source, auto-named <hubPrefix>-<environment>-<source> (defaults activity, entra, defender)
+- 'With mdc in hubSources: a hub-level Send rule abstract-mdc-send on that hub, for Defender for Cloud continuous
+  export, emitted as defenderForCloudSendRuleId'
 - A consumer group named abstract on every hub
 - A checkpoint storage account and private blob container for the Abstract consumer
 - A Listen SAS rule abstract-access at namespace level, and optional per-hub rules
@@ -50,6 +52,11 @@ prerequisites:
 - If the namespace firewall will deny by default, keep allowAzureServices true or Azure Monitor cannot
   deliver
 - Choose at least 4 partitions; partition count cannot be reduced later
+- 'The defender hub is the target of the Defender XDR Streaming API, read by the Microsoft Defender XDR via
+  Event Hub integration. The streaming setting itself is made in the Microsoft Defender portal (Settings >
+  Microsoft Defender XDR > Streaming API > Add), never by this or any Azure template: it takes this namespace''s
+  resource ID (the namespaceId output) and the hub name, for example abs-prod-defender. Type the hub name; left
+  blank, Defender creates one hub per table'
 parameters:
 - name: location
   type: string
@@ -128,8 +135,11 @@ parameters:
   type: array
   required: false
   description: 'Log sources - one Event Hub is generated per entry when autoHubNaming = true. Typical
-    sources: activity (Azure Activity Log), entra (Entra ID sign-in/audit), defender (Defender XDR streaming),
-    m365, resource (Azure Resource Logs).'
+    sources: activity (Azure Activity Log), entra (Entra ID sign-in/audit), defender (the Defender XDR Streaming
+    API target, read by the Microsoft Defender XDR via Event Hub integration; the streaming setting itself
+    is made in the Microsoft Defender portal, never by this template), mdc (Defender for Cloud
+    continuous export, which also gets its own hub-level Send rule), intune, devops, resource (Azure Resource
+    Logs).'
   default:
   - activity
   - entra
@@ -185,8 +195,22 @@ parameters:
   type: bool
   required: false
   description: Also create a per-hub SAS rule with the same name/rights - a tighter blast radius than
-    the namespace-level rule.
+    the namespace-level rule. These are consumer (Listen) rules; the Send rule Defender for Cloud continuous
+    export needs on its own hub is created separately, by defenderForCloudHubSource.
   default: false
+- name: defenderForCloudHubSource
+  type: string
+  required: false
+  description: Source whose hub receives Defender for Cloud continuous export (default mdc). When autoHubNaming
+    is on, enableSas is on and this source is in hubSources, its hub gets the hub-level rule defenderForCloudSendRuleName,
+    whose id is the defenderForCloudSendRuleId output (the management-group policy template's defenderEventHubAuthorizationRuleId).
+    Empty creates no rule.
+  default: mdc
+- name: defenderForCloudSendRuleName
+  type: string
+  required: false
+  description: Name of the hub-level rule for Defender for Cloud continuous export.
+  default: abstract-mdc-send
 - name: createDiagnosticsSendRule
   type: bool
   required: false
@@ -392,6 +416,7 @@ outputs:
 - safeModeEnabled
 - privateEndpointEnabled
 - abstractDiagnosticsAuthRuleId
+- defenderForCloudSendRuleId
 - abstractOnboarding
 abstract:
   integration: azure_eventhub

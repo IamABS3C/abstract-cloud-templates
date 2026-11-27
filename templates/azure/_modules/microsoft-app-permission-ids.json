@@ -1,0 +1,28 @@
+{
+  "_source": "Application permission (app role) ids, read from the Microsoft Graph (00000003-0000-0000-c000-000000000000) and Office 365 Management APIs (c5393580-f805-4401-95e8-94b7a6ef2fc2) service principals with az ad sp show on 2026-11-27. First-party app role ids are the same in every tenant. Graph: the permissions microsoft_graph_api 1.8.3 asks for, switch by switch; Office 365: what microsoft_365_api 0.0.35 asks for.",
+  "graph": {
+    "AuditLog.Read.All": "b0afded3-3588-46d8-8b3d-9842eff778da",
+    "Policy.Read.All": "246dd0d5-5bd0-4def-940b-0421030a5b68",
+    "Directory.Read.All": "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
+    "SecurityAlert.Read.All": "472e4a4d-bb4a-4026-98d1-0b0d74cb74a5",
+    "SecurityIncident.Read.All": "45cc0394-e837-488b-a098-1918f48d186c",
+    "DeviceManagementApps.Read.All": "7a6ee1e7-141e-4cec-ae74-d9db155731ff",
+    "DeviceManagementManagedDevices.Read.All": "2f51be20-0bb4-4fed-bf7b-db946066c75e",
+    "IdentityRiskEvent.Read.All": "6e472fd1-ad78-48da-a0f0-97ab2c6b769e",
+    "IdentityRiskyUser.Read.All": "dc5007c0-2d7d-4c42-879c-2dab87571379",
+    "ServiceHealth.Read.All": "79c261e0-fe76-4144-aad5-bdc68fbe4037",
+    "SecurityIdentitiesHealth.Read.All": "f8dcd971-5d83-4e1e-aa95-ef44611ad351",
+    "SecurityEvents.Read.All": "bf394140-e372-4bf9-a898-299cfc7564e5",
+    "Reports.Read.All": "230c1aed-a721-4c5d-9cb4-a90514e508ef",
+    "AiEnterpriseInteraction.Read.All": "839c90ab-5771-41ee-aef8-a562e8487c1e",
+    "User.Read.All": "df021288-bdef-4463-88db-98f22de89214",
+    "RoleManagement.Read.Directory": "483bed4a-2ad3-4361-a73b-c83ccdbdc53c",
+    "Application.Read.All": "9a5d68dd-52b0-4cc2-bd40-abcf44ac3a30",
+    "GroupMember.Read.All": "98830695-27a2-44f7-8c18-0c3ebc9698f6",
+    "Device.Read.All": "7438b122-aefc-4978-80ed-43db9fcc7715"
+  },
+  "office365Management": {
+    "ActivityFeed.Read": "594c1fb6-4f81-4475-ae41-0c394909246c",
+    "ActivityFeed.ReadDlp": "4807a72c-ad38-4250-94c9-4eabfe26cd55"
+  }
+}

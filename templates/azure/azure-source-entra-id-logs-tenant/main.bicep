@@ -61,7 +61,8 @@ param eventHubName string = 'abs-prod-entra'
 
 @description('''
 Entra ID log categories to stream. Defaults to the security-relevant set that
-every Abstract Entra detection is built on.
+every Abstract Entra detection is built on. MicrosoftGraphActivityLogs is not in
+the default; enableGraphActivityLogs adds it.
 
 Licensing / availability notes (revised 2026-08-26 against Microsoft's own
 licensing table - the previous note overstated the P1 requirement):
@@ -125,8 +126,12 @@ param entraLogCategories array = [
   'UserRiskEvents'
   'RiskyServicePrincipals'
   'ServicePrincipalRiskEvents'
-  'MicrosoftGraphActivityLogs'
 ]
+
+@description('Also stream MicrosoftGraphActivityLogs (every Microsoft Graph API call in the tenant). Off by default: it is high volume and grows steeply with user count (Microsoft publishes about 1,000 GiB a month and 4.8 million Event Hubs messages a month at 100,000 users), so it can dominate a namespace. Turn it on once the identity hub is sized for it. Needs Entra ID P1 or P2. Listing it in entraLogCategories has the same effect.')
+param enableGraphActivityLogs bool = false
+
+var streamedCategoryList = union(entraLogCategories, enableGraphActivityLogs ? [ 'MicrosoftGraphActivityLogs' ] : [])
 
 // ---------------------------------------------------------------------------
 // The tenant-level Entra diagnostic setting.
@@ -138,7 +143,7 @@ resource entraDiagnostics 'microsoft.aadiam/diagnosticSettings@2017-04-01' = {
   properties: {
     eventHubAuthorizationRuleId: eventHubAuthorizationRuleId
     eventHubName: eventHubName
-    logs: [for category in entraLogCategories: {
+    logs: [for category in streamedCategoryList: {
       category: category
       enabled: true
     }]
@@ -147,7 +152,7 @@ resource entraDiagnostics 'microsoft.aadiam/diagnosticSettings@2017-04-01' = {
 
 output diagnosticSettingName string = entraDiagnostics.name
 output eventHubName string = eventHubName
-output streamedCategories array = entraLogCategories
+output streamedCategories array = streamedCategoryList
 
 output abstractOnboarding object = {
   scope: 'Microsoft Entra ID tenant - one setting covers the whole organisation'

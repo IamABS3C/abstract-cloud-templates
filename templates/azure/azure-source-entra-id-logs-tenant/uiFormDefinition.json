@@ -118,10 +118,9 @@
                 "RiskyUsers",
                 "UserRiskEvents",
                 "RiskyServicePrincipals",
-                "ServicePrincipalRiskEvents",
-                "MicrosoftGraphActivityLogs"
+                "ServicePrincipalRiskEvents"
               ],
-              "toolTip": "The default set is what every Abstract Entra detection is built on. MicrosoftGraphActivityLogs is high volume but the single best source for 'what did this token actually do'.",
+              "toolTip": "The default set is what every Abstract Entra detection is built on. MicrosoftGraphActivityLogs (every Graph API call) is off by default because it is high volume and can dominate a namespace; add it once the identity hub is sized for it.",
               "constraints": {
                 "required": true,
                 "allowedValues": [

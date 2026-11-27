@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "389193308612955011"
+      "templateHash": "10097298639529638785"
     }
   },
   "parameters": {
@@ -109,7 +109,7 @@
         "defender"
       ],
       "metadata": {
-        "description": "Log sources - one Event Hub is generated per entry when autoHubNaming = true. Typical sources: activity (Azure Activity Log), entra (Entra ID sign-in/audit), defender (Defender XDR streaming), m365, resource (Azure Resource Logs)."
+        "description": "Log sources - one Event Hub is generated per entry when autoHubNaming = true. Typical sources: activity (Azure Activity Log), entra (Entra ID sign-in/audit), defender (the Defender XDR Streaming API target, read by the Microsoft Defender XDR via Event Hub integration; the streaming setting itself is made in the Microsoft Defender portal, never by this template), mdc (Defender for Cloud continuous export, which also gets its own hub-level Send rule), intune, devops, resource (Azure Resource Logs)."
       }
     },
     "eventHubs": {
@@ -177,7 +177,21 @@
       "type": "bool",
       "defaultValue": false,
       "metadata": {
-        "description": "Also create a per-hub SAS rule with the same name/rights - a tighter blast radius than the namespace-level rule."
+        "description": "Also create a per-hub SAS rule with the same name/rights - a tighter blast radius than the namespace-level rule. These are consumer (Listen) rules; the Send rule Defender for Cloud continuous export needs on its own hub is created separately, by defenderForCloudHubSource."
+      }
+    },
+    "defenderForCloudHubSource": {
+      "type": "string",
+      "defaultValue": "mdc",
+      "metadata": {
+        "description": "Source whose hub receives Defender for Cloud continuous export (default mdc). When autoHubNaming is on, enableSas is on and this source is in hubSources, its hub gets the hub-level rule defenderForCloudSendRuleName, whose id is the defenderForCloudSendRuleId output (the management-group policy template's defenderEventHubAuthorizationRuleId). Empty creates no rule."
+      }
+    },
+    "defenderForCloudSendRuleName": {
+      "type": "string",
+      "defaultValue": "abstract-mdc-send",
+      "metadata": {
+        "description": "Name of the hub-level rule for Defender for Cloud continuous export."
       }
     },
     "createDiagnosticsSendRule": {
@@ -422,7 +436,10 @@
     "storageRoleMap": {
       "Storage Blob Data Contributor": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
       "Storage Blob Data Owner": "b7e6dc6d-f1e8-4753-8033-0f276bb0955b"
-    }
+    },
+    "mdcSource": "[toLower(trim(parameters('defenderForCloudHubSource')))]",
+    "createMdcRule": "[and(and(and(parameters('enableSas'), parameters('autoHubNaming')), not(empty(variables('mdcSource')))), contains(map(variables('cleanedSources'), lambda('s', toLower(lambdaVariables('s')))), variables('mdcSource')))]",
+    "mdcHubName": "[toLower(format('{0}-{1}-{2}', parameters('hubPrefix'), parameters('environment'), variables('mdcSource')))]"
   },
   "resources": [
     {
@@ -537,6 +554,21 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.EventHub/namespaces', parameters('namespaceName'))]"
+      ]
+    },
+    {
+      "condition": "[variables('createMdcRule')]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs/authorizationRules",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}/{2}', parameters('namespaceName'), variables('mdcHubName'), parameters('defenderForCloudSendRuleName'))]",
+      "properties": {
+        "rights": [
+          "Send"
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces', parameters('namespaceName'))]",
+        "hubs"
       ]
     },
     {
@@ -803,6 +835,10 @@
     "abstractDiagnosticsAuthRuleId": {
       "type": "string",
       "value": "[if(and(parameters('enableSas'), parameters('createDiagnosticsSendRule')), resourceId('Microsoft.EventHub/namespaces/authorizationRules', parameters('namespaceName'), parameters('diagnosticsSendRuleName')), '(diagnostics Send rule not created - enableSas is false / local auth disabled)')]"
+    },
+    "defenderForCloudSendRuleId": {
+      "type": "string",
+      "value": "[if(variables('createMdcRule'), resourceId('Microsoft.EventHub/namespaces/eventhubs/authorizationRules', parameters('namespaceName'), variables('mdcHubName'), parameters('defenderForCloudSendRuleName')), format('(not created: add {0} to hubSources, with autoHubNaming and enableSas on)', if(empty(variables('mdcSource')), 'mdc', variables('mdcSource'))))]"
     },
     "abstractOnboarding": {
       "type": "object",

@@ -1,0 +1,134 @@
+id: azure-source-vnet-flow-logs
+title: Virtual network flow logs to Abstract
+cloud: azure
+role: source
+scope: resource-group
+summary: "Flow logs never pass through an Event Hub: Network Watcher writes them to Blob Storage. This template builds the path the Azure Network Flow Log integration reads, for the virtual networks of one region: a storage account kept for flow logs with a queue, an Event Grid subscription that puts a message on the queue each time a flow log file is written, and one virtual network flow log per network. Abstract reads the queue, then only the new part of each file."
+formats:
+- bicep
+- arm
+- script
+permissions:
+- role: Contributor
+  where: The target resource group
+  why: 'Deployer: Create the storage account, queue, Event Grid system topic and subscription.'
+- role: Network Contributor
+  where: The Network Watcher's resource group (NetworkWatcherRG) and the virtual networks
+  why: 'Deployer: Create a flow log on each virtual network in the region''s Network Watcher.'
+- role: Microsoft.Insights resource provider registered
+  where: The subscription
+  why: 'Network Watcher: Flow logs need it; register it once with az provider register --namespace Microsoft.Insights.'
+- role: The storage account's connection string (shared key)
+  where: The flow log storage account
+  why: 'Abstract: Reads the queue and the flow log blobs; the Azure Network Flow Log integration signs in
+    with the connection string.'
+creates:
+- A StorageV2 account kept for flow logs (TLS 1.2, no public blob access), default name absflow<hash>
+- A storage queue abstract-flowlogs
+- An Event Grid system topic on the account, and a subscription that sends Blob Created events in the
+  flow log container to the queue (Event Grid schema)
+- One virtual network flow log (format version 2) per network in virtualNetworkIds, in the region's Network
+  Watcher; Network Watcher creates the container insights-logs-flowlogflowevent on the first write
+never_touches:
+- The virtual networks, their subnets, network security groups and traffic
+- Existing flow logs, including network security group flow logs
+- Traffic analytics and Log Analytics workspaces
+- Any other storage account
+prerequisites:
+- 'One deployment per region: every network in virtualNetworkIds, the storage account and the Network Watcher
+  share a region'
+- The region's Network Watcher exists (Azure creates NetworkWatcher_<region> in NetworkWatcherRG when the
+  first virtual network is created there)
+- The Microsoft.Insights and Microsoft.EventGrid resource providers are registered on the subscription
+- A network logs only when traffic flows; a network with no running workload writes no file and puts no
+  message on the queue
+parameters:
+- name: location
+  type: string
+  required: false
+  description: Region of the storage account, the Event Grid topic and the flow logs. Must be the region
+    of every virtual network in virtualNetworkIds and of the Network Watcher.
+  default: '[resourceGroup().location]'
+- name: virtualNetworkIds
+  type: array
+  required: true
+  description: Resource IDs of the virtual networks to log, all in this region and this subscription. One
+    flow log is created per network.
+  example:
+  - /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-network/providers/Microsoft.Network/virtualNetworks/vnet-prod-eastus
+  find_it: az resource list --resource-type Microsoft.Network/virtualNetworks --query "[?location=='<region>'].id" -o tsv
+- name: storageAccountName
+  type: string
+  required: false
+  description: Storage account to create for the flow logs and the queue. Empty generates absflow<hash>.
+    3-24 lowercase letters and digits, globally unique.
+  default: ''
+- name: queueName
+  type: string
+  required: false
+  description: Queue the Event Grid subscription writes to. Enter it in the Queue Name field of the Abstract
+    integration.
+  default: abstract-flowlogs
+- name: systemTopicName
+  type: string
+  required: false
+  description: Name of the Event Grid system topic on the storage account.
+  default: abstract-flowlogs-topic
+- name: networkWatcherName
+  type: string
+  required: false
+  description: Network Watcher of this region. Azure creates NetworkWatcher_<region> in NetworkWatcherRG
+    the first time a virtual network is created in a region.
+  default: "[format('NetworkWatcher_{0}', parameters('location'))]"
+  find_it: az network watcher list --query "[?location=='<region>'].{name:name,group:resourceGroup}" -o table
+- name: networkWatcherResourceGroup
+  type: string
+  required: false
+  description: Resource group of the Network Watcher; the flow logs are created there.
+  default: NetworkWatcherRG
+- name: retentionDays
+  type: int
+  required: false
+  description: Days Azure keeps flow log files in the storage account (0 keeps them forever). Abstract reads
+    each record within minutes of the write, so this is your own retention, not Abstract's.
+  default: 7
+- name: tags
+  type: object
+  required: false
+  description: Tags applied to the storage account and the Event Grid topic.
+  default: {}
+outputs:
+- storageAccountName
+- containerName
+- queueName
+- flowLogIds
+- abstractOnboarding
+abstract:
+  integration: azure_network_flow
+  parameters_from_outputs:
+    container_name: outputs.containerName
+    queue_name: outputs.queueName
+verify:
+- check: A flow log exists and is enabled for each network
+  command: az network watcher flow-log list --location <region> --query "[].{name:name,enabled:enabled,target:targetResourceId}"
+    -o table
+  healthy: One abstract-<network> flow log per network, enabled.
+- check: Flow log files are being written (--auth-mode key reads the account key, which Contributor can; --auth-mode
+    login needs a Storage Blob or Queue Data role, which Owner alone does not give)
+  command: az storage blob list --account-name <storageAccountName> --container-name insights-logs-flowlogflowevent
+    --auth-mode key --query "length(@)"
+  healthy: A count above zero once traffic has flowed; the container appears on the first write.
+- check: The queue receives a message for each write
+  command: az storage message peek --queue-name abstract-flowlogs --account-name <storageAccountName> --auth-mode
+    key --num-messages 1
+  healthy: A base64 message whose JSON has eventType Microsoft.Storage.BlobCreated and a data.url in the
+    flow log container. After Abstract is reading, the queue stays near empty.
+cost: Network Watcher charges per GB of flow logs collected, and the storage account for what it keeps (retentionDays).
+  Event Grid and the queue add a small charge per operation. Volume follows traffic, and busy networks write
+  a lot.
+when_to_use: Network flow visibility (who talked to whom, allowed or denied) for virtual networks, read by
+  the Azure Network Flow Log integration.
+when_not_to_use: Activity Log, resource logs and Entra ID, which stream through the Event Hub foundation.
+  Existing network security group flow logs can also be read by the same integration; this template creates
+  virtual network flow logs, which Microsoft recommends.
+live_test: canary
