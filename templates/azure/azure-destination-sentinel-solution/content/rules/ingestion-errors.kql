@@ -1,0 +1,16 @@
+// Abstract Security - Ingestion errors.
+// One alert per data collection rule, stream and operation that logged errors on the Abstract stream in the last hour:
+// events Azure refused (schema, size or transformation errors). The data plane turns on DCR error logging, which writes
+// DCRLogErrors; the empty datatable keeps the rule valid in a workspace where that table does not exist yet.
+let _now = now();
+let lookback = 1h;
+union isfuzzy=true DCRLogErrors,
+    (datatable(TimeGenerated: datetime, InputStreamId: string, OperationName: string, Message: string, _ResourceId: string)[])
+| where TimeGenerated > _now - lookback
+// contains, not has: as a filter, has matches whole terms only, and "Abstract" is not a whole term of
+// "Custom-AbstractEventLogs_CL" (measured 2026-11-27: `where DataType has 'Abstract'` 0 rows, contains 212).
+| where InputStreamId contains "Abstract"
+| summarize Errors = count(), FirstError = min(TimeGenerated), LastError = max(TimeGenerated), SampleMessage = take_any(Message)
+    by DcrResourceId = _ResourceId, InputStreamId, OperationName
+| extend DcrName = tostring(split(DcrResourceId, "/")[-1]), SentinelScope_CF = ""
+| project LastError, DcrName, InputStreamId, OperationName, Errors, FirstError, SampleMessage, DcrResourceId, SentinelScope_CF

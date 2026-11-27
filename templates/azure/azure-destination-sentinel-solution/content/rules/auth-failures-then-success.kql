@@ -12,17 +12,18 @@ let auth = union isfuzzy=true
         | project TimeGenerated, AbstractEventId = acs_id, SrcIpAddr = coalesce(source_ipv4, source_ipv6, source_address),
             ActorUsername = coalesce(user_name, user_id), EventProduct = product,
             EventResult = case(_outcome in ("success", "succeeded", "allowed", "allow"), "Success",
-                               _outcome in ("failure", "failed", "fail", "denied", "blocked", "deny"), "Failure", "NA")),
+                               _outcome in ("failure", "failed", "fail", "denied", "blocked", "deny"), "Failure", "NA"),
+            SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", ""))),
     (ASimAuthenticationEventLogs
         | where TimeGenerated > ago(lookback)
         | where isnotnull(AdditionalFields.AbstractEventId)
         | project TimeGenerated, AbstractEventId = tostring(AdditionalFields.AbstractEventId), SrcIpAddr,
-            ActorUsername = TargetUsername, EventProduct, EventResult),
+            ActorUsername = TargetUsername, EventProduct, EventResult, SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", ""))),
     (OktaV2_CL
         | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'okta')
         | where TimeGenerated > ago(lookback)
         | where EventOriginalType has_any ("user.session.start", "user.authentication")
-        | project TimeGenerated, AbstractEventId = EventOriginalUid, SrcIpAddr, ActorUsername, EventProduct = "Okta", EventResult)
+        | project TimeGenerated, AbstractEventId = EventOriginalUid, SrcIpAddr, ActorUsername, EventProduct = "Okta", EventResult, SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", "")))
     | extend _key = iff(isempty(AbstractEventId), strcat(tostring(TimeGenerated), SrcIpAddr, ActorUsername, EventResult), AbstractEventId)
     | summarize arg_max(TimeGenerated, *) by _key;
 let failures = auth
@@ -31,10 +32,10 @@ let failures = auth
     | where Failures >= 10;
 let successes = auth
     | where EventResult == "Success"
-    | project SuccessTime = TimeGenerated, SrcIpAddr, ActorUsername, AbstractInsightId = AbstractEventId, EventProduct;
+    | project SuccessTime = TimeGenerated, SrcIpAddr, ActorUsername, AbstractInsightId = AbstractEventId, EventProduct, SentinelScope_CF;
 failures
 | join kind=inner successes on SrcIpAddr
 | where SuccessTime between (TimeGenerated .. (TimeGenerated + 10m))
 | where set_has_element(FailUsers, ActorUsername)
-| project SuccessTime, SrcIpAddr, ActorUsername, Failures, EventProduct, AbstractInsightId
+| project SuccessTime, SrcIpAddr, ActorUsername, Failures, EventProduct, AbstractInsightId, SentinelScope_CF
 | sort by Failures desc

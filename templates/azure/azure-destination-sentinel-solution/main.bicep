@@ -125,13 +125,13 @@ param deployDataConnectors bool = true
 @description('Install the workspace function ASim_AbstractEvent, which reads every Abstract event wherever the routes stored it and gives it ASIM column names. The hunting queries and the Abstract Security for Microsoft Sentinel workbook read it, so turning it off breaks them. Find it after deployment: Logs > Functions > ASim_AbstractEvent. Default: true. Example: true.')
 param deployParsers bool = true
 
-@description('Install the analytics rules Abstract Security - Finding, Abstract Security - High or Critical event and Abstract - Repeated auth failures followed by success. Each is on or off as enabledAnalyticsRules says. They read the tables directly and call no workspace function. Find them: Microsoft Sentinel > Analytics. Default: true. Example: true.')
+@description('Install the analytics rules Abstract Security - Finding, Abstract Security - High or Critical event and Abstract - Repeated auth failures followed by success, and the health rules Abstract Security - Data stopped arriving, Abstract Security - New source seen and Abstract Security - Ingestion errors. Each is on or off as enabledAnalyticsRules says. They read the tables directly and call no workspace function. Find them: Microsoft Sentinel > Analytics. Default: true. Example: true.')
 param deployAnalyticsRules bool = true
 
-@description('The analytics rules to turn on: finding (one incident per Abstract finding), high-or-critical (high or critical Abstract events) and repeated-auth-failures (failed sign-ins followed by a success). Every deployment sets each rule on or off from this list, so choose the rules here rather than in Microsoft Sentinel > Analytics, or the next deployment turns them off. An enabled rule runs every hour and can create incidents. Default: none. Example: [\'finding\'].')
+@description('The analytics rules to turn on: finding (one incident per Abstract finding), high-or-critical (high or critical Abstract events), repeated-auth-failures (failed sign-ins followed by a success), data-stopped (a source that sent events has been quiet for 3 hours), new-source (a source seen for the first time in 14 days) and ingestion-errors (events Azure refused, from DCRLogErrors). Every deployment sets each rule on or off from this list, so choose the rules here rather than in Microsoft Sentinel > Analytics, or the next deployment turns them off. An enabled rule runs every hour and can create incidents. Default: none. Example: [\'finding\'].')
 param enabledAnalyticsRules array = []
 
-@description('Install the hunting queries Rare or newly-seen product activity, High cumulative-risk identities and Daily value & reduction summary. Find them: Microsoft Sentinel > Hunting > Queries. Default: true. Example: true. They run only when someone runs them.')
+@description('Install the hunting queries Rare or newly-seen product activity, High cumulative-risk identities, Daily value & reduction summary and Sources stored only in the Abstract table. Find them: Microsoft Sentinel > Hunting > Queries. Default: true. Example: true. They run only when someone runs them.')
 param deployHuntingQueries bool = true
 
 @description('Install the workbook Abstract Security for Microsoft Sentinel (one workbook with tabs for overview, sources and coverage, data health, security activity, detections and response, and cost and volume) (the Sentinel Discovery workbook has its own switch). Find them: Microsoft Sentinel > Workbooks > My workbooks. Default: true. Example: true. They query only when opened.')
@@ -286,8 +286,8 @@ var lakeFlowCount = (!empty(lakeTableName) && !empty(lakeCategories)) ? 1 : 0
 var dataFlowCount = 1 + asimFlowCount + lakeFlowCount + length(nativeFlows)
 // No @allowed on nativeVendors: the portal's parameter form marks an array with allowedValues and an empty default as
 // required ("default value which is not present in the list of allowed values"). Unknown names fail here instead.
-var unknownRules = filter(enabledAnalyticsRules, r => !contains(['finding', 'high-or-critical', 'repeated-auth-failures'], r))
-var checkedEnabledAnalyticsRules = length(unknownRules) > 0 ? fail('enabledAnalyticsRules has unsupported values ${string(unknownRules)}. Supported: finding, high-or-critical, repeated-auth-failures.') : enabledAnalyticsRules
+var unknownRules = filter(enabledAnalyticsRules, r => !contains(['finding', 'high-or-critical', 'repeated-auth-failures', 'data-stopped', 'new-source', 'ingestion-errors'], r))
+var checkedEnabledAnalyticsRules = length(unknownRules) > 0 ? fail('enabledAnalyticsRules has unsupported values ${string(unknownRules)}. Supported: finding, high-or-critical, repeated-auth-failures, data-stopped, new-source, ingestion-errors.') : enabledAnalyticsRules
 var unknownVendors = filter(nativeVendors, v => !contains(map(nativeCatalog, c => c.name), v))
 // What the vendor lanes take, from the catalog's selectKql: the exact selection each lane's transformKql starts with.
 var nativeSelection = (excludeNativeVendorsFromAsim && !empty(enabledNative)) ? join(map(enabledNative, vendor => '(${vendor.selectKql})'), ' or ') : ''
@@ -381,6 +381,9 @@ module content 'content/content.json' = if (deployContent) {
     enableAutomationRules: enableAutomationRules
     parserReadsAsim: parserReadsAsim
     parserNativeVendors: parserNativeVendors
+    // Every enabled vendor lane, for the health rules and the mapping hunting query (they must see a vendor table even
+    // when store-once is off and parserNativeVendors is empty).
+    enabledNativeVendors: map(enabledNative, vendor => vendor.name)
   }
 }
 

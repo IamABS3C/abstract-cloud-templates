@@ -1,0 +1,24 @@
+// Abstract - Sources stored only in the Abstract table.
+// Sources whose Abstract rows in the last day reached only AbstractEventLogs_CL, with the ASIM table their ACS event
+// category points to: no route is enabled for that schema, or the route's selection does not match these events, so
+// Microsoft's ASIM content does not see them. Reads the tables directly (the shared AbstractRows list), not
+// ASim_AbstractEvent, so a source also copied to an ASIM or vendor table is never reported here. Vendor and product are
+// compared without case, because vendor tables name a product their own way.
+let _now = now();
+AbstractRows(_now - 1d, _now)
+| extend V = tolower(Vendor), P = tolower(Product)
+| summarize Events = count(), Tables = make_set(SourceTable, 10), Categories = make_set_if(Category, isnotempty(Category), 5),
+    Vendor = take_any(Vendor), Product = take_any(Product) by V, P
+| where array_length(Tables) == 1 and tostring(Tables[0]) == "AbstractEventLogs_CL"
+| extend Categories = strcat_array(Categories, ", ")
+| extend LikelyAsimTable = case(
+    Categories has "authentication", "ASimAuthenticationEventLogs",
+    Categories has "network", "ASimNetworkSessionLogs",
+    Categories has "web", "ASimWebSessionLogs",
+    Categories has "process", "ASimProcessEventLogs",
+    Categories has "file", "ASimFileEventLogs",
+    Categories has "registry", "ASimRegistryEventLogs",
+    Categories has_any ("iam", "configuration"), "ASimAuditEventLogs",
+    "no ASIM table suggested")
+| project Vendor, Product, Events, Categories, LikelyAsimTable
+| sort by Events desc

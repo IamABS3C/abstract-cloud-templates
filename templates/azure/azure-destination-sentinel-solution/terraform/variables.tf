@@ -155,19 +155,19 @@ variable "deployParsers" {
 variable "deployAnalyticsRules" {
   type        = bool
   default     = true
-  description = "Install the analytics rules Abstract Security - Finding, Abstract Security - High or Critical event and Abstract - Repeated auth failures followed by success. Each is on or off as enabledAnalyticsRules says. They read the tables directly and call no workspace function. Find them: Microsoft Sentinel > Analytics. Default: true. Example: true."
+  description = "Install the analytics rules Abstract Security - Finding, Abstract Security - High or Critical event and Abstract - Repeated auth failures followed by success, and the health rules Abstract Security - Data stopped arriving, Abstract Security - New source seen and Abstract Security - Ingestion errors. Each is on or off as enabledAnalyticsRules says. They read the tables directly and call no workspace function. Find them: Microsoft Sentinel > Analytics. Default: true. Example: true."
 }
 
 variable "enabledAnalyticsRules" {
   type        = list(string)
   default     = []
-  description = "The analytics rules to turn on: finding (one incident per Abstract finding), high-or-critical (high or critical Abstract events) and repeated-auth-failures (failed sign-ins followed by a success). Every deployment sets each rule on or off from this list, so choose the rules here rather than in Microsoft Sentinel > Analytics, or the next deployment turns them off. An enabled rule runs every hour and can create incidents. Default: none. Example: ['finding']."
+  description = "The analytics rules to turn on: finding (one incident per Abstract finding), high-or-critical (high or critical Abstract events), repeated-auth-failures (failed sign-ins followed by a success), data-stopped (a source that sent events has been quiet for 3 hours), new-source (a source seen for the first time in 14 days) and ingestion-errors (events Azure refused, from DCRLogErrors). Every deployment sets each rule on or off from this list, so choose the rules here rather than in Microsoft Sentinel > Analytics, or the next deployment turns them off. An enabled rule runs every hour and can create incidents. Default: none. Example: ['finding']."
 }
 
 variable "deployHuntingQueries" {
   type        = bool
   default     = true
-  description = "Install the hunting queries Rare or newly-seen product activity, High cumulative-risk identities and Daily value & reduction summary. Find them: Microsoft Sentinel > Hunting > Queries. Default: true. Example: true. They run only when someone runs them."
+  description = "Install the hunting queries Rare or newly-seen product activity, High cumulative-risk identities, Daily value & reduction summary and Sources stored only in the Abstract table. Find them: Microsoft Sentinel > Hunting > Queries. Default: true. Example: true. They run only when someone runs them."
 }
 
 variable "deployWorkbooks" {

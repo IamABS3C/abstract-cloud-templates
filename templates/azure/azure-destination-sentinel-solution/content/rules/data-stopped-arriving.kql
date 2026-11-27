@@ -1,0 +1,15 @@
+// Abstract Security - Data stopped arriving.
+// One alert per source (vendor and product) and table that sent at least minEvents events in the last two days and has
+// now been quiet for between `quiet` and `quiet` + 1 hour. The rule runs every hour, so each silence alerts once.
+// `quiet` is 3 hours because delivery from Abstract can lag by more than an hour. Quiet means nothing ingested, judged by
+// ingestion time, so a source that delivers late but steadily is not reported. Microsoft's SentinelHealth table does
+// not report this: it covers connectors that poll, not data that Abstract sends.
+let _now = now();
+let quiet = 3h;
+let minEvents = 20;
+AbstractRows(_now - 2d, _now)
+| summarize LastSeen = max(Ingested), Events = count(), SentinelScope_CF = take_any(SentinelScope_CF)
+    by Vendor, Product, SourceTable
+| where Events >= minEvents and LastSeen between ((_now - quiet - 1h) .. (_now - quiet))
+| extend Source = strcat(Vendor, " / ", Product), QuietHours = round((_now - LastSeen) / 1h, 1)
+| project LastSeen, Source, Vendor, Product, SourceTable, Events, QuietHours, SentinelScope_CF

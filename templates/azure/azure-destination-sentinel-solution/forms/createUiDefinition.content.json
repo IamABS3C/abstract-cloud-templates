@@ -263,9 +263,9 @@
               {
                 "name": "deployAnalyticsRules",
                 "type": "Microsoft.Common.CheckBox",
-                "label": "Analytics rules (3)",
+                "label": "Analytics rules (6)",
                 "defaultValue": true,
-                "toolTip": "What: 'Abstract Security - High or Critical event', 'Abstract - Repeated auth failures followed by success' and 'Abstract Security - Finding' (findings from the asim-alert lane). They read AbstractEventLogs_CL and the ASim tables directly. Consequence: none until you turn one on below. When: keep on. Portal: Microsoft Sentinel > Analytics.",
+                "toolTip": "What: 'Abstract Security - High or Critical event', 'Abstract - Repeated auth failures followed by success' and 'Abstract Security - Finding' (findings from the asim-alert lane), and three health rules: 'Data stopped arriving', 'New source seen' and 'Ingestion errors'. They read AbstractEventLogs_CL and the ASim tables directly. Consequence: none until you turn one on below. When: keep on. Portal: Microsoft Sentinel > Analytics.",
                 "visible": true
               },
               {
@@ -287,6 +287,18 @@
                     {
                       "label": "Repeated sign-in failures followed by a success",
                       "value": "repeated-auth-failures"
+                    },
+                    {
+                      "label": "Health: a source stopped sending for 3 hours",
+                      "value": "data-stopped"
+                    },
+                    {
+                      "label": "Health: a new source appeared",
+                      "value": "new-source"
+                    },
+                    {
+                      "label": "Health: Azure refused Abstract events",
+                      "value": "ingestion-errors"
                     }
                   ],
                   "required": false
@@ -299,9 +311,9 @@
               {
                 "name": "deployHuntingQueries",
                 "type": "Microsoft.Common.CheckBox",
-                "label": "Hunting queries (3)",
+                "label": "Hunting queries (4)",
                 "defaultValue": true,
-                "toolTip": "What: 'Rare or newly-seen product', 'High cumulative-risk identities' and 'Daily value & reduction summary'. Portal: Microsoft Sentinel > Hunting > Queries. When: keep on. Consequence: none on data; queries run only when someone opens them.",
+                "toolTip": "What: 'Rare or newly-seen product', 'High cumulative-risk identities', 'Daily value & reduction summary' and 'Sources stored only in the Abstract table'. Portal: Microsoft Sentinel > Hunting > Queries. When: keep on. Consequence: none on data; queries run only when someone opens them.",
                 "visible": "[equals(basics('depth'), 'all')]"
               },
               {

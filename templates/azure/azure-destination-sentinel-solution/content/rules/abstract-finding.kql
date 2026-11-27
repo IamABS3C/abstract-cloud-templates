@@ -12,4 +12,4 @@ ASimAlertEventLogs
 | where isnotnull(AdditionalFields.AbstractEventId) and EventVendor == "Abstract Security"
 | summarize arg_max(TimeGenerated, *) by AbstractInsightId = tostring(AdditionalFields.AbstractEventId)
 | project TimeGenerated, AbstractInsightId, AlertName, AlertDescription, EventSeverity, AttackTactics, AttackTechniques,
-    Username, DvcHostname, DvcIpAddr, RuleName
+    Username, DvcHostname, DvcIpAddr, RuleName, SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", ""))

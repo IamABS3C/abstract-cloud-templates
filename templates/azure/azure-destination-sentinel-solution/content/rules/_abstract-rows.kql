@@ -1,0 +1,49 @@
+// Shared by the health rules (build_content.py puts it in front of each one). Every Abstract row in a time range, from
+// wherever the deployment stored it, with its source (vendor and product) and table. Reads the tables directly and calls
+// no workspace function (Defender custom detections cannot call them). The same tables the High or Critical rule reads.
+// Ingested is when the row reached the workspace: the health rules judge arrival by it, not by the event's own time,
+// so late or backfilled events neither hide a new source nor look like a silence. Category is the ACS event.category
+// of rows kept in AbstractEventLogs_CL (empty elsewhere).
+let AbstractRows = (start: datetime, end: datetime) {
+    union isfuzzy=true
+        (AbstractEventLogs_CL
+            | where TimeGenerated between (start .. end)
+            | project TimeGenerated, Ingested = ingestion_time(), Vendor = tostring(vendor), Product = tostring(product),
+                SourceTable = "AbstractEventLogs_CL", Category = tolower(tostring(column_ifexists("event", dynamic(null)).category)),
+                SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", ""))),
+        (union isfuzzy=true ASimAuditEventLogs, ASimAuthenticationEventLogs, ASimDnsActivityLogs, ASimFileEventLogs,
+            ASimNetworkSessionLogs, ASimProcessEventLogs, ASimRegistryEventLogs, ASimWebSessionLogs, ASimAlertEventLogs,
+            ASimDhcpEventLogs, ASimUserManagementActivityLogs
+            | where TimeGenerated between (start .. end)
+            | where isnotnull(AdditionalFields.AbstractEventId)
+            | project TimeGenerated, Ingested = ingestion_time(), Category = "", Vendor = tostring(EventVendor), Product = tostring(EventProduct), SourceTable = Type,
+                SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", ""))),
+        (OktaV2_CL
+            | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'okta')
+            | where TimeGenerated between (start .. end)
+            | project TimeGenerated, Ingested = ingestion_time(), Category = "", Vendor = "Okta", Product = "Okta", SourceTable = "OktaV2_CL",
+                SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", ""))),
+        (CommonSecurityLog
+            | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'csl-cef') or set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'csl-acs')
+            | where TimeGenerated between (start .. end)
+            | where CollectorHostName == "Abstract"
+            | project TimeGenerated, Ingested = ingestion_time(), Category = "", Vendor = DeviceVendor, Product = DeviceProduct, SourceTable = "CommonSecurityLog",
+                SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", ""))),
+        (Syslog
+            | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'syslog')
+            | where TimeGenerated between (start .. end)
+            | where CollectorHostName == "Abstract"
+            | project TimeGenerated, Ingested = ingestion_time(), Category = "", Vendor = "Syslog", Product = ProcessName, SourceTable = "Syslog",
+                SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", ""))),
+        (AWSCloudTrail
+            | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'aws-cloudtrail')
+            | where TimeGenerated between (start .. end)
+            | project TimeGenerated, Ingested = ingestion_time(), Category = "", Vendor = "AWS", Product = "CloudTrail", SourceTable = "AWSCloudTrail",
+                SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", ""))),
+        (CrowdStrikeHostsV2_CL
+            | where set_has_element(dynamic(__ABSTRACT_NATIVE_VENDORS__), 'crowdstrike-hosts')
+            | where TimeGenerated between (start .. end)
+            | project TimeGenerated, Ingested = ingestion_time(), Category = "", Vendor = "CrowdStrike", Product = "Hosts", SourceTable = "CrowdStrikeHostsV2_CL",
+                SentinelScope_CF = tostring(column_ifexists("SentinelScope_CF", "")))
+    | extend Vendor = iff(isempty(Vendor), "Unknown", Vendor), Product = iff(isempty(Product), "Unknown", Product)
+};

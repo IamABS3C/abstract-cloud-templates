@@ -10,7 +10,7 @@ summary: 'One Azure deployment sets up everything Abstract needs to deliver data
   logging. On the same rule it adds the routes you choose: Microsoft''s ASim tables, a store-once option, a cheap
   Auxiliary lake table, and vendor-native tables filled with Microsoft''s own connector transformation (Okta into
   OktaV2_CL). The Content hub package Abstract Security for Microsoft Sentinel is installed with it: a data connector
-  tile, the ASim_AbstractEvent parser, three analytics rules (disabled), three hunting queries, two workbooks, three
+  tile, the ASim_AbstractEvent parser, six analytics rules (disabled), four hunting queries, two workbooks, three
   playbooks and their automation rules. Every content item has its own switch.'
 formats:
 - bicep
@@ -55,7 +55,8 @@ creates:
 - The Content hub package Abstract Security for Microsoft Sentinel (contentPackages, one contentTemplate per item,
   and metadata linking each installed item to the package)
 - 'Behind its own switch each: the data connector tile, the ASim_AbstractEvent parser, the analytics rules High or
-  Critical event, Repeated auth failures followed by success and Finding (all disabled), three hunting queries, the workbooks
+  Critical event, Repeated auth failures followed by success and Finding and the health rules Data stopped arriving, New
+  source seen and Ingestion errors (all disabled), four hunting queries, the workbooks
   Abstract Security for Microsoft Sentinel and Sentinel Discovery, the playbooks Abstract-Enrich-Incident, Abstract-Verdict
   and Abstract-Tune-At-Source with their Sentinel API connection, and the automation rules (disabled)'
 - 'Only with keyVaultMode Create or Existing: a Key Vault (Create: RBAC authorization, soft delete, purge protection),
@@ -345,30 +346,33 @@ parameters:
 - name: deployAnalyticsRules
   type: bool
   required: false
-  description: 'Install the analytics rules Abstract Security - Finding, Abstract Security - High or Critical event and Abstract -
-    Repeated auth failures followed by success. Each is on or off as enabledAnalyticsRules says. They read the tables
-    directly and call no workspace function. Find them: Microsoft Sentinel > Analytics. Default: true. Example: true.'
+  description: 'Install the analytics rules Abstract Security - Finding, Abstract Security - High or Critical event
+    and Abstract - Repeated auth failures followed by success, and the health rules Abstract Security - Data stopped
+    arriving, Abstract Security - New source seen and Abstract Security - Ingestion errors. Each is on or off as
+    enabledAnalyticsRules says. They read the tables directly and call no workspace function. Find them: Microsoft
+    Sentinel > Analytics. Default: true. Example: true.'
   default: true
   example: true
   find_it: 'Your choice. After deployment: Microsoft Sentinel > Analytics'
 - name: enabledAnalyticsRules
   type: array
   required: false
-  description: 'The analytics rules to turn on: finding (one incident per Abstract finding), high-or-critical (high or critical
-    Abstract events) and repeated-auth-failures (failed sign-ins followed by a success). Every deployment sets each rule
-    on or off from this list, so choose the rules here rather than in Microsoft Sentinel > Analytics, or the next
-    deployment turns them off. An enabled rule runs every hour and can create incidents. Default: none. Example:
-    [''finding''].'
+  description: 'The analytics rules to turn on: finding (one incident per Abstract finding), high-or-critical (high or
+    critical Abstract events), repeated-auth-failures (failed sign-ins followed by a success), data-stopped (a source
+    that sent events has been quiet for 3 hours), new-source (a source seen for the first time in 14 days) and
+    ingestion-errors (events Azure refused, from DCRLogErrors). Every deployment sets each rule on or off from this
+    list, so choose the rules here rather than in Microsoft Sentinel > Analytics, or the next deployment turns them
+    off. An enabled rule runs every hour and can create incidents. Default: none. Example: [''finding''].'
   default: []
   example:
   - finding
-  find_it: 'Microsoft Sentinel > Analytics, the Abstract rules and their Status. Supported: finding, high-or-critical, repeated-auth-failures'
+  find_it: 'Microsoft Sentinel > Analytics, the Abstract rules and their Status. Supported: finding, high-or-critical, repeated-auth-failures, data-stopped, new-source, ingestion-errors'
 - name: deployHuntingQueries
   type: bool
   required: false
-  description: 'Install the hunting queries Rare or newly-seen product activity, High cumulative-risk identities and
-    Daily value & reduction summary. Find them: Microsoft Sentinel > Hunting > Queries. Default: true. Example: true.
-    They run only when someone runs them.'
+  description: 'Install the hunting queries Rare or newly-seen product activity, High cumulative-risk identities,
+    Daily value & reduction summary and Sources stored only in the Abstract table. Find them: Microsoft Sentinel >
+    Hunting > Queries. Default: true. Example: true. They run only when someone runs them.'
   default: true
   example: true
   find_it: 'Your choice. After deployment: Microsoft Sentinel > Hunting > Queries'

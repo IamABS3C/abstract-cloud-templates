@@ -1,0 +1,14 @@
+// Abstract Security - New source seen.
+// One alert per source (vendor and product) whose first row in 14 days reached the workspace in the last hour: a new
+// integration, a route that changed, or a product someone turned on. Arrival is judged by ingestion time, so a source whose
+// first events are old (late delivery or a backfill) is still reported when they land. The hunting query "Rare or
+// newly-seen product activity" shows the same over three days; this rule raises it as it happens. On a brand-new
+// workspace every source is new once.
+let _now = now();
+let recent = 1h;
+AbstractRows(_now - 14d, _now)
+| summarize FirstArrived = min(Ingested), Events = countif(Ingested > _now - recent), Tables = make_set(SourceTable, 10),
+    SentinelScope_CF = take_any(SentinelScope_CF) by Vendor, Product
+| where FirstArrived > _now - recent
+| extend Source = strcat(Vendor, " / ", Product), Tables = strcat_array(Tables, ", ")
+| project FirstArrived, Source, Vendor, Product, Events, Tables, SentinelScope_CF
