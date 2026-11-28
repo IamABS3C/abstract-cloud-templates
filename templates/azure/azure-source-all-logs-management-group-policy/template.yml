@@ -1,5 +1,5 @@
 id: azure-source-all-logs-management-group-policy
-title: 'All Azure logs to Abstract: every subscription by Policy'
+title: 'Activity and resource logs to Abstract: management group, by Policy'
 cloud: azure
 role: source
 scope: management-group

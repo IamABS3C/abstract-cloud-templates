@@ -1,5 +1,5 @@
 id: azure-foundation-event-hub
-title: 'Azure first step: Event Hub that receives all logs'
+title: 'Azure first step: Event Hub for streamed Azure logs'
 cloud: azure
 role: foundation
 scope: resource-group

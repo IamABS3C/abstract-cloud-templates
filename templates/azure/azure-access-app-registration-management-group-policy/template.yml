@@ -1,5 +1,5 @@
 id: azure-access-app-registration-management-group-policy
-title: 'Abstract access to every subscription: app registrations by Policy'
+title: 'Abstract access to tagged subscriptions: app registrations by Policy'
 cloud: azure
 role: access
 scope: management-group

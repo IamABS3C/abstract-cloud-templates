@@ -4,7 +4,7 @@
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-white.svg"><img src="https://raw.githubusercontent.com/IamABS3C/abstract-cloud-templates/main/docs/brand/abstract-logo-black.svg" alt="Abstract Security" height="40"></picture>
 
-One Azure deployment sets up everything Abstract needs to deliver data into Microsoft Sentinel, and the Abstract content that uses it. The data plane is the Azure Sentinel Destination template, reused as a module: a new or existing workspace with Microsoft Sentinel, a Data Collection Endpoint, the AbstractEventLogs_CL table, a Data Collection Rule with Monitoring Metrics Publisher for the Abstract app on that rule only, and DCR error logging. On the same rule it adds the routes you choose: Microsoft's ASim tables, a store-once option, a cheap Auxiliary lake table, and vendor-native tables filled with Microsoft's own connector transformation (Okta into OktaV2_CL). The Content hub package Abstract Security for Microsoft Sentinel is installed with it: a data connector tile, the ASim_AbstractEvent parser, six analytics rules (disabled), four hunting queries, two workbooks, three playbooks and their automation rules. Every content item has its own switch.
+One Azure deployment sets up everything Abstract needs to deliver data into Microsoft Sentinel, and the Abstract content that uses it. The data plane is the Azure Sentinel Destination template, reused as a module: a new or existing workspace with Microsoft Sentinel, a Data Collection Endpoint, the AbstractEventLogs_CL table, a Data Collection Rule with Monitoring Metrics Publisher for the Abstract app on that rule only, and DCR error logging. On the same rule it adds the routes you choose: Microsoft's ASim tables, a store-once option, a cheap Auxiliary lake table, and vendor-native tables filled with Microsoft's own connector transformation (Okta into OktaV2_CL). The Sentinel content package Abstract Security for Microsoft Sentinel (not a Content hub listing) is installed with it: a data connector tile, the ASim_AbstractEvent parser, six analytics rules (disabled), four hunting queries, two workbooks, three playbooks and their automation rules. Every content item has its own switch.
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
@@ -16,7 +16,7 @@ Editable source: [diagram.drawio](diagram.drawio)
 
 A customer receiving Abstract data in Microsoft Sentinel who wants the Azure side and the Abstract content in one deployment.
 
-**Not for:** When you only need the ingestion stack; use azure-destination-sentinel. When the Content hub package must come from the Marketplace instead; use azure-destination-sentinel-content-pack.
+**Not for:** When you only need the ingestion stack; use azure-destination-sentinel.
 
 Not sure this is the right one, or what to deploy before it? Answer a few questions in [the setup guide](https://github.com/IamABS3C/abstract-cloud-templates/blob/main/docs/azure/GUIDE.md).
 
@@ -133,7 +133,7 @@ Ingestion into AbstractEventLogs_CL is charged at its plan (Analytics by default
 - Monitoring Metrics Publisher on the Data Collection Rule for principalId, when it is set
 - A diagnostic setting sending the rule's ingestion errors to DCRLogErrors (enableDcrErrorLogs, on by default)
 - Optional routes on the same rule: one ASIM dataflow per schema in asimSchemas (enableAsim), the lake table on the Auxiliary plan (lakeTableName and lakeCategories), and one vendor-native or ASIM dataflow per entry in nativeVendors (okta and crowdstrike-hosts create their table if missing)
-- The Content hub package Abstract Security for Microsoft Sentinel (contentPackages, one contentTemplate per item, and metadata linking each installed item to the package)
+- The Sentinel content package Abstract Security for Microsoft Sentinel (contentPackages, one contentTemplate per item, and metadata linking each installed item to the package); not a Content hub listing
 - Behind its own switch each: the data connector tile, the ASim_AbstractEvent parser, the analytics rules High or Critical event, Repeated auth failures followed by success and Finding and the health rules Data stopped arriving, New source seen and Ingestion errors (all disabled), four hunting queries, the workbooks Abstract Security for Microsoft Sentinel and Sentinel Discovery, the playbooks Abstract-Enrich-Incident, Abstract-Verdict and Abstract-Tune-At-Source with their Sentinel API connection, and the automation rules (disabled)
 - Only with keyVaultMode Create or Existing: a Key Vault (Create: RBAC authorization, soft delete, purge protection), the secret keyVaultSecretName holding abstractApiKey, and with grantPlaybookRoles each playbook's Key Vault Secrets User on that secret and Microsoft Sentinel Responder on the workspace
 
@@ -141,7 +141,7 @@ Ingestion into AbstractEventLogs_CL is charged at its plan (Analytics by default
 
 - Analytics rules, automation rules, hunting queries, workbooks, playbooks and parsers that are not this solution's
 - The SKU, retention, daily cap, access mode, network settings or workspace transformation DCR of an existing workspace
-- Any table other than AbstractEventLogs_CL, the lake table and the vendor tables it creates
+- Any table other than AbstractEventLogs_CL, the lake table and the vendor tables it creates, except Microsoft's ASim tables and AWSCloudTrail, CommonSecurityLog and Syslog, which its optional routes add rows to
 - Any other Data Collection Rule, Data Collection Endpoint or diagnostic setting, unless it has the same name as one the template creates
 - Microsoft's own data connectors and their Content hub solutions; install the Okta Single Sign-On solution yourself to get its parsers and rules over OktaV2_CL
 

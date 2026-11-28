@@ -1,4 +1,4 @@
-# Azure first step: Event Hub that receives all logs
+# Azure first step: Event Hub for streamed Azure logs
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -8,7 +8,7 @@ Azure Monitor cannot send diagnostic data directly to a third party, so every Az
 
 **Cloud:** azure · **Role:** foundation · **Scope:** resource-group
 
-![How Azure first step: Event Hub that receives all logs fits together](diagram.png)
+![How Azure first step: Event Hub for streamed Azure logs fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 

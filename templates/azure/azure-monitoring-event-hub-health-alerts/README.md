@@ -1,4 +1,4 @@
-# Azure alerts when the Abstract feed stalls
+# Azure alerts on your Event Hubs namespace
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -8,7 +8,7 @@ Event Hubs publishes no consumer-lag metric, so when the Abstract consumer stall
 
 **Cloud:** azure · **Role:** monitoring · **Scope:** resource-group
 
-![How Azure alerts when the Abstract feed stalls fits together](diagram.png)
+![How Azure alerts on your Event Hubs namespace fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 

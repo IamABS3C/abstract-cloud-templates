@@ -1,4 +1,4 @@
-# All Azure logs to Abstract: every subscription by Policy
+# Activity and resource logs to Abstract: management group, by Policy
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -8,7 +8,7 @@ Assign once at a management group and every subscription in it, today's and ever
 
 **Cloud:** azure · **Role:** source · **Scope:** management-group
 
-![How All Azure logs to Abstract: every subscription by Policy fits together](diagram.png)
+![How Activity and resource logs to Abstract: management group, by Policy fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 

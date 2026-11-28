@@ -1,5 +1,5 @@
 id: azure-destination-sentinel-discovery
-title: 'Sentinel discovery: read-only inventory run from your own subscription'
+title: 'Sentinel discovery: an inventory run from your own subscription'
 cloud: azure
 role: destination
 scope: resource-group
@@ -172,7 +172,7 @@ cost: Storage for the output, and two short container instances per run. Azure r
   when the scripts succeed. The inventory reads Azure Resource Manager and Log Analytics at no query charge
   on Analytics tables; Basic and Auxiliary tables are charged per GB scanned and only CommonSecurityLog
   and Syslog are read there, for deviceDays.
-when_to_use: A customer who wants a read-only inventory of a Sentinel workspace, without installing anything
+when_to_use: A customer who wants an inventory of a Sentinel workspace (the kit only reads; the template deploys an identity, storage and two scripts), without installing anything
   or running a script on a workstation.
 when_not_to_use: When an operator can run the kit by hand from a workstation; the discovery scripts in
   the Sentinel Discovery Kit do the same reads.

@@ -113,7 +113,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    *Note:* Clean-up deletes these resource groups whole, so put nothing else in them.
 
-   Template: [Azure first step: Event Hub that receives all logs](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-foundation-event-hub)
+   Template: [Azure first step: Event Hub for streamed Azure logs](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-foundation-event-hub)
 
    ```bash
    az graph query -q "resources | where location !in ('global', '') | summarize resources=count() by location" --management-groups <mg-id> -o table
@@ -138,7 +138,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    > **This changes:** Even report-only creates a custom policy definition and one assignment per log type, each with its own managed identity, and gives those identities Monitoring Contributor and Log Analytics Contributor on the whole management group &lt;mg-id>. No diagnostic setting is written yet.
 
-   Template: [All Azure logs to Abstract: every subscription by Policy](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-source-all-logs-management-group-policy)
+   Template: [Activity and resource logs to Abstract: management group, by Policy](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-source-all-logs-management-group-policy)
 
    ```bash
    cd ~/abstract-cloud-templates/templates/azure/azure-source-all-logs-management-group-policy
@@ -275,7 +275,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    *Optional:* Recommended for production. Event Hubs reports no consumer lag, so without these a stalled feed fails silently.
 
-   Template: [Azure alerts when the Abstract feed stalls](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-monitoring-event-hub-health-alerts)
+   Template: [Azure alerts on your Event Hubs namespace](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-monitoring-event-hub-health-alerts)
 
    **Check:** az monitor metrics alert list -g &lt;resource-group> --query "[?contains(name,'abstract-eh')].{name:name,enabled:enabled}" -o table shows four enabled metric alerts, and the Action Group's test notification arrives.
 
@@ -346,7 +346,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    *Note:* Put it in a resource group of its own. Clean-up deletes that resource group whole.
 
-   Template: [Azure first step: Event Hub that receives all logs](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-foundation-event-hub)
+   Template: [Azure first step: Event Hub for streamed Azure logs](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-foundation-event-hub)
 
    **Check:** az eventhubs eventhub list -g &lt;resource-group> --namespace-name &lt;namespace> --query "[].name" -o tsv lists the hubs, and the namespace's Overview shows Status Active.
 
@@ -409,7 +409,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    *Optional:* Recommended for production. Event Hubs reports no consumer lag, so without these a stalled feed fails silently.
 
-   Template: [Azure alerts when the Abstract feed stalls](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-monitoring-event-hub-health-alerts)
+   Template: [Azure alerts on your Event Hubs namespace](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-monitoring-event-hub-health-alerts)
 
    **Check:** az monitor metrics alert list -g &lt;resource-group> --query "[?contains(name,'abstract-eh')].{name:name,enabled:enabled}" -o table shows four enabled metric alerts, and the Action Group's test notification arrives.
 
@@ -460,7 +460,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    *Note:* Put it in a resource group of its own. Clean-up deletes that resource group whole.
 
-   Template: [Azure first step: Event Hub that receives all logs](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-foundation-event-hub)
+   Template: [Azure first step: Event Hub for streamed Azure logs](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-foundation-event-hub)
 
    **Check:** az eventhubs eventhub list -g &lt;resource-group> --namespace-name &lt;namespace> --query "[].name" -o tsv lists the hubs, and the namespace's Overview shows Status Active.
 
@@ -513,7 +513,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    *Optional:* Recommended for production. Event Hubs reports no consumer lag, so without these a stalled feed fails silently.
 
-   Template: [Azure alerts when the Abstract feed stalls](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-monitoring-event-hub-health-alerts)
+   Template: [Azure alerts on your Event Hubs namespace](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-monitoring-event-hub-health-alerts)
 
    **Check:** az monitor metrics alert list -g &lt;resource-group> --query "[?contains(name,'abstract-eh')].{name:name,enabled:enabled}" -o table shows four enabled metric alerts, and the Action Group's test notification arrives.
 
@@ -903,7 +903,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 
    > **This changes:** The identity holds Microsoft Graph Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All for the whole tenant: it can grant itself any directory permission, so treat it as tier-0. It and the Policy assignment identity each get Owner on every target subscription. With Enforce, each tagged subscription gets an Entra app with a client secret and tenant-wide Graph read permissions.
 
-   Template: [Abstract access to every subscription: app registrations by Policy](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-access-app-registration-management-group-policy)
+   Template: [Abstract access to tagged subscriptions: app registrations by Policy](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-access-app-registration-management-group-policy)
 
    ```bash
    [ -d ~/abstract-cloud-templates ] || git clone --depth 1 https://github.com/IamABS3C/abstract-cloud-templates ~/abstract-cloud-templates
@@ -1111,7 +1111,7 @@ Abstract writes processed events to a system of yours. This does not bring any A
 No plan above needs these on their own.
 
 - [Abstract Security for Microsoft Sentinel: one-deploy solution](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-destination-sentinel-solution): One deployment that builds the Sentinel destination's ingestion stack and installs the Abstract content for Sentinel together, with optional ASIM, lake and vendor-native routes. Use it instead of deploying the Sentinel destination and the content pack separately.
-- [Sentinel discovery: read-only inventory run from your own subscription](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-destination-sentinel-discovery): A read-only inventory of an existing Sentinel workspace, run from your own subscription, with a self-contained HTML report in a storage account you own. Deploy it alone, or as part of the solution with deployDiscovery.
+- [Sentinel discovery: an inventory run from your own subscription](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-destination-sentinel-discovery): A read-only inventory of an existing Sentinel workspace, run from your own subscription, with a self-contained HTML report in a storage account you own. Deploy it alone, or as part of the solution with deployDiscovery.
 - [Read access to a Key Vault: one role assignment](https://github.com/IamABS3C/abstract-cloud-templates/tree/main/templates/azure/azure-access-key-vault-secrets-reader): A building block the Sentinel templates call for you. Deploy it alone only to grant one identity read access to an existing Key Vault.
 
 ## Not covered yet

@@ -96,7 +96,7 @@ Ingestion into the Abstract table is charged at the table's plan (Analytics by d
 
 - Microsoft Sentinel analytics rules, automation rules, hunting queries, bookmarks, incidents, watchlists, workbooks, data connectors, threat intelligence or settings
 - Workspace functions, saved searches or parsers, including every ASIM parser
-- Any table other than the Abstract table
+- Any table other than the Abstract table, except Microsoft's ASim tables, which enableAsim (off by default) adds rows to
 - An existing workspace's SKU, retention, daily cap, access mode, network settings or workspace transformation DCR
 - Any other DCR, DCE or diagnostic setting, unless it has the same name as one the template creates
 

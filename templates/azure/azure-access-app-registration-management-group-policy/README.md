@@ -1,4 +1,4 @@
-# Abstract access to every subscription: app registrations by Policy
+# Abstract access to tagged subscriptions: app registrations by Policy
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -8,7 +8,7 @@ Azure Policy cannot create Entra objects, so this policy deploys a deployment sc
 
 **Cloud:** azure · **Role:** access · **Scope:** management-group
 
-![How Abstract access to every subscription: app registrations by Policy fits together](diagram.png)
+![How Abstract access to tagged subscriptions: app registrations by Policy fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 

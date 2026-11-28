@@ -100,8 +100,7 @@ parameters:
     \ RiskyAgents, AgentRiskEvents - Entra ID Protection (P2)\n  ADFSSignInLogs               - only when\
     \ AD FS is in use\n  NetworkAccessTrafficLogs,\n  EnrichedOffice365AuditLogs,\n  RemoteNetworkHealthLogs\
     \      - only with Global Secure Access / Entra\n                                 Internet Access\
-    \ + Private Access\n  MicrosoftGraphActivityLogs   - high volume; the single best source for\n   \
-    \                              \"what did this token actually do\". At 100k\n                    \
+    \ + Private Access\n  MicrosoftGraphActivityLogs   - high volume; it grows steeply with user count and can dominate a namespace. At 100k\n                    \
     \             users Microsoft publishes ~1,000 GiB/month and\n                                 ~4.8M\
     \ Event Hubs messages/month. Size for it.\n  MicrosoftServicePrincipalSignInLogs - preview, VERY high\
     \ volume, first-party\n                                 service-to-service. Microsoft advises against\n\

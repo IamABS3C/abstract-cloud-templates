@@ -1,4 +1,4 @@
-# Sentinel discovery: read-only inventory run from your own subscription
+# Sentinel discovery: an inventory run from your own subscription
 
 <!-- Generated from template.yml by `python -m tools.templates generate`. Do not edit. -->
 
@@ -8,13 +8,13 @@ One Azure deployment that runs the read-only Sentinel inventory kit against one 
 
 **Cloud:** azure · **Role:** destination · **Scope:** resource-group
 
-![How Sentinel discovery: read-only inventory run from your own subscription fits together](diagram.png)
+![How Sentinel discovery: an inventory run from your own subscription fits together](diagram.png)
 
 Editable source: [diagram.drawio](diagram.drawio)
 
 ## When to use
 
-A customer who wants a read-only inventory of a Sentinel workspace, without installing anything or running a script on a workstation.
+A customer who wants an inventory of a Sentinel workspace (the kit only reads; the template deploys an identity, storage and two scripts), without installing anything or running a script on a workstation.
 
 **Not for:** When an operator can run the kit by hand from a workstation; the discovery scripts in the Sentinel Discovery Kit do the same reads.
 

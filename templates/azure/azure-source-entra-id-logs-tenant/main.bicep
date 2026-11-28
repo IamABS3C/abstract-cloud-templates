@@ -90,8 +90,7 @@ licensing table - the previous note overstated the P1 requirement):
   EnrichedOffice365AuditLogs,
   RemoteNetworkHealthLogs      - only with Global Secure Access / Entra
                                  Internet Access + Private Access
-  MicrosoftGraphActivityLogs   - high volume; the single best source for
-                                 "what did this token actually do". At 100k
+  MicrosoftGraphActivityLogs   - high volume; it grows steeply with user count and can dominate a namespace. At 100k
                                  users Microsoft publishes ~1,000 GiB/month and
                                  ~4.8M Event Hubs messages/month. Size for it.
   MicrosoftServicePrincipalSignInLogs - preview, VERY high volume, first-party
